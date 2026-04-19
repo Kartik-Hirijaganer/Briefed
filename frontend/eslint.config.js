@@ -1,0 +1,98 @@
+// @ts-check
+// ESLint flat config for Briefed frontend.
+// Enforces Google style guide + Google-style JSDoc on every exported symbol.
+
+import js from '@eslint/js';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
+import googleConfig from 'eslint-config-google';
+import prettierConfig from 'eslint-config-prettier';
+import jsdoc from 'eslint-plugin-jsdoc';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+
+export default [
+  js.configs.recommended,
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: { jsx: true },
+        project: './tsconfig.json',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      react,
+      'react-hooks': reactHooks,
+      jsdoc,
+    },
+    settings: {
+      react: { version: 'detect' },
+      jsdoc: { mode: 'typescript', tagNamePreference: { returns: 'returns' } },
+    },
+    rules: {
+      // Google style guide (whitespace, naming, etc.)
+      ...googleConfig.rules,
+
+      // TypeScript — disable base rules superseded by @typescript-eslint
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/explicit-function-return-type': [
+        'error',
+        { allowExpressions: true, allowTypedFunctionExpressions: true },
+      ],
+      '@typescript-eslint/consistent-type-imports': 'error',
+
+      // React
+      'react/jsx-uses-react': 'off',
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+      'react/jsx-key': 'error',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+
+      // JSDoc — Google style, required on every exported symbol
+      'jsdoc/require-jsdoc': [
+        'error',
+        {
+          publicOnly: true,
+          require: {
+            FunctionDeclaration: true,
+            MethodDefinition: true,
+            ClassDeclaration: true,
+            ArrowFunctionExpression: true,
+            FunctionExpression: true,
+          },
+          contexts: ['TSInterfaceDeclaration', 'TSTypeAliasDeclaration'],
+        },
+      ],
+      'jsdoc/require-description': 'error',
+      'jsdoc/require-param': 'error',
+      'jsdoc/require-param-description': 'error',
+      'jsdoc/require-returns': 'error',
+      'jsdoc/require-returns-description': 'error',
+      'jsdoc/check-tag-names': 'error',
+      'jsdoc/check-param-names': 'error',
+      'jsdoc/no-types': 'error', // types come from TS, not JSDoc
+
+      // Misc Google-style overrides that clash with TS or Prettier
+      'require-jsdoc': 'off', // superseded by jsdoc/require-jsdoc
+      'valid-jsdoc': 'off',
+      'new-cap': ['error', { capIsNewExceptions: ['Injectable'] }],
+    },
+  },
+  {
+    files: ['src/**/*.test.{ts,tsx}', 'src/**/__tests__/**'],
+    rules: {
+      'jsdoc/require-jsdoc': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  // Keep Prettier last so it wins formatting conflicts.
+  prettierConfig,
+];

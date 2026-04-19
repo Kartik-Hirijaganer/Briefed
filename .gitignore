@@ -1,0 +1,48 @@
+# -------- Python --------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# -------- Node / Frontend --------
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# -------- Env & secrets --------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+token.json
+service-account*.json
+
+# -------- IDE / OS --------
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# -------- Generated docs --------
+docs/openapi.json.bak
+
+# -------- Claude Code --------
+.claude/settings.local.json
