@@ -1,0 +1,11 @@
+# CODEOWNERS — reviewers auto-added on PRs that touch owned paths.
+# Plan §19.12: maintainer owns LLM client, prompts, contracts, and infra.
+
+* @Kartik-Hirijaganer
+
+/backend/app/llm/         @Kartik-Hirijaganer
+/packages/prompts/        @Kartik-Hirijaganer
+/packages/contracts/      @Kartik-Hirijaganer
+/infra/                   @Kartik-Hirijaganer
+/docs/adr/                @Kartik-Hirijaganer
+/docs/security/           @Kartik-Hirijaganer

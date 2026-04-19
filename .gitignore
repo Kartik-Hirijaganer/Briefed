@@ -44,5 +44,16 @@ Thumbs.db
 # -------- Generated docs --------
 docs/openapi.json.bak
 
+# -------- Test / CI artifacts --------
+.artifacts/
+
+# -------- Terraform --------
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/terraform/envs/*/backend.tf
+!infra/terraform/envs/*/backend.tf.example
+
 # -------- Claude Code --------
 .claude/settings.local.json
