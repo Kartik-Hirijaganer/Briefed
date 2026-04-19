@@ -1,0 +1,9 @@
+{
+  "name": "@briefed/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generated OpenAPI + shared provider types for Briefed.",
+  "type": "module",
+  "main": "src/providers.ts",
+  "files": ["src", "openapi.json"]
+}

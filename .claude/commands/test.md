@@ -1,39 +1,56 @@
 ---
 description: Run the full Briefed test suite — Python (pytest) and React (vitest).
 argument-hint: "[py|react|all] (default: all)"
-allowed-tools: Bash(python:*), Bash(pytest:*), Bash(npm:*), Bash(cd:*), Read
+allowed-tools: Bash(make:*), Bash(python:*), Bash(pytest:*), Bash(npm:*), Bash(cd:*), Read
 ---
 
 # /test — Run all tests (Python + React)
 
-Run both test suites and report a unified summary. Default scope is `all`; if `$ARGUMENTS` is `py` run only Python, if `react` run only the frontend.
+Run both test suites and report a unified summary via the canonical Make
+target. Default scope is `all`; if `$ARGUMENTS` is `py` run only Python,
+if `react` run only the frontend.
 
-## Python (backend)
-
-```bash
-cd backend && pytest -ra --cov=app --cov-report=term-missing
-```
-
-Expected: exit code 0. Report passed / failed / skipped counts and coverage %.
-
-## React (frontend)
+## All suites
 
 ```bash
-cd frontend && npm test -- --reporter=verbose
+make test
 ```
 
-Expected: exit code 0. Report suites / tests / duration.
+The unified summary is printed by `backend/scripts/test_summary.py`,
+which reads JSON artifacts from `.artifacts/`. Exit code is non-zero
+if any suite failed.
+
+## Python only
+
+```bash
+pytest -m "not e2e and not eval" --cov=backend/app --cov-report=term-missing
+```
+
+## React only
+
+```bash
+npm --prefix frontend run test -- --reporter=verbose
+```
 
 ## Execution order
 
-Run the two suites **in parallel** via two simultaneous `Bash` tool calls (independent, no shared state). If one fails, still report the other's result — do not short-circuit.
+When scope is `all`, prefer `make test`. It runs both suites and
+consolidates the result. If the user wants raw per-suite output, run the
+individual commands in parallel via two simultaneous `Bash` tool calls.
 
 ## Output format
 
+The summary renderer produces a compact table:
+
 ```
-Python  : ✅ 42 passed, 0 failed  (coverage 87%)
-React   : ✅ 18 passed, 0 failed  (1.2s)
-Overall : PASS
+ pytest         342 passed    2 failed    0 skipped    18.4s
+ vitest         187 passed    0 failed    3 skipped     6.1s
+ playwright     (skipped — artifact missing)
+ promptfoo      (skipped — artifact missing)
+
+ Exit code: 1
 ```
 
-On failure, show the first failing test's output verbatim and name the file:line where it failed. Do **not** attempt to auto-fix failures unless the user asks — just report.
+On failure, show the first failing test's output verbatim and name the
+file:line where it failed. Do **not** attempt to auto-fix failures unless
+the user asks — just report.
