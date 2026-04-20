@@ -1,9 +1,10 @@
-"""Pydantic payloads for SQS messages (plan §14 Phase 1 + Phase 2 + Phase 3).
+"""Pydantic payloads for SQS messages (plan §14 Phase 1 through Phase 4).
 
 Every queue carries a discriminated-union payload. Phase 1 shipped
 :class:`IngestMessage`; Phase 2 added :class:`ClassifyMessage`; Phase 3
-adds :class:`SummarizeEmailMessage` and :class:`TechNewsClusterMessage`.
-Later phases add ``JobExtractMessage`` etc.
+added :class:`SummarizeEmailMessage` and :class:`TechNewsClusterMessage`;
+Phase 4 adds :class:`JobExtractMessage`. Later phases add
+``UnsubscribeMessage`` etc.
 """
 
 from __future__ import annotations
@@ -124,6 +125,35 @@ class TechNewsClusterMessage(BaseModel):
     max_cluster_size: int = Field(default=8, ge=1, le=50)
 
 
+class JobExtractMessage(BaseModel):
+    """SQS payload for the ``briefed-*-jobs`` queue (plan §14 Phase 4).
+
+    One message per ``job_candidate`` email. Workers fetch the email
+    row, render the ``job_extract`` prompt, corroborate the salary
+    against the body, evaluate every active ``job_filters`` predicate,
+    and write a :class:`app.db.models.JobMatch` row keyed by ``email_id``.
+
+    Attributes:
+        kind: Discriminator literal. Always ``"job_extract"``.
+        user_id: Owning user — bound into the encryption context.
+        account_id: Connected account the email belongs to.
+        email_id: Target email.
+        run_id: Optional digest-run scope.
+        prompt_name: Prompt key; defaults to ``"job_extract"``.
+        prompt_version: Version; defaults to ``1``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["job_extract"] = "job_extract"
+    user_id: UUID
+    account_id: UUID
+    email_id: UUID
+    run_id: UUID | None = Field(default=None)
+    prompt_name: str = Field(default="job_extract")
+    prompt_version: int = Field(default=1, ge=1)
+
+
 class FanoutMessage(BaseModel):
     """Envelope produced by EventBridge Scheduler → fan-out Lambda.
 
@@ -145,6 +175,7 @@ __all__ = [
     "ClassifyMessage",
     "FanoutMessage",
     "IngestMessage",
+    "JobExtractMessage",
     "SummarizeEmailMessage",
     "TechNewsClusterMessage",
 ]
