@@ -19,7 +19,8 @@ Vite · PWA · AWS Lambda + SnapStart · Terraform
 .
 ├── backend/            FastAPI service + Lambda handlers + Dockerfile (Python 3.11+)
 │   ├── app/            Application code (api, core, db, domain, services, workers, …)
-│   ├── alembic/        SQLAlchemy migrations (Phase 1 ingestion schema)
+│   ├── alembic/        SQLAlchemy migrations (Phase 1 + Phase 2 schema)
+│   ├── eval/           Promptfoo config + golden set + thresholds
 │   └── tests/          unit/ + integration/ test suites
 ├── frontend/           React PWA dashboard (Vite + TypeScript)
 ├── packages/           Shared contracts / prompts / config / UI primitives
@@ -53,8 +54,9 @@ Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**.
 ```bash
 git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
-cp .env.example .env        # fill in what you need
+cp .env.example .env        # fill in GEMINI_API_KEY + OAuth creds; other values optional
 make bootstrap              # installs deps, starts docker-compose services
+make migrate                # apply Phase 1 + Phase 2 Alembic migrations
 make dev                    # backend on :8000, frontend on :5173
 ```
 

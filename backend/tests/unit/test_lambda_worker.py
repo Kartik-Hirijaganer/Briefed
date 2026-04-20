@@ -28,7 +28,7 @@ def test_sqs_dispatcher_acks_unknown_stage() -> None:
     event = {
         "Records": [
             {
-                "eventSourceARN": "arn:aws:sqs:us-east-1:000000000000:briefed-dev-classify",
+                "eventSourceARN": "arn:aws:sqs:us-east-1:000000000000:briefed-dev-mystery",
                 "messageId": "m-2",
                 "body": "{}",
             }

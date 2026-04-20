@@ -92,6 +92,8 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
             try:
                 if stage == "ingest":
                     await _handle_ingest_record(record)
+                elif stage == "classify":
+                    await _handle_classify_record(record)
                 else:
                     logger.warning(
                         "sqs_dispatcher.unknown_stage",
@@ -124,6 +126,7 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
 
     from app.core.security import EnvelopeCipher
     from app.db.session import get_sessionmaker
+    from app.services.classification.dispatch import enqueue_unclassified_for_account
     from app.services.gmail.client import GmailClient
     from app.services.gmail.provider import GmailProvider
     from app.workers.handlers.fanout import parse_ingest_body
@@ -133,6 +136,8 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     alias = os.environ.get("BRIEFED_TOKEN_WRAP_KEY_ALIAS", "")
     if not alias:
         raise RuntimeError("BRIEFED_TOKEN_WRAP_KEY_ALIAS unset")
+
+    classify_queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
         provider = GmailProvider(
@@ -145,7 +150,72 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                 provider=provider,
                 cipher=EnvelopeCipher(key_id=alias, client=boto3.client("kms")),
             )
-            await handle_ingest(message, deps=deps)
+            stats = await handle_ingest(message, deps=deps)
+            if stats.new and classify_queue_url:
+                sqs = boto3.client("sqs")
+                await enqueue_unclassified_for_account(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=classify_queue_url,
+                    sqs=sqs,
+                    run_id=message.run_id,
+                )
+            await session.commit()
+
+
+async def _handle_classify_record(record: _SqsRecord) -> None:
+    """Decode + dispatch one classify-queue record (plan §14 Phase 2).
+
+    Args:
+        record: Raw SQS record from the event envelope.
+    """
+    import os
+
+    import boto3
+    import httpx
+
+    from app.core.security import EnvelopeCipher
+    from app.db.session import get_sessionmaker
+    from app.llm.client import LLMClient, RateCap
+    from app.llm.providers import (
+        AnthropicDirectProvider,
+        GeminiProvider,
+        LLMProvider,
+    )
+    from app.services.classification.dispatch import parse_classify_body
+    from app.services.classification.repository import ClassificationsRepo
+    from app.services.prompts.registry import PromptRegistry
+    from app.workers.handlers.classify import ClassifyDeps, handle_classify
+
+    message = parse_classify_body(record.get("body", "{}"))
+    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    gemini_key = _settings.gemini_api_key or ""
+    anthropic_key = _settings.anthropic_api_key or ""
+
+    async with httpx.AsyncClient() as http:
+        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
+        fallbacks: tuple[LLMProvider, ...] = ()
+        if anthropic_key:
+            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
+        llm = LLMClient(
+            primary=primary,
+            fallbacks=fallbacks,
+            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        )
+        cipher: EnvelopeCipher | None = None
+        if content_alias:
+            cipher = EnvelopeCipher(key_id=content_alias, client=boto3.client("kms"))
+        async with get_sessionmaker()() as session:
+            registry = PromptRegistry.load()
+            await registry.sync_to_db(session)
+            deps = ClassifyDeps(
+                session=session,
+                llm=llm,
+                registry=registry,
+                repo=ClassificationsRepo(cipher=cipher),
+            )
+            await handle_classify(message, deps=deps)
             await session.commit()
 
 

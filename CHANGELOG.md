@@ -10,6 +10,62 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Added
 
+- Phase 2 classification + rubric + prompt registry (plan §14 Phase 2):
+  - `app.llm` package:
+    - `schemas.py` — `TriageDecision` Pydantic model with
+      `extra="forbid"` so any hallucinated field raises at the
+      boundary.
+    - `providers/` — `LLMProvider` protocol (plan §19.4),
+      `GeminiProvider` (primary — Gemini 1.5 Flash per §20.1) and
+      `AnthropicDirectProvider` (gated Claude Haiku 4.5 fallback).
+    - `client.py` — `LLMClient` facade with retries (exponential
+      backoff + jitter), `CircuitBreaker`, configurable fallback
+      chain, per-provider `RateCap` (100/day Anthropic cap), prompt
+      rendering, and async `PromptCallRecord` persistence hook.
+  - `app.services.prompts.registry` — loads versioned prompt bundles
+    from `packages/prompts/**/v*.md`, validates YAML frontmatter,
+    and upserts rows into `prompt_versions` so `prompt_call_log` FKs
+    resolve.
+  - `packages/prompts/triage/v1.md` + `packages/prompts/schemas/triage.v1.json`
+    — the first versioned prompt with `<untrusted_email>` delimiters
+    (prompt-injection hardening per §19.9).
+  - `app.services.classification`:
+    - `rubric.py` — `RuleEngine` over `rubric_rules` +
+      `known_waste_senders` with priority ordering and seed-level
+      short-circuits.
+    - `repository.py` — `ClassificationsRepo` with transparent
+      envelope encryption of `classifications.reasons` per §20.10.
+    - `pipeline.py` — rule-first, LLM-on-miss orchestrator that
+      writes `classifications` + `prompt_call_log` rows (`ok` /
+      `fallback` / `skipped` / `error`).
+    - `dispatch.py` — enqueues one `ClassifyMessage` per
+      un-classified email onto the classify SQS queue.
+  - `app.core.content_crypto` — `content_context()` helper binding
+    `{table, row_id, purpose, user_id}` into every KMS Encrypt /
+    Decrypt call (plan §20.10).
+  - `app.workers.handlers.classify.handle_classify` + lambda dispatcher
+    route for the `classify` stage.
+  - API: `GET/POST/PUT/DELETE /api/v1/rubric` (`app.api.v1.rubric`)
+    — user-editable classification rules with predicate-key and
+    action-value validation at the boundary; `version` auto-bumps on
+    update.
+  - SQLAlchemy ORM + Alembic `0002_phase2_classification_tables`
+    migration for `classifications`, `rubric_rules`,
+    `prompt_versions`, `prompt_call_log`, `known_waste_senders` plus
+    seed rows for `known_waste_senders`.
+  - Promptfoo scaffolding: `backend/eval/promptfoo.yaml`,
+    `backend/eval/thresholds.yaml`, and golden-set seeds at
+    `backend/eval/golden/triage_v1.jsonl` +
+    `backend/eval/golden/triage_v1_adversarial.jsonl`.
+  - Tests: unit (`TriageDecision` forbid, rubric precedence,
+    prompt-registry parsing, LLM client retry + circuit breaker +
+    fallback + rate cap, content-crypto context, triage-schema
+    contract) and integration (pipeline rule-only / LLM /
+    fallback / low-confidence demotion / rubric propagation,
+    classify dispatch, rubric-API CRUD).
+- New optional env var `BRIEFED_CLASSIFY_QUEUE_URL` so the ingest
+  handler enqueues classify jobs for newly ingested emails.
+
 - Phase 1 Gmail auth + ingestion:
   - `app.domain.providers.MailboxProvider` protocol + Pydantic boundary
     objects (`EmailMessage`, `EmailBody`, `RawMessage`, `SyncCursor`,
