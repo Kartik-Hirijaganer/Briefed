@@ -117,6 +117,7 @@ convention = "google"
 "backend/app/core/security.py" = ["N803"]
 "backend/app/services/ingestion/storage.py" = ["N803"]
 "backend/app/workers/handlers/fanout.py" = ["N803"]
+"backend/app/services/classification/dispatch.py" = ["N803"]
 # Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.
 # Module-level import is deferred until the handler fires so SnapStart does not snapshot boto3+httpx.
 "backend/app/lambda_worker.py" = ["ANN401", "PLC0415"]

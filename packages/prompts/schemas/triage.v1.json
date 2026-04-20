@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/triage.v1.json",
+  "title": "TriageDecision",
+  "description": "Structured output produced by the triage prompt (plan §6). Every Pydantic boundary model and Gemini/Anthropic tool-use schema is generated from this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["category", "confidence", "reasons_short"],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "must_read",
+        "good_to_read",
+        "ignore",
+        "waste",
+        "newsletter",
+        "job_candidate",
+        "needs_review"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "reasons_short": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "is_newsletter": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_job_candidate": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

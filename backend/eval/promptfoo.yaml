@@ -1,0 +1,49 @@
+# Promptfoo config for the triage prompt (plan §6 evaluation framework).
+#
+# Run via `make eval` or:
+#
+#   promptfoo eval -c backend/eval/promptfoo.yaml
+#
+# Thresholds are enforced separately by backend/eval/thresholds.yaml; CI
+# fails the job when metrics drop below the declared bar.
+
+description: "Briefed triage v1 eval suite"
+
+prompts:
+  - id: triage-v1
+    label: "triage/v1"
+    file: ../../../packages/prompts/triage/v1.md
+
+providers:
+  - id: google:gemini-1.5-flash
+    label: "Gemini 1.5 Flash"
+    config:
+      temperature: 0.0
+      maxOutputTokens: 400
+      responseMimeType: application/json
+
+  - id: anthropic:claude-haiku-4-5
+    label: "Claude Haiku 4.5 (fallback)"
+    config:
+      temperature: 0.0
+      max_tokens: 400
+
+tests:
+  - description: "must_read — direct 1:1 coordination"
+    file: golden/triage_v1.jsonl
+
+  - description: "adversarial — prompt-injection fixtures (§19.9)"
+    file: golden/triage_v1_adversarial.jsonl
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const allowed = new Set([
+          "must_read","good_to_read","ignore","waste",
+          "newsletter","job_candidate","needs_review"
+        ]);
+        return output && allowed.has(output.category);
+
+outputPath: ../../.artifacts/promptfoo.json

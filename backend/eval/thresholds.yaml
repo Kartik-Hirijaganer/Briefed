@@ -1,0 +1,14 @@
+# Eval metric thresholds (plan §6). `backend/scripts/test_summary.py`
+# reads this file to decide whether the Phase 2 eval job is green.
+
+triage:
+  macro_f1_min: 0.90
+  per_class_recall_min: 0.80
+  expected_calibration_error_max: 0.08
+
+summary:
+  faithfulness_min: 4.3   # Opus-as-judge 5-point rubric
+
+jobs:
+  field_precision_min: 0.85
+  field_recall_min: 0.85
