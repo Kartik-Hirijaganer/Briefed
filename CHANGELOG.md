@@ -22,6 +22,21 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
   `docs/security/`, `docs/contributors/`).
 - Lambda entry-point stubs for SnapStart (`backend/app/lambda_api.py` +
   `backend/app/lambda_worker.py`).
+- Phase 0 closure (auditing gaps against plan §14 + §19.15 + §20.6):
+  - `backend/Dockerfile` — AWS Lambda container image (Python 3.11 base)
+    consumed by the `deploy-dev` workflow.
+  - `backend/app/core/config.py` — typed `Settings` via `pydantic-settings`
+    with SSM Parameter Store hydration on cold-start; rejects missing /
+    placeholder required parameters with `MissingSecretError`.
+  - `backend/app/core/logging.py` — idempotent structlog JSON setup.
+  - `backend/app/integrations/ssm_secrets.py` — thin SSM adapter.
+  - Alembic scaffolding under `backend/alembic/` + `backend/alembic.ini`
+    so Phase 1 can land the first migration immediately.
+  - `deploy-dev.yml` — ECR-autocreate step + cleaner step ordering; Mangum
+    handler + SSM loader now initialize at module import for SnapStart.
+  - Phase 0 exit-criteria tests: `tests/unit/test_config.py` (rejects
+    missing SSM parameters) and `tests/integration/test_lambda_api.py`
+    (Lambda Function URL event returns `/health` 200).
 
 ### Changed
 

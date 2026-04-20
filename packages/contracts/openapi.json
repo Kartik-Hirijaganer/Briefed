@@ -1,0 +1,36 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Briefed API",
+    "description": "Personal AI email agent. Runs a daily pipeline on the user's Gmail inbox, categorizes and prioritizes messages, and summarizes tech news via the Claude API.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Liveness probe",
+        "description": "Return service liveness status.\n\nReturns:\n    Mapping with ``status`` key set to ``\"ok\"`` when the service is up.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

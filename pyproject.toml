@@ -101,9 +101,17 @@ ignore = [
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["D", "ANN", "PLR2004"]
+"**/tests/**/*.py" = ["D", "ANN", "PLR2004", "N803"]
 "**/__init__.py" = ["D104"]
 "backend/scripts/**/*.py" = ["D100"]
+# Alembic scaffolding — env.py shape + versions/ boilerplate don't fit our docstring / import policy.
+"backend/alembic/env.py" = ["I001", "ANN"]
+"backend/alembic/versions/*.py" = ["D", "ANN", "I001"]
+# ssm_secrets.py: boto3 requires camelCase kwargs (Names, WithDecryption).
+"backend/app/integrations/ssm_secrets.py" = ["N803"]
+# Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.
+"backend/app/lambda_worker.py" = ["ANN401"]
+"backend/app/lambda_api.py" = ["ANN401"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true

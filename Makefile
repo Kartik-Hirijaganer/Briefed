@@ -18,6 +18,11 @@ COVERAGE_FLOOR ?= 80
 
 export PYTHONPATH := backend:$(PYTHONPATH)
 
+# Frontend is scaffolded in Phase 6. Until ``frontend/package-lock.json``
+# exists, frontend-side targets are gracefully skipped so Phase 0 CI can
+# go green. Phase 6's first commit lands the lock file and flips the gate.
+FRONTEND_READY := $(shell test -f frontend/package-lock.json && echo 1)
+
 .PHONY: help
 help:
 	@awk 'BEGIN{FS=":.*##"; printf "\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -29,15 +34,21 @@ help:
 .PHONY: bootstrap
 bootstrap: ## Install Python + Node deps and start docker-compose services
 	pip install -e ".[dev]"
+ifneq (,$(wildcard frontend/package.json))
 	npm --prefix frontend install
+endif
 	docker compose up -d
 
 .PHONY: dev
 dev: ## Run backend + frontend with hot-reload (requires docker-compose services)
 	docker compose up -d postgres
+ifdef FRONTEND_READY
 	( uvicorn app.main:app --app-dir backend --reload & \
 	  npm --prefix frontend run dev & \
 	  wait )
+else
+	uvicorn app.main:app --app-dir backend --reload
+endif
 
 .PHONY: clean
 clean: ## Remove build + test + coverage artifacts
@@ -53,13 +64,17 @@ lint: ## Run all linters (Python + Frontend)
 	ruff check .
 	ruff format --check .
 	mypy
+ifdef FRONTEND_READY
 	npm --prefix frontend run lint
+endif
 
 .PHONY: format
 format: ## Apply formatters
 	ruff format .
 	ruff check --fix .
+ifdef FRONTEND_READY
 	npm --prefix frontend run format
+endif
 
 .PHONY: typecheck
 typecheck: ## Strict type check (Python)
@@ -75,9 +90,11 @@ test: _artifacts_dir ## Run the full Briefed test suite and print a unified summ
 	  pytest -m "not e2e and not eval" \
 	    --junitxml=$(ARTIFACTS_DIR)/pytest.xml \
 	    --json-report --json-report-file=$(ARTIFACTS_DIR)/pytest.json || true
+ifdef FRONTEND_READY
 	@set -o pipefail; \
 	  npm --prefix frontend run test -- \
 	    --reporter=json --outputFile=$(ARTIFACTS_DIR)/vitest.json || true
+endif
 ifdef PLAYWRIGHT
 	PLAYWRIGHT=$(PLAYWRIGHT) npx playwright test \
 	  --reporter=json > $(ARTIFACTS_DIR)/playwright.json || true
@@ -107,11 +124,13 @@ coverage: _artifacts_dir ## Enforce the 80% line-coverage floor (+ listed 100% m
 	  --cov-report=term-missing \
 	  --cov-report=xml:$(COV_BE_XML) \
 	  --cov-fail-under=$(COVERAGE_FLOOR)
+ifdef FRONTEND_READY
 	npm --prefix frontend run test -- --coverage \
 	  --coverage.thresholds.lines=$(COVERAGE_FLOOR) \
 	  --coverage.thresholds.functions=$(COVERAGE_FLOOR) \
 	  --coverage.thresholds.branches=70 \
 	  --coverage.reporter=text --coverage.reporter=lcov
+endif
 
 # --------------------------------------------------------------------------- #
 # Docs — OpenAPI export + TS client regen                                     #
@@ -120,9 +139,11 @@ coverage: _artifacts_dir ## Enforce the 80% line-coverage floor (+ listed 100% m
 .PHONY: docs
 docs: ## Regenerate packages/contracts/openapi.json + frontend TS client
 	python backend/scripts/export_openapi.py
+ifdef FRONTEND_READY
 	npx --prefix frontend openapi-typescript \
 	  packages/contracts/openapi.json \
 	  -o frontend/src/api/schema.d.ts
+endif
 
 # --------------------------------------------------------------------------- #
 # Database                                                                    #
@@ -147,8 +168,13 @@ secrets-lint: ## Scan repo for accidentally-committed secrets
 
 .PHONY: audit
 audit: ## pip-audit + npm audit
-	pip-audit --strict
+	# --skip-editable so our own ``briefed-backend`` editable install isn't
+	# reported as "not on PyPI". Without ``--strict`` pip-audit still fails
+	# on real vulnerabilities but downgrades the skip to a warning.
+	pip-audit --skip-editable
+ifdef FRONTEND_READY
 	npm --prefix frontend audit --audit-level=high
+endif
 
 # --------------------------------------------------------------------------- #
 # Infra (Terraform)                                                           #
