@@ -14,6 +14,7 @@ process. Subsequent warm restores skip both the SSM round-trip and the
 from fastapi import FastAPI
 
 from app import __version__
+from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.core.logging import configure as configure_logging
 
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
         """
         return {"status": "ok", "version": __version__}
 
+    app.include_router(api_router)
     return app
 
 
