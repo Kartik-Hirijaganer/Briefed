@@ -13,8 +13,11 @@ Phase 2 tables (plan §14 Phase 2 + §20.10): ``classifications``,
 ``known_waste_senders``.
 
 Phase 3 tables (plan §14 Phase 3 + §20.10): ``summaries``,
-``known_newsletters``, ``tech_news_clusters``. Later phases add
-``job_matches``, ``unsubscribe_suggestions``, etc.
+``known_newsletters``, ``tech_news_clusters``.
+
+Phase 4 tables (plan §14 Phase 4 + §20.10): ``job_matches`` (with
+envelope-encrypted ``match_reason_ct``) + ``job_filters``. Later phases
+add ``unsubscribe_suggestions`` etc.
 """
 
 from __future__ import annotations
@@ -728,6 +731,147 @@ class KnownNewsletter(Base, TimestampMixin):
     maintainer: Mapped[str] = mapped_column(String(64), nullable=False, default="seed")
 
 
+class JobMatch(Base, TimestampMixin):
+    """Structured job extraction (plan §8, §14 Phase 4, §20.10).
+
+    ``match_reason_ct`` holds the envelope-encrypted rationale; the
+    plaintext never hits disk. Metadata (``title``, ``company``,
+    ``comp_min``/``max``, ``seniority``) stays plaintext so the JSONB
+    predicate in :mod:`app.services.jobs.predicate` can evaluate against
+    it without a round-trip through KMS — filtering is a per-request
+    hot path and decrypt-per-evaluate would swamp cost at scale.
+
+    One row per source email (``email_id`` is ``UNIQUE``). Re-extraction
+    replaces the row in place so ``filter_version`` reflects the most
+    recent rule set.
+
+    Attributes:
+        id: Primary key.
+        email_id: Source email (1:1).
+        title: Role title.
+        company: Hiring company / firm.
+        location: Free-text location or ``None``.
+        remote: Tri-state remote flag; ``None`` when ambiguous.
+        comp_min: Inclusive lower bound of the salary range.
+        comp_max: Inclusive upper bound of the salary range.
+        currency: ISO-4217 code for ``comp_min``/``max``.
+        comp_phrase: Verbatim phrase the LLM quoted the salary from;
+            kept for audit + the regex corroboration guard.
+        seniority: Normalized tier string (``senior``/``staff`` etc.).
+        source_url: Apply / posting URL, tracking params stripped.
+        match_score: Calibrated ``[0, 1]`` — mirrors the LLM confidence.
+        filter_version: ``job_filters.version`` that produced
+            :attr:`passed_filter`. ``0`` means "no filter set".
+        passed_filter: ``True`` when the row satisfied every active
+            filter for the user at write time.
+        prompt_version_id: FK into :class:`PromptVersion`; ``None`` when
+            the row was hand-imported.
+        model: Provider-scoped model identifier.
+        tokens_in: Input tokens billed.
+        tokens_out: Output tokens billed.
+        match_reason_ct: Envelope ciphertext over the plaintext
+            ``match_reason`` paragraph.
+        match_reason_dek_wrapped: Reserved for a future split-storage
+            layout; always ``None`` today.
+    """
+
+    __tablename__ = "job_matches"
+    __table_args__ = (
+        CheckConstraint(
+            "match_score >= 0 AND match_score <= 1",
+            name="ck_job_matches_match_score_range",
+        ),
+        CheckConstraint(
+            "(comp_min IS NULL AND comp_max IS NULL)"
+            " OR (comp_min IS NOT NULL AND currency IS NOT NULL)"
+            " OR (comp_max IS NOT NULL AND currency IS NOT NULL)",
+            name="ck_job_matches_currency_required",
+        ),
+        CheckConstraint(
+            "comp_min IS NULL OR comp_max IS NULL OR comp_min <= comp_max",
+            name="ck_job_matches_comp_range_order",
+        ),
+        Index(
+            "ix_job_matches_passed_filter",
+            "passed_filter",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    email_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("emails.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    company: Mapped[str] = mapped_column(Text, nullable=False)
+    location: Mapped[str | None] = mapped_column(Text)
+    remote: Mapped[bool | None] = mapped_column(Boolean)
+    comp_min: Mapped[int | None] = mapped_column(Integer)
+    comp_max: Mapped[int | None] = mapped_column(Integer)
+    currency: Mapped[str | None] = mapped_column(String(3))
+    comp_phrase: Mapped[str | None] = mapped_column(Text)
+    seniority: Mapped[str | None] = mapped_column(String(16))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    match_score: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3),
+        nullable=False,
+        default=Decimal("0.000"),
+    )
+    filter_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    passed_filter: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
+    )
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    match_reason_ct: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    match_reason_dek_wrapped: Mapped[bytes | None] = mapped_column(LargeBinary)
+
+
+class JobFilter(Base, TimestampMixin):
+    """Configurable job-filter predicate (plan §8, §14 Phase 4).
+
+    Each row is one named filter for one user. The predicate is a JSONB
+    document consumed by :mod:`app.services.jobs.predicate`; supported
+    operators include ``min_comp``, ``max_comp``, ``currency``,
+    ``remote_required``, ``location_any``, ``location_none``,
+    ``title_keywords_any``, ``title_keywords_none``, and
+    ``seniority_in``.
+
+    ``version`` increments on every mutation. New ``job_matches`` writes
+    stamp the current version onto :attr:`JobMatch.filter_version` so a
+    filter change does not retroactively re-label historical rows.
+
+    Attributes:
+        id: Primary key.
+        user_id: Owner.
+        name: Human-readable label (``"remote-staff-roles"``).
+        predicate: JSONB document with the filter clauses.
+        version: Bumped on each mutation.
+        active: Soft-delete switch; the predicate engine skips inactive
+            filters.
+    """
+
+    __tablename__ = "job_filters"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_job_filters_user_name"),
+        Index("ix_job_filters_user_active", "user_id", "active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    predicate: Mapped[Any] = mapped_column(json_column(), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 class KnownWasteSender(Base, TimestampMixin):
     """Curated list of senders the rule engine short-circuits to ``waste``.
 
@@ -757,6 +901,8 @@ __all__ = [
     "ConnectedAccount",
     "Email",
     "EmailContentBlob",
+    "JobFilter",
+    "JobMatch",
     "KnownNewsletter",
     "KnownWasteSender",
     "OAuthToken",

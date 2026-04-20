@@ -119,6 +119,10 @@ convention = "google"
 "backend/app/workers/handlers/fanout.py" = ["N803"]
 "backend/app/services/classification/dispatch.py" = ["N803"]
 "backend/app/services/summarization/dispatch.py" = ["N803"]
+"backend/app/services/jobs/dispatch.py" = ["N803"]
+# The predicate evaluator accepts arbitrary JSON values from job_filters.predicate;
+# the entry point validates keys, and each clause handler coerces before use.
+"backend/app/services/jobs/predicate.py" = ["ANN401", "PLR0911"]
 # anthropic_batch.py wraps a boto3-like HTTP response; ``Any`` types are required.
 "backend/app/llm/providers/anthropic_batch.py" = ["ANN401", "PLR0911"]
 # Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.

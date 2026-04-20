@@ -102,6 +102,105 @@ class EmailSummary(BaseModel):
         return tuple(item.strip() for item in value if item and item.strip())
 
 
+class JobMatch(BaseModel):
+    """Structured extraction of a job posting (plan §6, §14 Phase 4).
+
+    Emitted by ``job_extract/v1.md``. Written — with ``match_reason``
+    envelope-encrypted — to the ``job_matches`` table via
+    :class:`app.services.jobs.repository.JobMatchesRepo`.
+
+    The model refuses extra fields so a hallucinated ``equity`` or
+    ``work_hours`` key cannot slip onto disk. Every numeric salary is
+    required to cite a verbatim ``comp_phrase`` lifted from the body;
+    :func:`app.services.jobs.extractor.corroborate_comp` rejects rows
+    whose phrase does not re-match the source body with a conservative
+    regex.
+
+    Attributes:
+        title: Role title (e.g. "Senior Backend Engineer"). Required.
+        company: Hiring company / recruiting firm. Required.
+        location: Free-text location (city / region / country / empty).
+            ``None`` when absent — never an inferred default like
+            "Remote".
+        remote: Tri-state — ``True`` when the post explicitly says
+            remote is offered, ``False`` when it explicitly says on-site
+            only, ``None`` when the post is ambiguous.
+        comp_min: Inclusive lower bound of the compensation range, in
+            :attr:`currency` units. Omitted if the post does not state a
+            numeric range (we never infer from market rates).
+        comp_max: Inclusive upper bound of the compensation range.
+        currency: ISO-4217 currency code matching :attr:`comp_min` /
+            :attr:`comp_max`. Required when either bound is set.
+        comp_phrase: Verbatim text the LLM copied the salary from
+            (e.g. "$150k-$210k"). Powers the regex corroboration guard.
+        seniority: Optional seniority tier — one of the enum values to
+            keep filter predicates portable.
+        source_url: Apply / posting URL the recipient should open.
+            ``None`` if the email did not include one.
+        match_reason: One-paragraph fit rationale. Encrypted at rest.
+        confidence: Calibrated ``[0, 1]``. Values below 0.7 suppress
+            ``passed_filter=True`` (plan §14 Phase 4 exit criteria).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: str = Field(..., min_length=1, max_length=200)
+    company: str = Field(..., min_length=1, max_length=200)
+    location: str | None = Field(default=None, max_length=200)
+    remote: bool | None = Field(default=None)
+    comp_min: int | None = Field(default=None, ge=0, le=10_000_000)
+    comp_max: int | None = Field(default=None, ge=0, le=10_000_000)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    comp_phrase: str | None = Field(default=None, max_length=200)
+    seniority: (
+        Literal[
+            "intern",
+            "junior",
+            "mid",
+            "senior",
+            "staff",
+            "principal",
+            "director",
+            "executive",
+        ]
+        | None
+    ) = Field(default=None)
+    source_url: str | None = Field(default=None, max_length=2048)
+    match_reason: str = Field(..., min_length=1, max_length=600)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("title", "company", "match_reason")
+    @classmethod
+    def _strip_required_text(cls, value: str) -> str:
+        """Strip whitespace; reject empty strings after trimming."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("required text field must be non-empty")
+        return stripped
+
+    @field_validator("location", "comp_phrase", "source_url")
+    @classmethod
+    def _strip_optional_text(cls, value: str | None) -> str | None:
+        """Trim whitespace; turn all-whitespace strings into ``None``."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("currency")
+    @classmethod
+    def _uppercase_currency(cls, value: str | None) -> str | None:
+        """Normalize ISO-4217 codes to uppercase."""
+        if value is None:
+            return None
+        stripped = value.strip().upper()
+        if not stripped:
+            return None
+        if len(stripped) != 3 or not stripped.isalpha():
+            raise ValueError("currency must be a 3-letter ISO-4217 code")
+        return stripped
+
+
 class TechNewsClusterSummary(BaseModel):
     """Group summary for one newsletter cluster (plan §14 Phase 3).
 
@@ -156,6 +255,7 @@ class TechNewsClusterSummary(BaseModel):
 
 __all__ = [
     "EmailSummary",
+    "JobMatch",
     "TechNewsClusterSummary",
     "TriageCategory",
     "TriageDecision",

@@ -10,6 +10,66 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Added
 
+- Phase 4 job extraction + filters (plan §14 Phase 4):
+  - `app.llm.schemas.JobMatch` — Pydantic mirror with `extra="forbid"`
+    covering title / company / location / remote (tri-state) /
+    comp_min/max / currency / comp_phrase / seniority (controlled enum) /
+    source_url / match_reason / confidence.
+  - `packages/prompts/jobs/v1.md` + `packages/prompts/schemas/job_extract.v1.json`
+    — versioned extractor prompt with the hallucination-guard contract
+    (every numeric salary must cite a verbatim `comp_phrase` lifted
+    from the body).
+  - `app.services.jobs`:
+    - `predicate.py` — pure-functional JSONB predicate engine
+      (`min_comp`, `max_comp`, `currency`, `remote_required`,
+      `location_any`, `location_none`, `title_keywords_any`,
+      `title_keywords_none`, `seniority_in`, `min_confidence`) with
+      whitelist enforcement so a typo'd operator never widens a filter.
+    - `repository.py` — `JobMatchesRepo` with transparent envelope
+      encryption of `match_reason` per §20.10; metadata stays
+      plaintext so the predicate engine does not need KMS on the
+      filter hot path.
+    - `extractor.py` — `extract_job` end-to-end: render prompt → call
+      `LLMClient` → `corroborate_comp` (regex-verifies salary numbers
+      against the source body; hallucinations are sanitized and the
+      confidence is capped below the digest floor) → evaluate every
+      active `JobFilter` → upsert the row with `passed_filter` +
+      `filter_version`.
+    - `dispatch.py` — `enqueue_unextracted_for_account` enqueues one
+      `JobExtractMessage` per un-extracted `job_candidate`.
+  - `app.workers.handlers.jobs.handle_job_extract` SQS handler.
+  - SQLAlchemy ORM + Alembic `0004_phase4_job_extraction_tables`
+    migration for `job_matches` (envelope-encrypted
+    `match_reason_ct`) and `job_filters` (JSONB `predicate`). Check
+    constraints enforce `comp_min <= comp_max` and currency-required-
+    when-comp-is-set.
+  - New `JobExtractMessage` SQS payload + `parse_job_extract_body`
+    validator, mirroring the classify/summarize queue patterns.
+  - Promptfoo golden set: `backend/eval/golden/job_extract_v1.jsonl`
+    (10 canonical fixtures spanning remote / on-site / hybrid,
+    multiple currencies, seniority tiers, and low-confidence
+    recruiter pings). Added as a new `job_extract` suite in
+    `backend/eval/promptfoo.yaml`.
+  - Tests (unit + integration):
+    - `test_job_match_schema` — `extra="forbid"`, currency
+      normalization, confidence bounds, seniority enum, JSON-schema
+      parity with the Pydantic mirror.
+    - `test_job_predicate` — full operator matrix + remote tri-state
+      + unknown-key rejection + malformed-value guard.
+    - `test_job_matches_repo` — KMS round-trip, pass-through mode,
+      upsert replaces-in-place, empty-reason round-trip.
+    - `test_job_corroboration` — salary guard accepts verbatim
+      phrases, tolerates normalized whitespace, sanitizes
+      hallucinated numbers, noop when no comp was returned.
+    - `test_job_extract_pipeline` — happy path (encrypted reason +
+      `passed_filter=True`), hallucinated salary (row persisted with
+      comp cleared + `passed_filter=False`), predicate rejection,
+      LLM exhaustion (no row written + `error` call-log row).
+    - `test_job_extract_dispatch` — picks unextracted rows, skips
+      non-`job_candidate`, round-trips `JobExtractMessage`.
+    - `test_job_extract_handler` — handler end-to-end + missing
+      `prompt_versions` row raises `LookupError` for SQS redelivery.
+
 - Phase 2 classification + rubric + prompt registry (plan §14 Phase 2):
   - `app.llm` package:
     - `schemas.py` — `TriageDecision` Pydantic model with

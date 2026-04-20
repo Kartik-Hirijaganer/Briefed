@@ -20,6 +20,9 @@ prompts:
   - id: newsletter-group-v1
     label: "newsletter_group/v1"
     file: ../../../packages/prompts/newsletter_group/v1.md
+  - id: job-extract-v1
+    label: "job_extract/v1"
+    file: ../../../packages/prompts/jobs/v1.md
 
 providers:
   - id: google:gemini-1.5-flash
@@ -44,6 +47,8 @@ tests:
     file: golden/summarize_relevant_v1.jsonl
   - description: "newsletter_group — cluster fixtures"
     file: golden/newsletter_group_v1.jsonl
+  - description: "job_extract — field precision/recall + salary corroboration"
+    file: golden/job_extract_v1.jsonl
 
 defaultTest:
   assert:
