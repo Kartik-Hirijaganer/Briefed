@@ -7,7 +7,11 @@ triage:
   expected_calibration_error_max: 0.08
 
 summary:
-  faithfulness_min: 4.3   # Opus-as-judge 5-point rubric
+  faithfulness_min: 4.3           # Opus-as-judge 5-point rubric (per-email).
+  cache_hit_rate_min: 0.65        # Rolling 24h cache-hit rate for summarize.
+  batch_latency_p95_seconds_max: 21600  # 6h batch SLO (plan §14 Phase 3).
+  cluster_summary_faithfulness_min: 4.0  # Cluster summaries are allowed a
+                                          # slightly lower bar than per-email.
 
 jobs:
   field_precision_min: 0.85

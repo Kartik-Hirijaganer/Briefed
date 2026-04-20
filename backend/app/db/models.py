@@ -10,8 +10,11 @@ Phase 1 tables: ``users``, ``connected_accounts``, ``oauth_tokens``,
 
 Phase 2 tables (plan §14 Phase 2 + §20.10): ``classifications``,
 ``rubric_rules``, ``prompt_versions``, ``prompt_call_log``,
-``known_waste_senders``. Later phases add ``summaries``, ``job_matches``,
-``unsubscribe_suggestions``, etc.
+``known_waste_senders``.
+
+Phase 3 tables (plan §14 Phase 3 + §20.10): ``summaries``,
+``known_newsletters``, ``tech_news_clusters``. Later phases add
+``job_matches``, ``unsubscribe_suggestions``, etc.
 """
 
 from __future__ import annotations
@@ -544,6 +547,187 @@ class PromptCallLog(Base, TimestampMixin):
     run_id: Mapped[uuid.UUID | None] = mapped_column()
 
 
+_SUMMARY_KIND_CHOICES = ("email", "tech_news_cluster")
+"""Allowed values for ``summaries.kind`` (plan §8)."""
+
+
+class Summary(Base, TimestampMixin):
+    """Per-email or per-cluster summary (plan §8, §14 Phase 3, §20.10).
+
+    ``body_md_ct`` and ``entities_ct`` are envelope ciphertexts — the
+    plaintext ``body_md`` + entity list never hit disk. Cluster rows
+    carry ``email_id=NULL`` and a ``cluster_id`` FK into
+    :class:`TechNewsCluster`.
+
+    Attributes:
+        id: Primary key.
+        kind: ``email`` or ``tech_news_cluster``.
+        email_id: Target email for ``kind='email'``; ``None`` for
+            cluster summaries.
+        cluster_id: Target cluster for ``kind='tech_news_cluster'``;
+            ``None`` otherwise.
+        prompt_version_id: FK into :class:`PromptVersion`.
+        model: Provider-scoped model identifier.
+        tokens_in: Input tokens billed.
+        tokens_out: Output tokens billed.
+        body_md_ct: Envelope ciphertext over the plaintext summary.
+        entities_ct: Envelope ciphertext over the JSON entity chips.
+        cache_hit: True when the provider reported cache-read tokens
+            for this call (plan §14 Phase 3 cache-hit metrics).
+        confidence: Calibrated ``[0, 1]``; ≥ 0.55 ships in the digest.
+        batch_id: Optional Batch API job id when the summary was
+            produced in an overnight batch; ``None`` for sync calls.
+    """
+
+    __tablename__ = "summaries"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('email','tech_news_cluster')",
+            name="ck_summaries_kind",
+        ),
+        CheckConstraint(
+            "(kind = 'email' AND email_id IS NOT NULL AND cluster_id IS NULL)"
+            " OR (kind = 'tech_news_cluster' AND cluster_id IS NOT NULL AND email_id IS NULL)",
+            name="ck_summaries_kind_target",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_summaries_confidence_range",
+        ),
+        UniqueConstraint("email_id", name="uq_summaries_email_id"),
+        UniqueConstraint("cluster_id", name="uq_summaries_cluster_id"),
+        Index("ix_summaries_kind_created_at", "kind", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    email_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("emails.id", ondelete="CASCADE"),
+    )
+    cluster_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("tech_news_clusters.id", ondelete="CASCADE"),
+    )
+    prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
+    )
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    body_md_ct: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    entities_ct: Mapped[bytes | None] = mapped_column(LargeBinary)
+    cache_hit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3),
+        nullable=False,
+        default=Decimal("0.000"),
+    )
+    batch_id: Mapped[str | None] = mapped_column(String(128))
+
+
+class TechNewsCluster(Base, TimestampMixin):
+    """Newsletter cluster envelope (plan §14 Phase 3).
+
+    One row per ``(user_id, cluster_key, run_id)`` scope — the digest
+    composer joins ``summaries.cluster_id`` → ``TechNewsCluster`` →
+    ``tech_news_cluster_members`` to render a topic list with source
+    chips.
+
+    Attributes:
+        id: Primary key.
+        user_id: Owner.
+        run_id: Optional digest-run scope; ``None`` for ad-hoc clusters.
+        cluster_key: Stable slug — matches
+            :attr:`EmailSummary.cluster_key` / the routing label in
+            :class:`KnownNewsletter`.
+        topic_hint: Optional human-readable topic caption.
+        member_count: Denormalized count for quick UI rendering.
+    """
+
+    __tablename__ = "tech_news_clusters"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "cluster_key",
+            "run_id",
+            name="uq_tech_news_clusters_user_key_run",
+        ),
+        Index("ix_tech_news_clusters_user_created_at", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column()
+    cluster_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    topic_hint: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    member_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TechNewsClusterMember(Base, TimestampMixin):
+    """Join table linking cluster rows to their source emails.
+
+    Attributes:
+        cluster_id: FK into :class:`TechNewsCluster`.
+        email_id: FK into :class:`Email` — the source newsletter.
+        sort_order: Order of inclusion in the cluster (0-indexed).
+    """
+
+    __tablename__ = "tech_news_cluster_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "cluster_id",
+            "email_id",
+            name="uq_tech_news_cluster_members_cluster_email",
+        ),
+        Index(
+            "ix_tech_news_cluster_members_cluster_sort",
+            "cluster_id",
+            "sort_order",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    cluster_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tech_news_clusters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    email_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("emails.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class KnownNewsletter(Base, TimestampMixin):
+    """Curated list-ID / domain → cluster mapping (plan §8, §14 Phase 3).
+
+    The tech-news router reads this table to deterministically bucket
+    incoming newsletters into stable cluster keys before falling back to
+    a domain-based heuristic.
+
+    Attributes:
+        id: Primary key.
+        match: JSON predicate (same shape as :attr:`RubricRule.match`);
+            supports ``list_id_equals``, ``from_domain``, ``from_email``,
+            ``subject_regex``, combined via implicit AND.
+        cluster_key: Target cluster slug — feeds
+            :attr:`Summary.cluster_id` via :class:`TechNewsCluster`.
+        topic_hint: Human-readable topic caption the prompt uses verbatim.
+        maintainer: Who owns this entry (``seed`` / ``user:<id>``).
+    """
+
+    __tablename__ = "known_newsletters"
+    __table_args__ = (Index("ix_known_newsletters_cluster_key", "cluster_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    match: Mapped[Any] = mapped_column(json_column(), nullable=False)
+    cluster_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    topic_hint: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    maintainer: Mapped[str] = mapped_column(String(64), nullable=False, default="seed")
+
+
 class KnownWasteSender(Base, TimestampMixin):
     """Curated list of senders the rule engine short-circuits to ``waste``.
 
@@ -573,12 +757,16 @@ __all__ = [
     "ConnectedAccount",
     "Email",
     "EmailContentBlob",
+    "KnownNewsletter",
     "KnownWasteSender",
     "OAuthToken",
     "PromptCallLog",
     "PromptVersion",
     "RubricRule",
+    "Summary",
     "SyncCursor",
+    "TechNewsCluster",
+    "TechNewsClusterMember",
     "TimestampMixin",
     "User",
 ]
