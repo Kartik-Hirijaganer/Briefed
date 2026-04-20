@@ -18,11 +18,17 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-# Structured logging gets wired up in Phase 8; for Phase 0 we use the
-# stdlib logger so mypy --strict is happy without the structlog shim.
-import logging
+from app.core.config import get_settings
+from app.core.logging import configure as configure_logging
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+# SnapStart-friendly module init: load settings (SSM hydration happens
+# here on cold start) + configure logging before any handler runs. Both
+# calls are idempotent — repeated imports during tests are cheap.
+_settings = get_settings()
+configure_logging(level=_settings.log_level, json_output=_settings.runtime != "local")
+
+logger = get_logger(__name__)
 
 
 class _SqsRecord(TypedDict, total=False):
@@ -73,9 +79,11 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
     """
     records = event.get("Records", [])
     for record in records:
-        source = record.get("eventSourceARN", "<unknown>")
-        message_id = record.get("messageId", "<no-id>")
-        logger.info("sqs_dispatcher received record %s from %s", message_id, source)
+        logger.info(
+            "sqs_dispatcher.record",
+            message_id=record.get("messageId", "<no-id>"),
+            source=record.get("eventSourceARN", "<unknown>"),
+        )
 
     return {"batchItemFailures": []}
 
@@ -95,5 +103,5 @@ def fanout_handler(_event: dict[str, Any], _context: Any) -> dict[str, int]:
         A mapping with an ``accounts_enqueued`` counter, useful for
         CloudWatch metric filters.
     """
-    logger.info("fanout_handler invoked (stub — no accounts enqueued)")
+    logger.info("fanout_handler.invoked", accounts_enqueued=0)
     return {"accounts_enqueued": 0}

@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Any
 
 from mangum import Mangum
 
+# Importing ``app.main`` runs its module-level init block, which in turn
+# invokes ``get_settings()`` (hydrates SSM secrets) + ``configure_logging``.
+# That work lands inside the SnapStart snapshot so warm restores skip it.
 from app.main import app
 
 if TYPE_CHECKING:
@@ -28,5 +31,5 @@ if TYPE_CHECKING:
 # ``lifespan="off"`` — FastAPI lifespan events don't fit the Lambda model
 # (each invocation is effectively a single request); startup work must
 # live at module import so SnapStart can capture it.
-mangum_handler: LambdaHandler = Mangum(app, lifespan="off")  # type: ignore[assignment]
+mangum_handler: LambdaHandler = Mangum(app, lifespan="off")
 """Lambda handler — the Terraform ``image_config.command`` points here."""
