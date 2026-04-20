@@ -94,6 +94,8 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
                     await _handle_ingest_record(record)
                 elif stage == "classify":
                     await _handle_classify_record(record)
+                elif stage == "summarize":
+                    await _handle_summarize_record(record)
                 else:
                     logger.warning(
                         "sqs_dispatcher.unknown_stage",
@@ -167,6 +169,13 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
 async def _handle_classify_record(record: _SqsRecord) -> None:
     """Decode + dispatch one classify-queue record (plan §14 Phase 2).
 
+    On the last classify record for an account, also enqueue the
+    matching ``summarize_*`` jobs. The flush happens opportunistically
+    per-message — idempotent because
+    :func:`app.services.summarization.dispatch.enqueue_unsummarized_for_run`
+    filters by ``summaries.email_id IS NULL`` so duplicate messages
+    never double-summarize.
+
     Args:
         record: Raw SQS record from the event envelope.
     """
@@ -186,12 +195,14 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     from app.services.classification.dispatch import parse_classify_body
     from app.services.classification.repository import ClassificationsRepo
     from app.services.prompts.registry import PromptRegistry
+    from app.services.summarization import enqueue_unsummarized_for_run
     from app.workers.handlers.classify import ClassifyDeps, handle_classify
 
     message = parse_classify_body(record.get("body", "{}"))
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     gemini_key = _settings.gemini_api_key or ""
     anthropic_key = _settings.anthropic_api_key or ""
+    summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
         primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
@@ -216,6 +227,80 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                 repo=ClassificationsRepo(cipher=cipher),
             )
             await handle_classify(message, deps=deps)
+            if summarize_queue_url:
+                await enqueue_unsummarized_for_run(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=summarize_queue_url,
+                    sqs=boto3.client("sqs"),
+                    run_id=message.run_id,
+                )
+            await session.commit()
+
+
+async def _handle_summarize_record(record: _SqsRecord) -> None:
+    """Decode + dispatch one summarize-queue record (plan §14 Phase 3).
+
+    Routes to :func:`app.workers.handlers.summarize.handle_summarize_email`
+    or :func:`.handle_tech_news_cluster` based on the message kind.
+
+    Args:
+        record: Raw SQS record from the event envelope.
+    """
+    import os
+
+    import boto3
+    import httpx
+
+    from app.core.security import EnvelopeCipher
+    from app.db.session import get_sessionmaker
+    from app.llm.client import LLMClient, RateCap
+    from app.llm.providers import (
+        AnthropicDirectProvider,
+        GeminiProvider,
+        LLMProvider,
+    )
+    from app.services.prompts.registry import PromptRegistry
+    from app.services.summarization import SummariesRepo, parse_summarize_body
+    from app.workers.handlers.summarize import (
+        SummarizeDeps,
+        handle_summarize_email,
+        handle_tech_news_cluster,
+    )
+    from app.workers.messages import SummarizeEmailMessage
+
+    message = parse_summarize_body(record.get("body", "{}"))
+    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    gemini_key = _settings.gemini_api_key or ""
+    anthropic_key = _settings.anthropic_api_key or ""
+
+    async with httpx.AsyncClient() as http:
+        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
+        fallbacks: tuple[LLMProvider, ...] = ()
+        if anthropic_key:
+            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
+        llm = LLMClient(
+            primary=primary,
+            fallbacks=fallbacks,
+            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        )
+        cipher: EnvelopeCipher | None = None
+        if content_alias:
+            cipher = EnvelopeCipher(key_id=content_alias, client=boto3.client("kms"))
+        async with get_sessionmaker()() as session:
+            registry = PromptRegistry.load()
+            await registry.sync_to_db(session)
+            deps = SummarizeDeps(
+                session=session,
+                llm=llm,
+                registry=registry,
+                repo=SummariesRepo(cipher=cipher),
+            )
+            if isinstance(message, SummarizeEmailMessage):
+                await handle_summarize_email(message, deps=deps)
+            else:
+                await handle_tech_news_cluster(message, deps=deps)
             await session.commit()
 
 

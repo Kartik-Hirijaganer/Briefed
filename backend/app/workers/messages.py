@@ -1,8 +1,9 @@
-"""Pydantic payloads for SQS messages (plan §14 Phase 1 + Phase 2).
+"""Pydantic payloads for SQS messages (plan §14 Phase 1 + Phase 2 + Phase 3).
 
 Every queue carries a discriminated-union payload. Phase 1 shipped
-:class:`IngestMessage`; Phase 2 adds :class:`ClassifyMessage`. Later
-phases add ``SummarizeMessage``, ``JobExtractMessage`` etc.
+:class:`IngestMessage`; Phase 2 added :class:`ClassifyMessage`; Phase 3
+adds :class:`SummarizeEmailMessage` and :class:`TechNewsClusterMessage`.
+Later phases add ``JobExtractMessage`` etc.
 """
 
 from __future__ import annotations
@@ -61,6 +62,68 @@ class ClassifyMessage(BaseModel):
     prompt_version: int = Field(default=1, ge=1)
 
 
+class SummarizeEmailMessage(BaseModel):
+    """SQS payload for the ``briefed-*-summarize`` queue (plan §14 Phase 3).
+
+    One message per email to be summarized. Workers fetch the email row,
+    render the ``summarize_relevant`` prompt, and write a ``summaries``
+    row keyed by ``email_id``.
+
+    Attributes:
+        kind: Discriminator literal. Always ``"summarize_email"``.
+        user_id: Owning user — bound into the encryption context.
+        account_id: Connected account the email belongs to.
+        email_id: Target email.
+        run_id: Optional digest-run scope.
+        prompt_name: Prompt key; defaults to ``"summarize_relevant"``.
+        prompt_version: Version; defaults to ``1``.
+        batch_id: Optional Batch API job id when this message is
+            replaying a previously-submitted batch.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["summarize_email"] = "summarize_email"
+    user_id: UUID
+    account_id: UUID
+    email_id: UUID
+    run_id: UUID | None = Field(default=None)
+    prompt_name: str = Field(default="summarize_relevant")
+    prompt_version: int = Field(default=1, ge=1)
+    batch_id: str | None = Field(default=None)
+
+
+class TechNewsClusterMessage(BaseModel):
+    """SQS payload for the ``briefed-*-summarize`` queue — cluster variant.
+
+    One message per run covering all newsletter emails for a user.
+    Workers compute clusters, then run one LLM call per cluster via
+    :func:`app.services.summarization.tech_news.cluster_and_summarize`.
+
+    Attributes:
+        kind: Discriminator literal. Always ``"tech_news_cluster"``.
+        user_id: Owning user.
+        run_id: Digest-run scope.
+        email_ids: Newsletter email ids to cluster. Bounded by the
+            fan-out so one message fits well inside SQS's 256 KB limit.
+        prompt_name: Prompt key; defaults to ``"newsletter_group"``.
+        prompt_version: Version; defaults to ``1``.
+        min_cluster_size: Inclusive lower bound (default 2).
+        max_cluster_size: Inclusive upper bound (default 8).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["tech_news_cluster"] = "tech_news_cluster"
+    user_id: UUID
+    run_id: UUID | None = Field(default=None)
+    email_ids: tuple[UUID, ...]
+    prompt_name: str = Field(default="newsletter_group")
+    prompt_version: int = Field(default=1, ge=1)
+    min_cluster_size: int = Field(default=2, ge=1, le=50)
+    max_cluster_size: int = Field(default=8, ge=1, le=50)
+
+
 class FanoutMessage(BaseModel):
     """Envelope produced by EventBridge Scheduler → fan-out Lambda.
 
@@ -76,3 +139,12 @@ class FanoutMessage(BaseModel):
     kind: Literal["fanout"] = "fanout"
     scheduled_at: str
     user_id: UUID | None = Field(default=None)
+
+
+__all__ = [
+    "ClassifyMessage",
+    "FanoutMessage",
+    "IngestMessage",
+    "SummarizeEmailMessage",
+    "TechNewsClusterMessage",
+]

@@ -118,6 +118,9 @@ convention = "google"
 "backend/app/services/ingestion/storage.py" = ["N803"]
 "backend/app/workers/handlers/fanout.py" = ["N803"]
 "backend/app/services/classification/dispatch.py" = ["N803"]
+"backend/app/services/summarization/dispatch.py" = ["N803"]
+# anthropic_batch.py wraps a boto3-like HTTP response; ``Any`` types are required.
+"backend/app/llm/providers/anthropic_batch.py" = ["ANN401", "PLR0911"]
 # Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.
 # Module-level import is deferred until the handler fires so SnapStart does not snapshot boto3+httpx.
 "backend/app/lambda_worker.py" = ["ANN401", "PLC0415"]

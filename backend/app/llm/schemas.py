@@ -54,4 +54,109 @@ class TriageDecision(BaseModel):
         return value.strip()
 
 
-__all__ = ["TriageCategory", "TriageDecision"]
+class EmailSummary(BaseModel):
+    """Per-email summary produced by ``summarize_relevant`` (plan §6, §14 Phase 3).
+
+    Emitted by Gemini Flash (primary) or Claude Haiku 4.5 (fallback) via
+    :class:`app.llm.client.LLMClient`. Written — envelope-encrypted — to
+    ``summaries.body_md_ct`` + ``summaries.entities_ct`` by
+    :class:`app.services.summarization.repository.SummariesRepo`.
+
+    The model intentionally refuses extra fields so a hallucinated
+    ``next_steps`` / ``sentiment`` key does not silently end up on disk;
+    the value objects the UI reads are the ones declared here.
+
+    Attributes:
+        tldr: One-sentence summary (max 240 chars). Must be faithful to
+            the source body — the eval rubric scores for this.
+        key_points: Up to five bullet fragments lifted from the body.
+        action_items: Up to three concrete asks or deadlines. May be
+            empty when the email is purely informational.
+        entities: Zero-or-more proper-noun mentions the UI can surface
+            as chips (people, orgs, products). Each entry is 1-80 chars.
+        confidence: Calibrated ``[0, 1]`` — values below 0.55 route the
+            row to ``needs_review`` in the pipeline policy gate.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tldr: str = Field(..., min_length=1, max_length=240)
+    key_points: tuple[str, ...] = Field(default=(), max_length=5)
+    action_items: tuple[str, ...] = Field(default=(), max_length=3)
+    entities: tuple[str, ...] = Field(default=(), max_length=20)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("tldr")
+    @classmethod
+    def _strip_tldr(cls, value: str) -> str:
+        """Strip surrounding whitespace; reject empty strings."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("tldr must be non-empty")
+        return stripped
+
+    @field_validator("key_points", "action_items", "entities")
+    @classmethod
+    def _strip_items(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Drop empties and whitespace-only entries from the list."""
+        return tuple(item.strip() for item in value if item and item.strip())
+
+
+class TechNewsClusterSummary(BaseModel):
+    """Group summary for one newsletter cluster (plan §14 Phase 3).
+
+    Produced by ``newsletter_group/v1.md`` when a run has ≥ 2 emails
+    routed to the same cluster (``cluster_hint`` from
+    ``known_newsletters`` or a deterministic domain-based bucket).
+
+    Attributes:
+        cluster_key: Stable slug identifying the cluster (e.g.
+            ``llm-research`` / ``aws-weekly``). Plumbed through to the UI
+            filter bar.
+        headline: Short cluster caption (max 120 chars).
+        bullets: Up to six cross-story bullets. Each string is lifted /
+            paraphrased from the underlying emails; no speculation.
+        sources: Subjects of the underlying newsletters in source order.
+            The UI uses this to render source attribution chips.
+        confidence: Calibrated ``[0, 1]``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    cluster_key: str = Field(..., min_length=1, max_length=64)
+    headline: str = Field(..., min_length=1, max_length=120)
+    bullets: tuple[str, ...] = Field(default=(), max_length=6)
+    sources: tuple[str, ...] = Field(default=(), max_length=20)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("cluster_key")
+    @classmethod
+    def _slug(cls, value: str) -> str:
+        """Normalize cluster keys to lowercase slugs — stable across runs."""
+        slug = value.strip().lower()
+        if not slug:
+            raise ValueError("cluster_key must be non-empty")
+        return slug
+
+    @field_validator("headline")
+    @classmethod
+    def _strip_headline(cls, value: str) -> str:
+        """Trim surrounding whitespace; keep interior punctuation."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("headline must be non-empty")
+        return stripped
+
+    @field_validator("bullets", "sources")
+    @classmethod
+    def _strip_items(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Drop empties + whitespace-only entries."""
+        return tuple(item.strip() for item in value if item and item.strip())
+
+
+__all__ = [
+    "EmailSummary",
+    "TechNewsClusterSummary",
+    "TriageCategory",
+    "TriageDecision",
+]
