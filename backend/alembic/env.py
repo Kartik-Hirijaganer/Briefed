@@ -51,9 +51,11 @@ def _resolve_database_url() -> str:
     return url.replace("+asyncpg", "")
 
 
-# Phase 1 wires in app.db.models.Base.metadata here. Left None for now so
-# autogenerate fails loudly rather than silently producing empty scripts.
-target_metadata = None
+# Phase 1: register the SQLAlchemy metadata so ``alembic revision
+# --autogenerate`` picks up schema drift.
+from app.db.models import Base  # noqa: E402 — needs the env-scoped path setup above
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
