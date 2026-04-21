@@ -56,8 +56,6 @@ _ALLOWED_MATCH_KEYS = frozenset(
 
 _LABEL_PRIORITY: dict[str, int] = {
     "waste": 100,
-    "job_candidate": 80,
-    "newsletter": 70,
     "must_read": 60,
     "good_to_read": 50,
     "ignore": 40,
@@ -77,6 +75,8 @@ class RuleDecision:
         reasons: Human-readable bullets (persisted encrypted on the row).
         rubric_version: The winning rule's ``version``; ``0`` when the
             decision came from ``known_waste_senders``.
+        is_newsletter: Independent newsletter flag.
+        is_job_candidate: Independent jobs flag.
         rule_id: Winning rule's id; ``None`` for synthetic-seed matches.
         source: Always ``"rule"`` from this module — classification
             pipeline promotes to ``hybrid`` if the LLM is also called.
@@ -86,6 +86,8 @@ class RuleDecision:
     confidence: float
     reasons: tuple[str, ...]
     rubric_version: int
+    is_newsletter: bool = False
+    is_job_candidate: bool = False
     rule_id: UUID | None
     source: Literal["rule"] = "rule"
 
@@ -162,7 +164,11 @@ class RuleEngine:
             _validate_match_keys(match, source=str(rule.id))
             if _match_predicate(match, email):
                 action = rule.action or {}
-                label = str(action.get("label") or "needs_review")
+                label, is_newsletter, is_job_candidate = _normalize_action_label(
+                    str(action.get("label") or "needs_review"),
+                    bool(action.get("is_newsletter", False)),
+                    bool(action.get("is_job_candidate", False)),
+                )
                 confidence = float(action.get("confidence", 0.9))
                 reasons_list = action.get("reasons") or []
                 reasons: tuple[str, ...] = tuple(str(r) for r in reasons_list)
@@ -173,6 +179,8 @@ class RuleEngine:
                             confidence=confidence,
                             reasons=reasons or (f"rule:{rule.id}",),
                             rubric_version=rule.version,
+                            is_newsletter=is_newsletter,
+                            is_job_candidate=is_job_candidate,
                             rule_id=rule.id,
                         ),
                         priority=rule.priority,
@@ -187,6 +195,25 @@ class RuleEngine:
             key=lambda m: (m.priority, _LABEL_PRIORITY.get(m.decision.label, 0)),
         )
         return winner.decision
+
+
+def _normalize_action_label(
+    label: str,
+    is_newsletter: bool,
+    is_job_candidate: bool,
+) -> tuple[str, bool, bool]:
+    """Normalize legacy pseudo-labels into primary label + flags.
+
+    Older fixtures and seed data may still use ``newsletter`` or
+    ``job_candidate`` as labels. New API writes should use primary labels
+    and the independent flags, but normalizing here keeps historical rows
+    from producing invalid downstream classifications.
+    """
+    if label == "newsletter":
+        return "good_to_read", True, is_job_candidate
+    if label == "job_candidate":
+        return "good_to_read", is_newsletter, True
+    return label, is_newsletter, is_job_candidate
 
 
 def _validate_match_keys(match: Mapping[str, Any], *, source: str) -> None:

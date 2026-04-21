@@ -400,6 +400,10 @@ class Classification(Base, TimestampMixin):
             ``gemini-1.5-flash``).
         tokens_in: Input tokens billed by the LLM (0 when rule-only).
         tokens_out: Output tokens billed.
+        is_newsletter: Independent newsletter flag used by downstream
+            tech-news routing.
+        is_job_candidate: Independent jobs flag used by downstream job
+            extraction.
         reasons_ct: Envelope ciphertext over the JSON reasons payload.
         reasons_dek_wrapped: Kept as ``None`` — the packed envelope blob
             already carries the wrapped DEK. Column reserved for a future
@@ -441,6 +445,8 @@ class Classification(Base, TimestampMixin):
     model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_newsletter: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_job_candidate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reasons_ct: Mapped[bytes | None] = mapped_column(LargeBinary)
     reasons_dek_wrapped: Mapped[bytes | None] = mapped_column(LargeBinary)
 

@@ -46,6 +46,8 @@ class ClassificationWrite:
         model: Model identifier (empty for rule-only).
         tokens_in: Tokens billed (0 for rule-only).
         tokens_out: Tokens billed.
+        is_newsletter: Independent newsletter flag for downstream routing.
+        is_job_candidate: Independent jobs flag for downstream routing.
         reasons: Plaintext JSON-serializable rationale payload.
         user_id: Owner id — bound into the encryption context so
             re-assigning the row to another owner makes the ciphertext
@@ -61,6 +63,8 @@ class ClassificationWrite:
     model: str
     tokens_in: int
     tokens_out: int
+    is_newsletter: bool
+    is_job_candidate: bool
     reasons: dict[str, object]
     user_id: UUID
 
@@ -120,6 +124,8 @@ class ClassificationsRepo:
         existing.model = payload.model
         existing.tokens_in = payload.tokens_in
         existing.tokens_out = payload.tokens_out
+        existing.is_newsletter = payload.is_newsletter
+        existing.is_job_candidate = payload.is_job_candidate
 
         ciphertext = self._encrypt_reasons(
             reasons=payload.reasons,

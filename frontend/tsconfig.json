@@ -18,9 +18,14 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
-    "baseUrl": "./src",
-    "types": ["vite/client", "vitest/globals"]
+    "baseUrl": ".",
+    "paths": {
+      "@briefed/ui": ["../packages/ui/src/index.ts"],
+      "@briefed/ui/tokens.css": ["../packages/ui/src/tokens.css"],
+      "@briefed/contracts": ["../packages/contracts/src/index.ts"]
+    },
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src"],
+  "include": ["src", "vite.config.ts", "../packages/ui/src", "../packages/contracts/src"],
   "exclude": ["node_modules", "dist"]
 }

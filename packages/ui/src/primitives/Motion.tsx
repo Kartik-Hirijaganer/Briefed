@@ -1,32 +1,46 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { motion, useReducedMotion, type HTMLMotionProps, type Transition } from 'framer-motion';
+import { forwardRef, type ReactNode, type Ref } from 'react';
 
 /**
  * Props for the {@link Motion} helper.
  */
-export interface MotionProps {
+export interface MotionProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
   /** Children rendered inside the motion wrapper. */
   readonly children: ReactNode;
-  /** Optional inline style overrides passed through to the wrapper element. */
-  readonly style?: CSSProperties;
-  /** Optional className so consumers can layer utility classes. */
-  readonly className?: string;
+  /**
+   * Transition preset tier keyed to the three motion tokens
+   * (`--motion-fast`, `--motion-base`, `--motion-slow`). Defaults to `base`.
+   */
+  readonly pace?: 'fast' | 'base' | 'slow';
 }
 
+const DURATIONS: Record<NonNullable<MotionProps['pace']>, number> = {
+  fast: 0.12,
+  base: 0.2,
+  slow: 0.4,
+};
+
 /**
- * Placeholder motion wrapper — real framer-motion implementation lands in Phase 6.
- *
- * The primitive exists in Phase 0 so lint rules that forbid raw `motion.div`
- * outside `@briefed/ui` already have a valid import target. Until framer-motion
- * is wired in, Motion is a transparent `div`; transitions collapse to instant,
- * which matches the `prefers-reduced-motion: reduce` contract.
+ * Central wrapper for all animated primitives. Enforces the three motion
+ * tokens and collapses to instant transitions when the user prefers
+ * reduced motion — features must compose this instead of raw `motion.div`.
  *
  * @param props - Component props.
- * @returns A div wrapping `children`.
+ * @param ref - Forwarded DOM ref.
+ * @returns A framer-motion div that animates according to `pace`.
  */
-export function Motion(props: MotionProps): JSX.Element {
+export const Motion = forwardRef<HTMLDivElement, MotionProps>(function Motion(
+  props,
+  ref: Ref<HTMLDivElement>,
+): JSX.Element {
+  const { children, pace = 'base', transition, ...rest } = props;
+  const reduced = useReducedMotion();
+  const resolvedTransition: Transition = reduced
+    ? { duration: 0 }
+    : { duration: DURATIONS[pace], ease: [0.2, 0, 0, 1], ...transition };
   return (
-    <div className={props.className} style={props.style}>
-      {props.children}
-    </div>
+    <motion.div ref={ref} {...rest} transition={resolvedTransition}>
+      {children}
+    </motion.div>
   );
-}
+});

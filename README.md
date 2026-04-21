@@ -60,7 +60,12 @@ make migrate                # apply all Alembic migrations (Phase 1–4)
 make dev                    # backend on :8000, frontend on :5173
 ```
 
-Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc
+The frontend is an npm workspace — `make bootstrap` runs `npm install` at
+the repo root, which hoists deps across `frontend/` and `packages/{ui,contracts}`.
+The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance
+so cookies + CSRF are same-origin.
+
+Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
 ## Developer commands
 
@@ -80,6 +85,7 @@ calls the same targets — there is one source of truth.
 | `make migrate`       | `alembic upgrade head`.                                                |
 | `make secrets-lint`  | `gitleaks detect` full-repo scan.                                      |
 | `make deploy-dev`    | `terraform apply` the dev environment (requires `IMAGE_URI=<ecr>...`). |
+| `npm run codegen`    | Regenerate `frontend/src/api/schema.d.ts` from the OpenAPI contract.   |
 | `/make-docs`         | Claude-Code wrapper around `make docs`.                                |
 | `/test`              | Claude-Code wrapper around `make test`.                                |
 
