@@ -16,7 +16,7 @@ import json
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.logging import get_logger
 from app.db.models import Classification, Email, JobMatch
@@ -29,7 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = get_logger(__name__)
 
 _JOB_LABEL = "job_candidate"
-"""Classification label that qualifies for job extraction."""
+"""Legacy classification label that qualifies for job extraction."""
 
 
 class SqsSender(Protocol):
@@ -80,7 +80,10 @@ async def enqueue_unextracted_for_account(
         .outerjoin(JobMatch, JobMatch.email_id == Email.id)
         .where(
             Email.account_id == account_id,
-            Classification.label == _JOB_LABEL,
+            or_(
+                Classification.is_job_candidate.is_(True),
+                Classification.label == _JOB_LABEL,
+            ),
             JobMatch.email_id.is_(None),
         )
         .order_by(Email.internal_date.desc())
@@ -133,7 +136,10 @@ async def enqueue_job_extract_for_email(
         .where(
             Email.id == email_id,
             Email.account_id == account_id,
-            Classification.label == _JOB_LABEL,
+            or_(
+                Classification.is_job_candidate.is_(True),
+                Classification.label == _JOB_LABEL,
+            ),
             JobMatch.email_id.is_(None),
         )
         .limit(1)

@@ -208,6 +208,8 @@ async def classify_one(
     final_conf = triage.confidence
     if triage.confidence < _NEEDS_REVIEW_THRESHOLD:
         final_label = "needs_review"
+    final_is_newsletter = triage.is_newsletter if final_label != "needs_review" else False
+    final_is_job_candidate = triage.is_job_candidate if final_label != "needs_review" else False
 
     decision_source = "model" if rule_decision is None else "hybrid"
     reasons_payload: dict[str, object] = {
@@ -236,6 +238,8 @@ async def classify_one(
             model=response.call_result.model,
             tokens_in=response.call_result.tokens_in,
             tokens_out=response.call_result.tokens_out,
+            is_newsletter=final_is_newsletter,
+            is_job_candidate=final_is_job_candidate,
             reasons=reasons_payload,
             user_id=inputs.user_id,
         ),
@@ -266,6 +270,8 @@ async def _persist_rule_only(
         "rule_label": rule_decision.label,
         "rule_confidence": rule_decision.confidence,
         "rule_version": rule_decision.rubric_version,
+        "is_newsletter": rule_decision.is_newsletter,
+        "is_job_candidate": rule_decision.is_job_candidate,
     }
     await inputs.repo.upsert(
         session,
@@ -279,6 +285,8 @@ async def _persist_rule_only(
             model="",
             tokens_in=0,
             tokens_out=0,
+            is_newsletter=rule_decision.is_newsletter,
+            is_job_candidate=rule_decision.is_job_candidate,
             reasons=reasons_payload,
             user_id=inputs.user_id,
         ),
@@ -318,6 +326,8 @@ async def _persist_needs_review(
             model="",
             tokens_in=0,
             tokens_out=0,
+            is_newsletter=False,
+            is_job_candidate=False,
             reasons=reasons_payload,
             user_id=inputs.user_id,
         ),

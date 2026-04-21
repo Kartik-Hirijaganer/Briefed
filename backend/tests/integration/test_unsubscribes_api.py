@@ -268,6 +268,39 @@ async def test_unsubscribes_endpoint_isolates_owners(
 
 
 @pytest.mark.asyncio
+async def test_list_suggestions_hides_low_confidence_audit_rows(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    user, account = await _seed_user(api_session, email="me@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user,
+        account=account,
+        sender_email="model-veto@promo.example",
+        sender_domain="promo.example",
+        confidence=Decimal("0.20"),
+        frequency=12,
+        rationale="Model veto audit row.",
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert response.status_code == 200
+        assert response.json()["suggestions"] == []
+
+        audit_view = client.get(
+            "/api/v1/unsubscribes",
+            params={"include_dismissed": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert audit_view.status_code == 200
+        assert audit_view.json()["suggestions"][0]["sender_email"] == "model-veto@promo.example"
+
+
+@pytest.mark.asyncio
 async def test_dismiss_requires_ownership(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:

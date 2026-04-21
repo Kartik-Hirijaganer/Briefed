@@ -7,9 +7,9 @@ export interface ErrorStateProps {
   /** Heading copy — typically the failure class. */
   readonly title: string;
   /** Details from the thrown error (already user-safe). */
-  readonly detail?: string;
+  readonly detail?: string | undefined;
   /** Optional retry / recovery action. */
-  readonly action?: ReactNode;
+  readonly action?: ReactNode | undefined;
 }
 
 /**

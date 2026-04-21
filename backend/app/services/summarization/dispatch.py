@@ -18,7 +18,7 @@ import json
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.logging import get_logger
 from app.db.models import Classification, Email, Summary
@@ -38,7 +38,7 @@ _SUMMARIZABLE_LABELS: tuple[str, ...] = (
     "good_to_read",
     "newsletter",
 )
-"""Classification labels that qualify for a per-email summary."""
+"""Primary labels and legacy pseudo-labels that qualify for a summary."""
 
 _NEWSLETTER_LABEL = "newsletter"
 
@@ -90,12 +90,15 @@ async def enqueue_unsummarized_for_run(
         is 0 or 1.
     """
     stmt = (
-        select(Email.id, Classification.label)
+        select(Email.id, Classification.label, Classification.is_newsletter)
         .join(Classification, Classification.email_id == Email.id)
         .outerjoin(Summary, Summary.email_id == Email.id)
         .where(
             Email.account_id == account_id,
-            Classification.label.in_(_SUMMARIZABLE_LABELS),
+            or_(
+                Classification.label.in_(_SUMMARIZABLE_LABELS),
+                Classification.is_newsletter.is_(True),
+            ),
             Summary.email_id.is_(None),
         )
         .order_by(Email.internal_date.desc())
@@ -105,7 +108,7 @@ async def enqueue_unsummarized_for_run(
 
     per_email = 0
     newsletter_ids: list[UUID] = []
-    for email_id, label in rows:
+    for email_id, label, is_newsletter in rows:
         msg = SummarizeEmailMessage(
             user_id=user_id,
             account_id=account_id,
@@ -116,7 +119,7 @@ async def enqueue_unsummarized_for_run(
         )
         sqs.send_message(QueueUrl=queue_url, MessageBody=msg.model_dump_json())
         per_email += 1
-        if label == _NEWSLETTER_LABEL:
+        if label == _NEWSLETTER_LABEL or is_newsletter:
             newsletter_ids.append(email_id)
 
     cluster_count = 0
@@ -169,7 +172,10 @@ async def enqueue_summary_for_email(
         .where(
             Email.id == email_id,
             Email.account_id == account_id,
-            Classification.label.in_(_SUMMARIZABLE_LABELS),
+            or_(
+                Classification.label.in_(_SUMMARIZABLE_LABELS),
+                Classification.is_newsletter.is_(True),
+            ),
             Summary.email_id.is_(None),
         )
         .limit(1)

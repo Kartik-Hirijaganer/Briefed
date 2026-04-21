@@ -2,9 +2,9 @@
 
 Ensures:
 
-* ``enqueue_unsummarized_for_run`` picks must_read / good_to_read /
-  newsletter rows that lack a summary and skips already-summarized ones;
-* newsletters enqueue a single :class:`TechNewsClusterMessage`;
+* ``enqueue_unsummarized_for_run`` picks must_read / good_to_read rows
+  and newsletter-flagged rows that lack a summary;
+* newsletter-flagged rows enqueue a single :class:`TechNewsClusterMessage`;
 * ``parse_summarize_body`` routes by discriminator.
 """
 
@@ -60,8 +60,15 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
     await session.flush()
 
     emails: list[Email] = []
-    labels = ["must_read", "good_to_read", "newsletter", "newsletter", "ignore", "waste"]
-    for idx, label in enumerate(labels):
+    classifications = [
+        ("must_read", False),
+        ("good_to_read", False),
+        ("good_to_read", True),
+        ("good_to_read", True),
+        ("ignore", False),
+        ("waste", False),
+    ]
+    for idx, (label, is_newsletter) in enumerate(classifications):
         email = Email(
             account_id=account.id,
             gmail_message_id=f"m-{idx}",
@@ -88,6 +95,7 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
                 model="",
                 tokens_in=0,
                 tokens_out=0,
+                is_newsletter=is_newsletter,
                 reasons_ct=None,
             ),
         )
@@ -129,7 +137,7 @@ async def test_enqueue_skips_already_summarized(test_session) -> None:
         run_id=None,
     )
 
-    assert per_email == 3  # good_to_read + 2 newsletters; must_read[0] skipped.
+    assert per_email == 3  # good_to_read + 2 newsletter flags; must_read[0] skipped.
     assert cluster == 1  # two newsletters form a cluster.
     assert len(sqs.messages) == 4  # 3 per-email + 1 cluster.
 

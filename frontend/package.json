@@ -20,7 +20,10 @@
   "dependencies": {
     "@briefed/contracts": "1.0.0",
     "@briefed/ui": "1.0.0",
+    "@tanstack/query-async-storage-persister": "^5.99.2",
     "@tanstack/react-query": "^5.59.16",
+    "@tanstack/react-query-persist-client": "^5.99.2",
+    "dexie": "^4.4.2",
     "framer-motion": "^11.11.0",
     "openapi-fetch": "^0.13.0",
     "react": "^18.3.1",
@@ -28,6 +31,7 @@
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0-beta.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
@@ -43,11 +47,11 @@
     "eslint-plugin-jsdoc": "^50.5.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^14.0.0",
     "jsdom": "^25.0.1",
     "openapi-typescript": "^7.4.2",
     "prettier": "^3.3.3",
     "tailwindcss": "^4.0.0-beta.3",
-    "@tailwindcss/vite": "^4.0.0-beta.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^0.20.5",

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { api, unwrap } from '../api/client';
-import type { Schemas } from '../api/schema';
+import type { Schemas } from '../api/types';
 
 /**
  * Shape returned by {@link useRunProgress}.

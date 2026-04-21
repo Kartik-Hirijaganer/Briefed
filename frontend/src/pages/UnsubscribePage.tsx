@@ -11,7 +11,10 @@ import {
 } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
+import type { Schemas } from '../api/types';
 import { useFreshnessState } from '../hooks/useFreshnessState';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { enqueueMutation } from '../offline/mutations';
 
 const STALE_MS = 10 * 60 * 1000;
 
@@ -24,6 +27,7 @@ const STALE_MS = 10 * 60 * 1000;
  */
 export default function UnsubscribePage(): JSX.Element {
   const client = useQueryClient();
+  const online = useOnlineStatus();
   const suggestionsQuery = useQuery({
     queryKey: ['unsubscribes'],
     queryFn: async () => unwrap(await api.GET('/api/v1/unsubscribes')),
@@ -33,24 +37,38 @@ export default function UnsubscribePage(): JSX.Element {
 
   const dismiss = useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      if (!online) {
+        await enqueueMutation({ type: 'unsubscribe_dismiss', suggestionId: id });
+        return;
+      }
       unwrap(
         await api.POST('/api/v1/unsubscribes/{suggestion_id}/dismiss', {
           params: { path: { suggestion_id: id } },
         }),
       );
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ['unsubscribes'] }),
+    onMutate: (id) => removeSuggestionFromCache(client, id),
+    onSuccess: () => {
+      if (online) void client.invalidateQueries({ queryKey: ['unsubscribes'] });
+    },
   });
 
   const confirm = useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      if (!online) {
+        await enqueueMutation({ type: 'unsubscribe_confirm', suggestionId: id });
+        return;
+      }
       unwrap(
         await api.POST('/api/v1/unsubscribes/{suggestion_id}/confirm', {
           params: { path: { suggestion_id: id } },
         }),
       );
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ['unsubscribes'] }),
+    onMutate: (id) => removeSuggestionFromCache(client, id),
+    onSuccess: () => {
+      if (online) void client.invalidateQueries({ queryKey: ['unsubscribes'] });
+    },
   });
 
   return (
@@ -82,13 +100,13 @@ export default function UnsubscribePage(): JSX.Element {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-fg">
-                      {suggestion.sender_name}
+                      {suggestion.sender_email}
                     </h3>
                     <p className="truncate text-xs text-fg-muted">{suggestion.sender_domain}</p>
                   </div>
-                  <Badge tone="warn">score {suggestion.score.toFixed(2)}</Badge>
+                  <Badge tone="warn">score {Number(suggestion.confidence).toFixed(2)}</Badge>
                 </div>
-                <p className="text-xs text-fg-muted">{suggestion.reason_summary}</p>
+                <p className="text-xs text-fg-muted">{suggestion.rationale}</p>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="secondary"
@@ -97,8 +115,8 @@ export default function UnsubscribePage(): JSX.Element {
                   >
                     Keep
                   </Button>
-                  {suggestion.unsubscribe_url ? (
-                    <Button variant="link" size="sm" href={suggestion.unsubscribe_url}>
+                  {unsubscribeUrl(suggestion) ? (
+                    <Button variant="link" size="sm" href={unsubscribeUrl(suggestion) ?? '#'}>
                       Open unsubscribe link
                     </Button>
                   ) : null}
@@ -123,4 +141,22 @@ export default function UnsubscribePage(): JSX.Element {
       )}
     </section>
   );
+}
+
+function unsubscribeUrl(
+  suggestion: Schemas['UnsubscribeSuggestion'],
+): string | null {
+  return suggestion.list_unsubscribe?.http_urls[0] ?? null;
+}
+
+function removeSuggestionFromCache(
+  client: ReturnType<typeof useQueryClient>,
+  suggestionId: string,
+): void {
+  client.setQueryData<Schemas['UnsubscribesListResponse']>(['unsubscribes'], (current) => {
+    if (!current) return current;
+    return {
+      suggestions: current.suggestions.filter((suggestion) => suggestion.id !== suggestionId),
+    };
+  });
 }

@@ -1,12 +1,13 @@
 import '@briefed/ui/tokens.css';
 import './index.css';
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import { queryClient } from './api/queryClient';
+import { queryPersister } from './offline/queryPersistence';
 import { router } from './router';
 
 const rootElement = document.getElementById('root');
@@ -14,8 +15,18 @@ if (!rootElement) throw new Error('Root element not found — index.html must in
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryPersister,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        buster: 'briefed-pwa-cache-v1',
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) => query.state.status === 'success',
+        },
+      }}
+    >
       <RouterProvider router={router} />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </StrictMode>,
 );

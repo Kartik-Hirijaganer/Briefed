@@ -115,6 +115,7 @@ def _require_oauth_credentials(settings: Settings) -> tuple[str, str]:
 async def start(
     request: Request,
     return_to: str | None = Query(default=None),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
     """Generate PKCE + state, set the cookie, redirect to Google.
@@ -123,6 +124,8 @@ async def start(
         request: FastAPI request (used to compute the callback URL).
         return_to: Optional post-callback UI path (must be an internal
             absolute path, e.g. ``/settings/accounts``).
+        session_cookie: Existing signed session, when the caller is
+            connecting another mailbox to the same user.
         settings: Cached :class:`Settings`.
 
     Returns:
@@ -138,6 +141,14 @@ async def start(
         "code_verifier": verifier,
         "return_to": return_to if return_to and return_to.startswith("/") else None,
     }
+    if session_cookie:
+        try:
+            existing_session = verify_cookie(session_cookie, secret=signing_key)
+        except AuthError:
+            existing_session = {}
+        existing_user_id = existing_session.get("user_id")
+        if isinstance(existing_user_id, str):
+            cookie_payload["user_id"] = existing_user_id
     cookie_value = sign_cookie(cookie_payload, secret=signing_key)
 
     url = build_authorize_url(
@@ -209,12 +220,29 @@ async def callback(
             detail="Google did not return a refresh_token; re-consent required",
         )
 
-    email = _extract_email_from_id_token(bundle.id_token) or "unknown@invalid"
+    identity = _extract_identity_from_id_token(bundle.id_token)
+    if identity is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Google id_token did not include an email claim",
+        )
+    email, gmail_account_id = identity
     cipher = _build_token_cipher(settings)
 
     async with get_sessionmaker()() as session:
-        user = await _get_or_create_user(session, email=email)
-        account = await _upsert_connected_account(session, user_id=user.id, email=email)
+        requested_user_id = _uuid_from_cookie(cookie.get("user_id"))
+        if requested_user_id is not None:
+            user = await session.get(User, requested_user_id)
+            if user is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="session user not found")
+        else:
+            user = await _get_or_create_user(session, email=email)
+        account = await _upsert_connected_account(
+            session,
+            user_id=user.id,
+            email=email,
+            gmail_account_id=gmail_account_id,
+        )
         access_blob = cipher.encrypt(
             bundle.access_token.encode("utf-8"),
             token_context(account_id=str(account.id), purpose="access_token"),
@@ -287,19 +315,19 @@ def _build_token_cipher(settings: Settings) -> EnvelopeCipher:
     return EnvelopeCipher(key_id=alias, client=cast("KmsClient", boto3.client("kms")))
 
 
-def _extract_email_from_id_token(id_token: str | None) -> str | None:
-    """Decode the ``email`` claim from a Google id_token without verification.
+def _extract_identity_from_id_token(id_token: str | None) -> tuple[str, str | None] | None:
+    """Decode stable identity claims from a Google id_token.
 
-    Signature verification is deferred to a later phase; for now we trust
-    the token because (a) it came directly from an HTTPS POST to Google,
-    (b) email verification happens at the mailbox level on the first
-    Gmail call anyway.
+    Signature verification is deferred to a later phase; the token was
+    received directly from Google's HTTPS token endpoint. We still
+    require an ``email`` claim and persist ``sub`` when present so account
+    swaps can be detected.
 
     Args:
         id_token: The raw id_token string (may be ``None``).
 
     Returns:
-        The ``email`` claim, or ``None`` when absent / malformed.
+        ``(email, sub)`` or ``None`` when absent / malformed.
     """
     if not id_token:
         return None
@@ -317,8 +345,23 @@ def _extract_email_from_id_token(id_token: str | None) -> str | None:
         payload = json.loads(base64.urlsafe_b64decode(body.encode("ascii")))
     except (ValueError, UnicodeDecodeError):
         return None
-    value = payload.get("email") if isinstance(payload, dict) else None
-    return str(value) if isinstance(value, str) else None
+    if not isinstance(payload, dict):
+        return None
+    email = payload.get("email")
+    if not isinstance(email, str) or not email:
+        return None
+    sub = payload.get("sub")
+    return email, str(sub) if isinstance(sub, str) and sub else None
+
+
+def _uuid_from_cookie(value: object) -> UUID | None:
+    """Return a UUID from a signed cookie payload value, ignoring blanks."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="invalid session user id") from exc
 
 
 async def _get_or_create_user(
@@ -357,6 +400,7 @@ async def _upsert_connected_account(
     *,
     user_id: UUID,
     email: str,
+    gmail_account_id: str | None,
 ) -> ConnectedAccount:
     """Return an existing account by (user_id, email) or create one.
 
@@ -364,6 +408,7 @@ async def _upsert_connected_account(
         session: Open async session.
         user_id: Owning user id.
         email: Mailbox email.
+        gmail_account_id: Google ``sub`` claim, when present.
 
     Returns:
         The loaded / created :class:`ConnectedAccount`.
@@ -382,11 +427,13 @@ async def _upsert_connected_account(
     )
     if existing is not None:
         existing.status = "active"
+        existing.gmail_account_id = gmail_account_id
         return existing
     account = ConnectedAccount(
         user_id=user_id,
         provider="gmail",
         email=email,
+        gmail_account_id=gmail_account_id,
         status="active",
     )
     session.add(account)

@@ -6,6 +6,7 @@ import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import googleConfig from 'eslint-config-google';
+import globals from 'globals';
 import prettierConfig from 'eslint-config-prettier';
 import jsdoc from 'eslint-plugin-jsdoc';
 import react from 'eslint-plugin-react';
@@ -22,6 +23,11 @@ export default [
         sourceType: 'module',
         ecmaFeatures: { jsx: true },
         project: './tsconfig.json',
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.es2022,
+        JSX: 'readonly',
       },
     },
     plugins: {
@@ -83,7 +89,7 @@ export default [
       // Misc Google-style overrides that clash with TS or Prettier
       'require-jsdoc': 'off', // superseded by jsdoc/require-jsdoc
       'valid-jsdoc': 'off',
-      'new-cap': ['error', { capIsNewExceptions: ['Injectable'] }],
+      'new-cap': ['error', { capIsNewExceptions: ['Injectable'], properties: false }],
     },
   },
   {

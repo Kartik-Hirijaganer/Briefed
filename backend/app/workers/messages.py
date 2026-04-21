@@ -128,7 +128,7 @@ class TechNewsClusterMessage(BaseModel):
 class JobExtractMessage(BaseModel):
     """SQS payload for the ``briefed-*-jobs`` queue (plan §14 Phase 4).
 
-    One message per ``job_candidate`` email. Workers fetch the email
+    One message per job-candidate flagged email. Workers fetch the email
     row, render the ``job_extract`` prompt, corroborate the salary
     against the body, evaluate every active ``job_filters`` predicate,
     and write a :class:`app.db.models.JobMatch` row keyed by ``email_id``.

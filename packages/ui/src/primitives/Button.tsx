@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type AnchorHTMLAttributes, type Ref } from 'react';
+import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type Ref } from 'react';
 
 /**
  * Supported visual variants.
@@ -14,14 +14,16 @@ interface BaseProps {
   /** Visual emphasis tier. */
   readonly variant: ButtonVariant;
   /** Sizing token. Defaults to `md`. */
-  readonly size?: ButtonSize;
+  readonly size?: ButtonSize | undefined;
   /** Disable interactivity. */
-  readonly disabled?: boolean;
+  readonly disabled?: boolean | undefined;
   /** Show a spinner and prevent clicks while truthy. */
-  readonly loading?: boolean;
+  readonly loading?: boolean | undefined;
 }
 
-interface ButtonAsButton extends BaseProps, ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonAsButton
+  extends BaseProps,
+    Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'disabled'> {
   readonly variant: Exclude<ButtonVariant, 'link'>;
   readonly href?: never;
 }

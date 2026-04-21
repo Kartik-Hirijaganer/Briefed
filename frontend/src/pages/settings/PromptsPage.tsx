@@ -42,13 +42,15 @@ export default function PromptsPage(): JSX.Element {
         <li key={rule.id}>
           <Card className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-fg">{rule.label}</h3>
+              <h3 className="text-sm font-semibold text-fg">
+                {String(rule.action.label ?? 'Rule')}
+              </h3>
               <span className="text-xs text-fg-muted">
-                priority {rule.priority} · {rule.bucket.replace('_', ' ')}
+                priority {rule.priority} · {String(rule.action.label ?? 'unknown').replace('_', ' ')}
               </span>
             </div>
             <pre className="overflow-x-auto rounded-[var(--radius-sm)] bg-bg-muted p-2 text-xs text-fg-muted">
-              {JSON.stringify(rule.predicate_json, null, 2)}
+              {JSON.stringify(rule.match, null, 2)}
             </pre>
           </Card>
         </li>

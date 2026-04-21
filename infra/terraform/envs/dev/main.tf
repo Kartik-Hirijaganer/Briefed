@@ -105,14 +105,16 @@ module "worker" {
   s3_bucket_arns       = values(module.s3.bucket_arns)
   tags                 = local.tags
   env_vars = {
-    BRIEFED_ENV                  = "dev"
-    BRIEFED_SSM_PREFIX           = module.ssm.parameter_prefix
-    BRIEFED_TOKEN_WRAP_KEY_ALIAS = module.kms.token_wrap_alias
-    BRIEFED_CONTENT_KEY_ALIAS    = module.kms.content_alias
-    BRIEFED_CLASSIFY_QUEUE_URL   = module.sqs.queue_urls["classify"]
-    BRIEFED_SUMMARIZE_QUEUE_URL  = module.sqs.queue_urls["summarize"]
-    BRIEFED_JOBS_QUEUE_URL       = module.sqs.queue_urls["jobs"]
-    BRIEFED_STORE_RAW_MIME       = "0"
+    BRIEFED_ENV                   = "dev"
+    BRIEFED_SSM_PREFIX            = module.ssm.parameter_prefix
+    BRIEFED_TOKEN_WRAP_KEY_ALIAS  = module.kms.token_wrap_alias
+    BRIEFED_CONTENT_KEY_ALIAS     = module.kms.content_alias
+    BRIEFED_CLASSIFY_QUEUE_URL    = module.sqs.queue_urls["classify"]
+    BRIEFED_SUMMARIZE_QUEUE_URL   = module.sqs.queue_urls["summarize"]
+    BRIEFED_JOBS_QUEUE_URL        = module.sqs.queue_urls["jobs"]
+    BRIEFED_UNSUBSCRIBE_QUEUE_URL = module.sqs.queue_urls["unsubscribe"]
+    BRIEFED_RAW_EMAIL_BUCKET      = module.s3.bucket_names["raw_email"]
+    BRIEFED_STORE_RAW_MIME        = "0"
   }
 }
 

@@ -19,7 +19,10 @@ Phase 4 tables (plan §14 Phase 4 + §20.10): ``job_matches`` (with
 envelope-encrypted ``match_reason_ct``) + ``job_filters``.
 
 Phase 5 tables (plan §14 Phase 5 + §7 unsubscribe recommender):
-``unsubscribe_suggestions``. Later phases add ``digest_runs`` etc.
+``unsubscribe_suggestions``.
+
+Phase 6 tables: ``user_preferences`` and ``digest_runs`` for the PWA
+settings and run-history surfaces.
 """
 
 from __future__ import annotations
@@ -1063,10 +1066,77 @@ class KnownWasteSender(Base, TimestampMixin):
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
+class UserPreference(Base, TimestampMixin):
+    """Per-user frontend preferences (plan §19.16 Phase 6).
+
+    Attributes:
+        user_id: Owning user and primary key.
+        auto_execution_enabled: Global scheduled-scan switch.
+        digest_send_hour_utc: Hour-of-day the digest should be sent.
+        redact_pii: Whether LLM prompts should redact obvious PII first.
+        secure_offline_mode: Whether the PWA should require a local
+            passcode for offline cache access.
+        retention_policy_json: Operator-readable retention knobs.
+    """
+
+    __tablename__ = "user_preferences"
+    __table_args__ = (
+        CheckConstraint(
+            "digest_send_hour_utc >= 0 AND digest_send_hour_utc <= 23",
+            name="ck_user_preferences_digest_hour",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    auto_execution_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    digest_send_hour_utc: Mapped[int] = mapped_column(Integer, nullable=False, default=13)
+    redact_pii: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    secure_offline_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retention_policy_json: Mapped[Any] = mapped_column(json_column(), nullable=False, default=dict)
+
+
+class DigestRun(Base, TimestampMixin):
+    """Manual or scheduled digest run visible in the frontend history.
+
+    The worker stages already pass a ``run_id`` through messages; this row
+    is the API-visible ledger the Phase 6 PWA can poll and list.
+    """
+
+    __tablename__ = "digest_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','running','complete','failed')",
+            name="ck_digest_runs_status",
+        ),
+        CheckConstraint(
+            "trigger_type IN ('scheduled','manual')",
+            name="ck_digest_runs_trigger_type",
+        ),
+        Index("ix_digest_runs_user_started_at", "user_id", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    trigger_type: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stats: Mapped[Any] = mapped_column(json_column(), nullable=False, default=dict)
+    cost_cents: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
 __all__ = [
     "Base",
     "Classification",
     "ConnectedAccount",
+    "DigestRun",
     "Email",
     "EmailContentBlob",
     "JobFilter",
@@ -1084,4 +1154,5 @@ __all__ = [
     "TimestampMixin",
     "UnsubscribeSuggestion",
     "User",
+    "UserPreference",
 ]

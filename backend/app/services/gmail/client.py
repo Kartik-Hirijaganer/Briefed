@@ -41,6 +41,11 @@ _DEFAULT_PAGE_SIZE = 500
 class GmailApiError(ProviderError):
     """Upstream Gmail API returned an unrecoverable error."""
 
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        """Store the HTTP status so callers can distinguish 404 races."""
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class GmailClient:
     """Quota-aware Gmail REST client.
@@ -250,4 +255,5 @@ class GmailClient:
         if response.status_code >= 300:
             raise GmailApiError(
                 f"Gmail API error {response.status_code}: {response.text[:200]}",
+                status_code=response.status_code,
             )

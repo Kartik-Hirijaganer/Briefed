@@ -16,6 +16,8 @@ export class ApiError extends Error {
   public readonly detail: unknown;
 
   /**
+   * Build an API error with response metadata.
+   *
    * @param message - Human-readable message.
    * @param status - HTTP status code.
    * @param detail - Raw JSON payload.
@@ -59,6 +61,12 @@ const csrfMiddleware: Middleware = {
   },
 };
 
+interface ApiEnvelope<TData> {
+  readonly data?: TData;
+  readonly error?: unknown;
+  readonly response?: Response;
+}
+
 /**
  * Typed API client. `credentials: 'include'` sends the session cookie on
  * every request; the CSRF middleware mirrors the double-submit token from
@@ -82,11 +90,7 @@ api.use(csrfMiddleware);
  * @returns The success payload.
  * @throws {@link ApiError} when the envelope contains an error.
  */
-export function unwrap<TData>(envelope: {
-  data?: TData;
-  error?: unknown;
-  response?: Response;
-}): TData {
+export function unwrap<TData>(envelope: ApiEnvelope<TData>): TData {
   if (envelope.data !== undefined) return envelope.data;
   const status = envelope.response?.status ?? 0;
   throw new ApiError(`API request failed with status ${status}`, status, envelope.error);

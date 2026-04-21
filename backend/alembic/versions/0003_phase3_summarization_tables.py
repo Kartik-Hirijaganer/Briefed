@@ -255,7 +255,7 @@ def upgrade() -> None:
         bind.execute(
             seed_insert,
             {
-                "id": sa.func.gen_random_uuid() if bind.dialect.name == "postgresql" else _uuid(),
+                "id": _uuid(),
                 "match": json.dumps(match),
                 "cluster_key": cluster_key,
                 "topic_hint": topic_hint,
@@ -286,5 +286,5 @@ def downgrade() -> None:
 
 
 def _uuid() -> str:
-    """Return a fresh UUIDv4 string (SQLite seed path only)."""
+    """Return a fresh UUIDv4 string for portable Alembic seed inserts."""
     return str(uuid.uuid4())

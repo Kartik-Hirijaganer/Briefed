@@ -56,6 +56,9 @@ hygiene_router = APIRouter(prefix="/hygiene", tags=["hygiene"])
 _TOP_DOMAIN_CAP = 10
 """Plan §14 Phase 5 — dashboard card shows at most 10 top domains."""
 
+_RECOMMENDATION_CONFIDENCE_MIN = Decimal("0.800")
+"""Policy gate: low-confidence model veto rows are audit rows, not recommendations."""
+
 
 def _repo_for(settings: Settings) -> UnsubscribeSuggestionsRepo:
     """Return a repo wired with the content cipher when configured.
@@ -125,7 +128,10 @@ async def list_suggestions(
         .limit(limit)
     )
     if not include_dismissed:
-        stmt = stmt.where(UnsubscribeSuggestion.dismissed.is_(False))
+        stmt = stmt.where(
+            UnsubscribeSuggestion.dismissed.is_(False),
+            UnsubscribeSuggestion.confidence >= _RECOMMENDATION_CONFIDENCE_MIN,
+        )
 
     rows = (await session.execute(stmt)).scalars().all()
     repo = _repo_for(settings)
