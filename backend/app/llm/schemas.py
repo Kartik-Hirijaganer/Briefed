@@ -21,11 +21,14 @@ TriageCategory = Literal[
     "good_to_read",
     "ignore",
     "waste",
-    "newsletter",
-    "job_candidate",
     "needs_review",
 ]
-"""Bucket enumeration mirrored from ``triage.v1.json``."""
+"""Primary triage-bucket enumeration mirrored from ``triage.v1.json``.
+
+Newsletter and job-candidate detection are independent boolean flags, not
+primary buckets. Downstream routing fans out from those flags while the
+four-way attention label stays stable.
+"""
 
 
 class TriageDecision(BaseModel):

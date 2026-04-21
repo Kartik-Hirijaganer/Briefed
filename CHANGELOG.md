@@ -10,6 +10,44 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Added
 
+- Phase 6 frontend PWA + dashboard + triage + settings (plan §14 Phase 6,
+  §10 IA, §19.16):
+  - `@briefed/ui` primitive library: `Button` (discriminated-union variant
+    props), `Field` (a11y label + description + error wiring), `Switch`,
+    `Card`, `Dialog`, `Sheet`, `EmptyState`, `Skeleton`, `ErrorState`,
+    `Alert`, `Badge`, `FreshnessBadge`, `WhyBadge` (§19.8 explainability),
+    `OpenInGmailLink`, `InstallPromptIOS`, and an upgraded `Motion` helper
+    wired to framer-motion with `useReducedMotion` collapse.
+  - `@briefed/contracts` exposes a barrel `index.ts` and an `exports` map
+    so the OpenAPI JSON and provider types resolve from both sides.
+  - Root `package.json` turns the repo into an npm workspace covering
+    `frontend`, `packages/ui`, `packages/contracts`.
+  - Vite + React 18 + TypeScript strict frontend (`frontend/`):
+    Tailwind v4 wired against the `@briefed/ui` tokens, typed API client
+    on top of `openapi-fetch` with session-cookie credentials + CSRF
+    double-submit + 401 redirect middleware, TanStack Query with a 7-day
+    GC default, and `vite-plugin-pwa` precaching the app shell.
+  - Hooks `useBreakpoint`, `useOnlineStatus`, `useFreshnessState` (plan
+    §19.8 four named states), and `useRunProgress` (polling-only per
+    §20.6).
+  - Routes matching §10 IA: dashboard, `/must-read`, `/good-to-read`,
+    `/ignore`, `/waste`, `/jobs`, `/news`, `/unsubscribe`, `/history`,
+    `/settings/{accounts,preferences,prompts,schedule}`, `/login`, and
+    `/oauth/callback`, rendered inside an `<AppShell>` with sidebar
+    (≥ md) + `<BottomTabBar>` (mobile).
+  - Settings → Accounts owns Add Gmail, per-account auto-scan toggle,
+    disconnect confirm dialog, and a mobile bottom `<Sheet>` for the
+    overflow menu (§19.16 §1 + §6). Preferences owns the global
+    auto-execution toggle (§19.16 §2) plus PII-redaction and
+    secure-offline toggles.
+  - Dashboard hosts the Scan Now button per §19.16 §3: manual run via
+    `POST /api/v1/runs`, polling `GET /api/v1/runs/{id}` through
+    `useRunProgress`, offline guard, success auto-revert.
+  - Vitest component tests: `<Button>` discriminated-union + click +
+    loading (with `@ts-expect-error` regression cases), `<Field>` a11y
+    attributes and required marker.
+  - Frontend TS contract stub at `src/api/schema.d.ts`; `make docs`
+    regenerates via `npm run codegen` (`openapi-typescript`).
 - Phase 5 unsubscribe + inbox hygiene (plan §14 Phase 5):
   - `app.services.unsubscribe.parser` — lenient RFC 2369 / RFC 8058
     `List-Unsubscribe` parser. Handles bracketed entries, bare

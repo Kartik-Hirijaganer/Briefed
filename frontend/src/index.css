@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind v4 `@theme` block mirrors @briefed/ui tokens so utility classes
+ * (e.g. `bg-surface`, `text-fg-muted`, `text-accent`) resolve to the same
+ * CSS custom properties. Tokens are the single source of truth; Tailwind
+ * is just the ergonomic alias per plan §10.
+ */
+
+@theme {
+  --color-bg: var(--color-bg);
+  --color-bg-muted: var(--color-bg-muted);
+  --color-surface: var(--color-surface);
+  --color-border: var(--color-border);
+  --color-fg: var(--color-fg);
+  --color-fg-muted: var(--color-fg-muted);
+  --color-accent: var(--color-accent);
+  --color-accent-contrast: var(--color-accent-fg);
+  --color-danger: var(--color-danger);
+  --color-warn: var(--color-warn);
+  --color-success: var(--color-success);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-sans);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Disable hover transforms on touch devices — plan §19.16 §6. */
+@media (hover: none) {
+  .hover\:bg-surface:hover {
+    background: inherit;
+  }
+}

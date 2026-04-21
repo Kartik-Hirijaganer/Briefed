@@ -4,6 +4,11 @@
   "private": true,
   "description": "Generated OpenAPI + shared provider types for Briefed.",
   "type": "module",
-  "main": "src/providers.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi.json": "./openapi.json"
+  },
   "files": ["src", "openapi.json"]
 }

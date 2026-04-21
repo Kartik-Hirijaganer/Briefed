@@ -18,10 +18,12 @@ COVERAGE_FLOOR ?= 80
 
 export PYTHONPATH := backend:$(PYTHONPATH)
 
-# Frontend is scaffolded in Phase 6. Until ``frontend/package-lock.json``
-# exists, frontend-side targets are gracefully skipped so Phase 0 CI can
-# go green. Phase 6's first commit lands the lock file and flips the gate.
-FRONTEND_READY := $(shell test -f frontend/package-lock.json && echo 1)
+# Frontend scaffolding landed in Phase 6 (sources + tsconfig + primitives).
+# CI still keys frontend-side targets off the lockfile so a clean clone
+# without ``npm install`` does not break the gate — operators run
+# ``make bootstrap`` once to create ``package-lock.json`` at the repo root
+# (npm workspaces hoist deps across frontend/ + packages/).
+FRONTEND_READY := $(shell test -f package-lock.json && echo 1)
 
 .PHONY: help
 help:
@@ -34,8 +36,8 @@ help:
 .PHONY: bootstrap
 bootstrap: ## Install Python + Node deps and start docker-compose services
 	pip install -e ".[dev]"
-ifneq (,$(wildcard frontend/package.json))
-	npm --prefix frontend install
+ifneq (,$(wildcard package.json))
+	npm install
 endif
 	docker compose up -d
 
@@ -44,7 +46,7 @@ dev: ## Run backend + frontend with hot-reload (requires docker-compose services
 	docker compose up -d postgres
 ifdef FRONTEND_READY
 	( uvicorn app.main:app --app-dir backend --reload & \
-	  npm --prefix frontend run dev & \
+	  npm --workspace frontend run dev & \
 	  wait )
 else
 	uvicorn app.main:app --app-dir backend --reload
@@ -65,7 +67,7 @@ lint: ## Run all linters (Python + Frontend)
 	ruff format --check .
 	mypy
 ifdef FRONTEND_READY
-	npm --prefix frontend run lint
+	npm --workspace frontend run lint
 endif
 
 .PHONY: format
@@ -73,7 +75,7 @@ format: ## Apply formatters
 	ruff format .
 	ruff check --fix .
 ifdef FRONTEND_READY
-	npm --prefix frontend run format
+	npm --workspace frontend run format
 endif
 
 .PHONY: typecheck
@@ -99,7 +101,7 @@ endif
 	    --json-report --json-report-file=$(ARTIFACTS_DIR)/pytest.json || true
 ifdef FRONTEND_READY
 	@set -o pipefail; \
-	  npm --prefix frontend run test -- \
+	  npm --workspace frontend run test -- \
 	    --reporter=json --outputFile=$(ARTIFACTS_DIR)/vitest.json || true
 endif
 ifdef PLAYWRIGHT
@@ -133,7 +135,7 @@ coverage: _artifacts_dir ## Enforce the 80% line-coverage floor (+ listed 100% m
 	  --cov-fail-under=$(COVERAGE_FLOOR)
 	python backend/scripts/coverage_gate.py $(COV_BE_XML)
 ifdef FRONTEND_READY
-	npm --prefix frontend run test -- --coverage \
+	npm --workspace frontend run test -- --coverage \
 	  --coverage.thresholds.lines=$(COVERAGE_FLOOR) \
 	  --coverage.thresholds.functions=$(COVERAGE_FLOOR) \
 	  --coverage.thresholds.branches=70 \
@@ -148,9 +150,7 @@ endif
 docs: ## Regenerate packages/contracts/openapi.json + frontend TS client
 	python backend/scripts/export_openapi.py
 ifdef FRONTEND_READY
-	npx --prefix frontend openapi-typescript \
-	  packages/contracts/openapi.json \
-	  -o frontend/src/api/schema.d.ts
+	npm --workspace frontend run codegen
 endif
 
 # --------------------------------------------------------------------------- #
@@ -181,7 +181,7 @@ audit: ## pip-audit + npm audit
 	# on real vulnerabilities but downgrades the skip to a warning.
 	pip-audit --skip-editable
 ifdef FRONTEND_READY
-	npm --prefix frontend audit --audit-level=high
+	npm --workspace frontend audit --audit-level=high
 endif
 
 # --------------------------------------------------------------------------- #

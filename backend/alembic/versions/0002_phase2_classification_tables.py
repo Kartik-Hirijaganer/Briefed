@@ -114,6 +114,18 @@ def upgrade() -> None:
         sa.Column("model", sa.String(64), nullable=False, server_default=""),
         sa.Column("tokens_in", sa.Integer, nullable=False, server_default="0"),
         sa.Column("tokens_out", sa.Integer, nullable=False, server_default="0"),
+        sa.Column(
+            "is_newsletter",
+            sa.Boolean,
+            nullable=False,
+            server_default=sa.false(),
+        ),
+        sa.Column(
+            "is_job_candidate",
+            sa.Boolean,
+            nullable=False,
+            server_default=sa.false(),
+        ),
         sa.Column("reasons_ct", sa.LargeBinary),
         sa.Column("reasons_dek_wrapped", sa.LargeBinary),
         sa.Column(
