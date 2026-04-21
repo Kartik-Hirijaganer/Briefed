@@ -42,6 +42,10 @@ def _jsonb() -> sa.types.TypeEngine[object]:
 
 def upgrade() -> None:
     """Apply the Phase 1 schema."""
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS citext")
+
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),

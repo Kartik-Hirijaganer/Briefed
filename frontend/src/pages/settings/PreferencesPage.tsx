@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, Field, Skeleton, Switch } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
-import type { Schemas } from '../../api/schema';
+import type { Schemas } from '../../api/types';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { enqueueMutation } from '../../offline/mutations';
 
 /**
  * Global user preferences (plan §19.16 §2 auto-execution toggle,
@@ -13,15 +15,28 @@ import type { Schemas } from '../../api/schema';
  */
 export default function PreferencesPage(): JSX.Element {
   const client = useQueryClient();
+  const online = useOnlineStatus();
   const preferencesQuery = useQuery({
     queryKey: ['preferences'],
     queryFn: async () => unwrap(await api.GET('/api/v1/preferences')),
   });
 
   const patch = useMutation({
-    mutationFn: async (body: Schemas['PreferencesPatchRequest']) =>
-      unwrap(await api.PATCH('/api/v1/preferences', { body })),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['preferences'] }),
+    mutationFn: async (body: Schemas['PreferencesPatchRequest']) => {
+      if (!online) {
+        await enqueueMutation({ type: 'preferences_patch', body });
+        return body;
+      }
+      return unwrap(await api.PATCH('/api/v1/preferences', { body }));
+    },
+    onMutate: (body) => {
+      client.setQueryData<Schemas['UserPreferences']>(['preferences'], (current) =>
+        current ? applyPreferencesPatch(current, body) : current,
+      );
+    },
+    onSuccess: () => {
+      if (online) void client.invalidateQueries({ queryKey: ['preferences'] });
+    },
   });
 
   if (preferencesQuery.isPending) return <Skeleton shape="block" />;
@@ -80,4 +95,18 @@ export default function PreferencesPage(): JSX.Element {
       </Card>
     </section>
   );
+}
+
+function applyPreferencesPatch(
+  current: Schemas['UserPreferences'],
+  body: Schemas['PreferencesPatchRequest'],
+): Schemas['UserPreferences'] {
+  return {
+    auto_execution_enabled:
+      body.auto_execution_enabled ?? current.auto_execution_enabled,
+    digest_send_hour_utc: body.digest_send_hour_utc ?? current.digest_send_hour_utc,
+    redact_pii: body.redact_pii ?? current.redact_pii,
+    secure_offline_mode: body.secure_offline_mode ?? current.secure_offline_mode,
+    retention_policy_json: body.retention_policy_json ?? current.retention_policy_json,
+  };
 }

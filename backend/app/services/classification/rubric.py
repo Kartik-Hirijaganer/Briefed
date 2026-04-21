@@ -86,9 +86,9 @@ class RuleDecision:
     confidence: float
     reasons: tuple[str, ...]
     rubric_version: int
+    rule_id: UUID | None = None
     is_newsletter: bool = False
     is_job_candidate: bool = False
-    rule_id: UUID | None
     source: Literal["rule"] = "rule"
 
 
@@ -375,7 +375,8 @@ def default_rubric_seed() -> Iterable[MatchPredicate]:
             "priority": 200,
             "match": {"list_unsubscribe_present": True},
             "action": {
-                "label": "newsletter",
+                "label": "good_to_read",
+                "is_newsletter": True,
                 "confidence": 0.75,
                 "reasons": ["List-Unsubscribe header present."],
             },

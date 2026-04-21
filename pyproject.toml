@@ -137,6 +137,8 @@ convention = "google"
 # is configured so local + test runs never load boto3.
 "backend/app/api/v1/jobs.py" = ["PLC0415"]
 "backend/app/api/v1/unsubscribes.py" = ["PLC0415"]
+"backend/app/api/v1/emails.py" = ["PLC0415"]
+"backend/app/api/v1/frontend.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
@@ -201,9 +203,6 @@ branch = true
 omit = [
     "backend/app/lambda_api.py",
     "backend/app/lambda_worker.py",
-    "backend/app/api/v1/unsubscribes.py",
-    "backend/app/services/unsubscribe/*",
-    "backend/app/workers/handlers/unsubscribe.py",
 ]
 
 [tool.coverage.report]

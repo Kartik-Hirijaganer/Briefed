@@ -89,7 +89,7 @@ _MAX_SUBJECT_LEN = 160
 _POSITIVE_LABELS: frozenset[str] = frozenset(
     {"must_read", "good_to_read", "job_candidate"},
 )
-"""Labels that count toward engagement (plan §14 Phase 2 buckets)."""
+"""Primary and legacy labels that count toward engagement."""
 
 _WASTE_LABELS: frozenset[str] = frozenset({"waste", "ignore"})
 """Labels that count toward waste rate."""
@@ -224,12 +224,18 @@ async def aggregate_sender_stats(
 
     class_rows = (
         await session.execute(
-            select(Classification.email_id, Classification.label)
+            select(
+                Classification.email_id,
+                Classification.label,
+                Classification.is_job_candidate,
+            )
             .join(Email, Email.id == Classification.email_id)
             .where(email_window),
         )
     ).all()
-    labels_by_email: dict[UUID, str] = {row.email_id: row.label for row in class_rows}
+    labels_by_email: dict[UUID, tuple[str, bool]] = {
+        row.email_id: (row.label, row.is_job_candidate) for row in class_rows
+    }
 
     unsub_rows = (
         await session.execute(
@@ -269,10 +275,11 @@ async def aggregate_sender_stats(
             bucket["last_at"] = row.internal_date
         if len(bucket["subjects"]) < _SUBJECT_SAMPLE_COUNT:
             bucket["subjects"].append(_sanitize_subject(row.subject))
-        label = labels_by_email.get(row.id)
-        if label is not None:
+        label_info = labels_by_email.get(row.id)
+        if label_info is not None:
+            label, is_job_candidate = label_info
             bucket["classified"] += 1
-            if label in _POSITIVE_LABELS:
+            if label in _POSITIVE_LABELS or is_job_candidate:
                 bucket["positive"] += 1
             elif label in _WASTE_LABELS:
                 bucket["waste"] += 1

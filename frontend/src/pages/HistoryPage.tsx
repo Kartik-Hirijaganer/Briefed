@@ -70,10 +70,10 @@ export default function HistoryPage(): JSX.Element {
                   <Badge tone={STATUS_TONE[run.status] ?? 'neutral'}>{run.status}</Badge>
                 </div>
                 <div className="flex gap-4 text-xs text-fg-muted">
-                  <span>Ingested {run.stats.ingested}</span>
-                  <span>Classified {run.stats.classified}</span>
-                  <span>Summarized {run.stats.summarized}</span>
-                  {run.cost_cents !== undefined ? (
+                  <span>Ingested {run.stats?.ingested ?? 0}</span>
+                  <span>Classified {run.stats?.classified ?? 0}</span>
+                  <span>Summarized {run.stats?.summarized ?? 0}</span>
+                  {run.cost_cents !== undefined && run.cost_cents !== null ? (
                     <span>${(run.cost_cents / 100).toFixed(2)}</span>
                   ) : null}
                 </div>

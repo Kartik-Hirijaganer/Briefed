@@ -4,8 +4,9 @@ import { EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
 import { EmailCard } from '../features/email/EmailCard';
+import { useEmailBucketMutation } from '../features/email/useEmailBucketMutation';
 import { useFreshnessState } from '../hooks/useFreshnessState';
-import type { Schemas } from '../api/schema';
+import type { Schemas } from '../api/types';
 
 /**
  * Props for {@link TriagePage}.
@@ -33,6 +34,7 @@ const STALE_MS = 2 * 60 * 1000;
 export default function TriagePage(props: TriagePageProps): JSX.Element {
   const { bucket } = props;
   const queryKey = ['emails', bucket];
+  const bucketMutation = useEmailBucketMutation();
   const emailsQuery = useQuery({
     queryKey,
     queryFn: async () =>
@@ -75,7 +77,12 @@ export default function TriagePage(props: TriagePageProps): JSX.Element {
         <ul className="flex flex-col gap-3">
           {emailsQuery.data.emails.map((email) => (
             <li key={email.id}>
-              <EmailCard email={email} />
+              <EmailCard
+                email={email}
+                onBucketChange={(row, nextBucket) =>
+                  bucketMutation.mutate({ email: row, bucket: nextBucket })
+                }
+              />
             </li>
           ))}
         </ul>

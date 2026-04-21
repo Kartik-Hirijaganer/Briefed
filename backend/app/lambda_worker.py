@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:  # pragma: no cover
     from app.core.security import KmsClient
     from app.services.classification.dispatch import SqsSender
+    from app.services.ingestion.storage import ObjectStore
 
 
 class _SqsRecord(TypedDict, total=False):
@@ -78,6 +79,13 @@ def _sqs_client() -> SqsSender:
     import boto3
 
     return cast("SqsSender", boto3.client("sqs"))
+
+
+def _s3_client() -> ObjectStore:
+    """Return a boto3 S3 client narrowed to the storage protocol."""
+    import boto3
+
+    return cast("ObjectStore", boto3.client("s3"))
 
 
 def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
@@ -170,6 +178,9 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     classify_queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL", "")
+    raw_bucket = os.environ.get("BRIEFED_RAW_EMAIL_BUCKET", "")
+    if message.store_raw_mime and not raw_bucket:
+        raise RuntimeError("BRIEFED_RAW_EMAIL_BUCKET unset while raw MIME storage is enabled")
 
     async with httpx.AsyncClient() as http:
         provider = GmailProvider(
@@ -182,6 +193,11 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                 provider=provider,
                 cipher=EnvelopeCipher(key_id=alias, client=_kms_client()),
                 content_cipher=EnvelopeCipher(key_id=content_alias, client=_kms_client()),
+                raw_storage=_s3_client() if message.store_raw_mime else None,
+                raw_bucket=raw_bucket or None,
+                oauth_client_id=_settings.google_oauth_client_id,
+                oauth_client_secret=_settings.google_oauth_client_secret,
+                http_client=http,
             )
             stats = await handle_ingest(message, deps=deps)
             if stats.new and classify_queue_url:

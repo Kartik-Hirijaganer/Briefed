@@ -37,17 +37,17 @@ def _jsonb() -> sa.types.TypeEngine[object]:
 
 _KNOWN_WASTE_SEED: tuple[tuple[dict[str, object], str, str], ...] = (
     (
-        {"from_domain": "mailer-daemon@googlemail.com"},
+        {"from_email": "mailer-daemon@googlemail.com"},
         "Google bounce notifications rarely need reading.",
         "seed",
     ),
     (
-        {"from_domain": "noreply@reply.linkedin.com"},
+        {"from_email": "noreply@reply.linkedin.com"},
         "LinkedIn bulk-notification loop; promote via rubric if desired.",
         "seed",
     ),
     (
-        {"subject_regex": r"^(?i)\s*(viagra|crypto airdrop|lottery)"},
+        {"subject_regex": r"(?i)^\s*(viagra|crypto airdrop|lottery)"},
         "Obvious spam keywords.",
         "seed",
     ),
@@ -266,7 +266,7 @@ def upgrade() -> None:
         bind.execute(
             seed_insert,
             {
-                "id": sa.func.gen_random_uuid() if bind.dialect.name == "postgresql" else _uuid(),
+                "id": _uuid(),
                 "match": json.dumps(match),
                 "added_by": added_by,
                 "reason": reason,
@@ -286,5 +286,5 @@ def downgrade() -> None:
 
 
 def _uuid() -> str:
-    """Return a fresh UUIDv4 string (SQLite seed path only)."""
+    """Return a fresh UUIDv4 string for portable Alembic seed inserts."""
     return str(uuid.uuid4())

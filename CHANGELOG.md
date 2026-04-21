@@ -10,6 +10,20 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Added
 
+- Phase 7 offline + mobile polish (plan §14 Phase 7, §19.16):
+  - Workbox runtime caching for digest, email-list, jobs, news,
+    unsubscribe, history, and immutable summary reads.
+  - Dexie-backed TanStack Query persistence in IndexedDB for cold
+    offline opens, with a 7-day cache window.
+  - Durable `pending_mutations` queue with replay-on-reconnect and a
+    `<QueuedActionsSheet>` for inspecting, cancelling, and manually
+    retrying queued actions.
+  - Offline-aware optimistic mutations for account toggles, preferences,
+    unsubscribe dismiss/confirm, and email bucket changes.
+  - Swipe gestures on email cards, dashboard pull-to-refresh wired to
+    Scan Now, iOS install prompt display, storage-pressure warning, and
+    Android-only haptic completion feedback.
+
 - Phase 6 frontend PWA + dashboard + triage + settings (plan §14 Phase 6,
   §10 IA, §19.16):
   - `@briefed/ui` primitive library: `Button` (discriminated-union variant

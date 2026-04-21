@@ -117,6 +117,7 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.this.arn
   package_type  = "Image"
   image_uri     = var.image_uri
+  publish       = true
   memory_size   = var.memory_mb
   timeout       = var.timeout_seconds
   architectures = ["x86_64"]
@@ -139,7 +140,7 @@ resource "aws_lambda_function" "this" {
 resource "aws_lambda_alias" "live" {
   name             = "live"
   function_name    = aws_lambda_function.this.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.this.version
   description      = "Rolling alias; update-alias is the atomic deploy step."
 }
 

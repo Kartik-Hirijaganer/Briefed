@@ -13,8 +13,8 @@ const projectDir = fileURLToPath(new URL('.', import.meta.url));
  *
  * - Aliases `@briefed/ui` + `@briefed/contracts` to the workspace sources so
  *   no separate build step is required.
- * - Wires `vite-plugin-pwa` with the Phase 6 manifest. Runtime caching rules
- *   land in Phase 7; today we precache the app shell only.
+ * - Wires `vite-plugin-pwa` with Phase 7 runtime caching for digest,
+ *   summary, jobs, news, unsubscribe, and history reads.
  * - Proxies `/api` + `/oauth` to the local uvicorn during development so
  *   cookies and CSRF work against `http://localhost:5173` same-origin.
  */
@@ -25,6 +25,51 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      workbox: {
+        cleanupOutdatedCaches: true,
+        navigateFallback: '/index.html',
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, url }) =>
+              request.method === 'GET' && url.pathname.startsWith('/api/v1/digest'),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'briefed-digests',
+              expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ request, url }) =>
+              request.method === 'GET' &&
+              [
+                '/api/v1/emails',
+                '/api/v1/jobs',
+                '/api/v1/news',
+                '/api/v1/unsubscribes',
+                '/api/v1/history',
+              ].some((path) => url.pathname.startsWith(path)),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'briefed-dashboard-reads',
+              expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ request, url }) =>
+              request.method === 'GET' &&
+              url.pathname.startsWith('/api/v1/summaries/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'briefed-summary-reads',
+              expiration: { maxEntries: 300, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
       manifest: {
         name: 'Briefed',
         short_name: 'Briefed',
@@ -43,11 +88,17 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      '@briefed/ui': resolve(projectDir, '../packages/ui/src/index.ts'),
-      '@briefed/ui/tokens.css': resolve(projectDir, '../packages/ui/src/tokens.css'),
-      '@briefed/contracts': resolve(projectDir, '../packages/contracts/src/index.ts'),
-    },
+    alias: [
+      {
+        find: '@briefed/ui/tokens.css',
+        replacement: resolve(projectDir, '../packages/ui/src/tokens.css'),
+      },
+      { find: '@briefed/ui', replacement: resolve(projectDir, '../packages/ui/src/index.ts') },
+      {
+        find: '@briefed/contracts',
+        replacement: resolve(projectDir, '../packages/contracts/src/index.ts'),
+      },
+    ],
   },
   server: {
     host: '127.0.0.1',

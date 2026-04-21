@@ -12,7 +12,9 @@ import {
 } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
-import type { Schemas } from '../../api/schema';
+import type { Schemas } from '../../api/types';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { enqueueMutation } from '../../offline/mutations';
 
 /**
  * Props for {@link AccountCard}.
@@ -47,18 +49,36 @@ const STATUS_LABEL: Record<Schemas['ConnectedAccount']['status'], string> = {
 export function AccountCard(props: AccountCardProps): JSX.Element {
   const { account } = props;
   const client = useQueryClient();
+  const online = useOnlineStatus();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const patch = useMutation({
-    mutationFn: async (body: Schemas['AccountPatchRequest']) =>
-      unwrap(
+    mutationFn: async (body: Schemas['AccountPatchRequest']) => {
+      if (!online) {
+        await enqueueMutation({ type: 'account_patch', accountId: account.id, body });
+        return { ...account, ...body };
+      }
+      return unwrap(
         await api.PATCH('/api/v1/accounts/{account_id}', {
           params: { path: { account_id: account.id } },
           body,
         }),
-      ),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['accounts'] }),
+      );
+    },
+    onMutate: (body) => {
+      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+        if (!current) return current;
+        return {
+          accounts: current.accounts.map((row) =>
+            row.id === account.id ? applyAccountPatch(row, body) : row,
+          ),
+        };
+      });
+    },
+    onSuccess: () => {
+      if (online) void client.invalidateQueries({ queryKey: ['accounts'] });
+    },
   });
 
   const disconnect = useMutation({
@@ -187,4 +207,18 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
       </Dialog>
     </Card>
   );
+}
+
+function applyAccountPatch(
+  account: Schemas['ConnectedAccount'],
+  body: Schemas['AccountPatchRequest'],
+): Schemas['ConnectedAccount'] {
+  const next: Schemas['ConnectedAccount'] = {
+    ...account,
+    auto_scan_enabled: body.auto_scan_enabled ?? account.auto_scan_enabled,
+    exclude_from_global_digest:
+      body.exclude_from_global_digest ?? account.exclude_from_global_digest,
+  };
+  if (body.display_name !== undefined) next.display_name = body.display_name;
+  return next;
 }

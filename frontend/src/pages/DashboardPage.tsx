@@ -4,8 +4,10 @@ import { Alert, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@
 
 import { api, unwrap } from '../api/client';
 import { EmailCard } from '../features/email/EmailCard';
-import { ScanNowButton } from '../features/dashboard/ScanNowButton';
+import { SCAN_NOW_EVENT, ScanNowButton } from '../features/dashboard/ScanNowButton';
 import { useFreshnessState } from '../hooks/useFreshnessState';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 
 const DIGEST_STALE_MS = 60 * 1000;
 
@@ -16,6 +18,7 @@ const DIGEST_STALE_MS = 60 * 1000;
  * @returns The rendered page.
  */
 export default function DashboardPage(): JSX.Element {
+  const online = useOnlineStatus();
   const digestQuery = useQuery({
     queryKey: ['digest-today'],
     queryFn: async () => unwrap(await api.GET('/api/v1/digest/today')),
@@ -30,9 +33,13 @@ export default function DashboardPage(): JSX.Element {
   const hoursSinceLastRun = lastRunAt
     ? (Date.now() - new Date(lastRunAt).getTime()) / (60 * 60 * 1000)
     : Infinity;
+  const pullToRefresh = usePullToRefresh({
+    disabled: !online,
+    onRefresh: () => window.dispatchEvent(new Event(SCAN_NOW_EVENT)),
+  });
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6" {...pullToRefresh}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Today&apos;s Digest</h1>

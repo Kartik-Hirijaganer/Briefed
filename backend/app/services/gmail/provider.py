@@ -17,7 +17,7 @@ from app.domain.providers import (
     RawMessage,
     SyncCursor,
 )
-from app.services.gmail.client import GmailClient
+from app.services.gmail.client import GmailApiError, GmailClient
 from app.services.gmail.oauth import revoke_token
 from app.services.gmail.parser import raw_from_gmail_full
 
@@ -126,8 +126,10 @@ class GmailProvider(MailboxProvider):
                     access_token=credentials.access_token,
                     message_id=message_id,
                 )
-            except Exception:
-                continue
+            except GmailApiError as exc:
+                if exc.status_code == 404:
+                    continue
+                raise
             results.append(raw_from_gmail_full(payload))
         return results
 

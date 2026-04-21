@@ -2,9 +2,9 @@
 
 Ensures:
 
-* ``enqueue_unextracted_for_account`` picks ``job_candidate`` rows that
-  lack a ``job_matches`` row and skips already-extracted ones;
-* non-``job_candidate`` rows are ignored;
+* ``enqueue_unextracted_for_account`` picks job-candidate flagged rows
+  that lack a ``job_matches`` row and skips already-extracted ones;
+* non-job-candidate rows are ignored;
 * ``parse_job_extract_body`` validates :class:`JobExtractMessage`.
 """
 
@@ -57,8 +57,13 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
     await session.flush()
 
     emails: list[Email] = []
-    labels = ["job_candidate", "job_candidate", "must_read", "newsletter"]
-    for idx, label in enumerate(labels):
+    classifications = [
+        ("good_to_read", True),
+        ("good_to_read", True),
+        ("must_read", False),
+        ("good_to_read", False),
+    ]
+    for idx, (label, is_job_candidate) in enumerate(classifications):
         email = Email(
             account_id=account.id,
             gmail_message_id=f"m-{idx}",
@@ -85,6 +90,7 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
                 model="",
                 tokens_in=0,
                 tokens_out=0,
+                is_job_candidate=is_job_candidate,
                 reasons_ct=None,
             ),
         )
@@ -121,7 +127,7 @@ async def test_enqueue_picks_unextracted_job_candidates(test_session) -> None:
         run_id=None,
     )
 
-    assert enqueued == 1  # one job_candidate left after skipping the extracted one.
+    assert enqueued == 1  # one flagged candidate left after skipping the extracted one.
     assert len(sqs.messages) == 1
 
     body = json.loads(sqs.messages[0]["Body"])

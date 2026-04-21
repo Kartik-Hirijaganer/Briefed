@@ -38,7 +38,7 @@
           "oauth"
         ],
         "summary": "Start Google OAuth authorization-code flow",
-        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path, e.g. ``/settings/accounts``).\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
+        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path, e.g. ``/settings/accounts``).\n    session_cookie: Existing signed session, when the caller is\n        connecting another mailbox to the same user.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
         "operationId": "gmail_oauth_start_api_v1_oauth_gmail_start_get",
         "parameters": [
           {
@@ -55,6 +55,22 @@
                 }
               ],
               "title": "Return To"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
             }
           }
         ],
@@ -197,6 +213,74 @@
       }
     },
     "/api/v1/accounts/{account_id}": {
+      "patch": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Update account settings",
+        "description": "Update per-account UI preferences.\n\nArgs:\n    account_id: Target account.\n    payload: Patch body.\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nReturns:\n    Updated account view.\n\nRaises:\n    HTTPException: 404 when the account does not belong to the caller.",
+        "operationId": "patch_account_api_v1_accounts__account_id__patch",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectedAccountPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectedAccountOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "accounts"
@@ -1010,6 +1094,579 @@
           }
         }
       }
+    },
+    "/api/v1/emails": {
+      "get": {
+        "tags": [
+          "emails"
+        ],
+        "summary": "List classified emails",
+        "description": "Return classified email rows for the PWA.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached app settings.\n    bucket: Optional primary bucket filter.\n    account_id: Optional account filter.\n    limit: Maximum row count.\n\nReturns:\n    Newest-first rows plus total count.",
+        "operationId": "list_emails_api_v1_emails_get",
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "must_read",
+                    "good_to_read",
+                    "ignore",
+                    "waste"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emails/{email_id}/bucket": {
+      "patch": {
+        "tags": [
+          "emails"
+        ],
+        "summary": "Update a user-selected email bucket",
+        "description": "Persist a user override from swipe gestures or queued replay.\n\nArgs:\n    email_id: Target email.\n    body: Destination bucket.\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached app settings.\n\nReturns:\n    Updated email row.\n\nRaises:\n    HTTPException: 404 when the email does not belong to the caller.",
+        "operationId": "patch_email_bucket_api_v1_emails__email_id__bucket_patch",
+        "parameters": [
+          {
+            "name": "email_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Email Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailBucketPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailRowOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/preferences": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Get user preferences",
+        "description": "Return the caller's preferences, inserting defaults on first use.",
+        "operationId": "get_preferences_api_v1_preferences_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Update user preferences",
+        "description": "Patch the caller's global preferences.",
+        "operationId": "patch_preferences_api_v1_preferences_patch",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs": {
+      "post": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Start a manual digest run",
+        "description": "Create a digest run and enqueue one ingest message per selected account.",
+        "operationId": "start_manual_run_api_v1_runs_post",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Get digest-run status",
+        "description": "Return one owned digest-run row for polling.",
+        "operationId": "get_run_api_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/history": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "List digest-run history",
+        "description": "Return newest-first digest-run rows for the history page.",
+        "operationId": "list_history_api_v1_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/digest/today": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Get today's digest summary",
+        "description": "Return dashboard counters, cost, and a must-read preview.",
+        "operationId": "digest_today_api_v1_digest_today_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DigestTodayResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/news": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Get tech-news digest",
+        "description": "Return summarized tech-news clusters for the caller.",
+        "operationId": "news_digest_api_v1_news_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDigestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1041,6 +1698,17 @@
             "format": "email",
             "title": "Email"
           },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
           "provider": {
             "type": "string",
             "title": "Provider",
@@ -1049,6 +1717,16 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "auto_scan_enabled": {
+            "type": "boolean",
+            "title": "Auto Scan Enabled",
+            "default": true
+          },
+          "exclude_from_global_digest": {
+            "type": "boolean",
+            "title": "Exclude From Global Digest",
+            "default": false
           },
           "created_at": {
             "type": "string",
@@ -1066,6 +1744,18 @@
               }
             ],
             "title": "Last Sync At"
+          },
+          "emails_ingested_24h": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Emails Ingested 24H",
+            "default": 0
+          },
+          "daily_budget_used_pct": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Daily Budget Used Pct",
+            "default": 0.0
           }
         },
         "type": "object",
@@ -1076,7 +1766,131 @@
           "created_at"
         ],
         "title": "ConnectedAccountOut",
-        "description": "Public view of a ``connected_accounts`` row.\n\nAttributes:\n    id: ``connected_accounts.id``.\n    email: Mailbox address.\n    provider: Always ``\"gmail\"`` in 1.0.0.\n    status: Lifecycle state (``active``/``disabled``/``revoked``).\n    created_at: When the account was connected.\n    last_sync_at: Latest successful ingest timestamp, if any."
+        "description": "Public view of a ``connected_accounts`` row.\n\nAttributes:\n    id: ``connected_accounts.id``.\n    email: Mailbox address.\n    display_name: Optional UI label. ``None`` falls back to email.\n    provider: Always ``\"gmail\"`` in 1.0.0.\n    status: Lifecycle state (``active``/``disabled``/``revoked``).\n    auto_scan_enabled: Per-account scan switch.\n    exclude_from_global_digest: Per-account digest opt-out.\n    created_at: When the account was connected.\n    last_sync_at: Latest successful ingest timestamp, if any.\n    emails_ingested_24h: Count for the settings card.\n    daily_budget_used_pct: Approximate daily token budget usage."
+      },
+      "ConnectedAccountPatchRequest": {
+        "properties": {
+          "auto_scan_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Scan Enabled"
+          },
+          "exclude_from_global_digest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude From Global Digest"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectedAccountPatchRequest",
+        "description": "Request body for ``PATCH /accounts/{account_id}``.\n\nAttributes:\n    auto_scan_enabled: Toggle scans for this account.\n    exclude_from_global_digest: Toggle the global-digest opt-out.\n    display_name: Accepted for forward compatibility; ignored in\n        1.0.0 because connected-account rows do not store aliases."
+      },
+      "DigestCounts": {
+        "properties": {
+          "must_read": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Must Read",
+            "default": 0
+          },
+          "good_to_read": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Good To Read",
+            "default": 0
+          },
+          "ignore": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ignore",
+            "default": 0
+          },
+          "waste": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Waste",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "DigestCounts",
+        "description": "Daily digest triage counts."
+      },
+      "DigestTodayResponse": {
+        "properties": {
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "cost_cents_today": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cost Cents Today"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/DigestCounts"
+          },
+          "must_read_preview": {
+            "items": {
+              "$ref": "#/components/schemas/EmailRowOut"
+            },
+            "type": "array",
+            "title": "Must Read Preview",
+            "default": []
+          },
+          "last_successful_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Successful Run At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cost_cents_today",
+          "counts"
+        ],
+        "title": "DigestTodayResponse",
+        "description": "Dashboard summary for the current daily digest.\n\nAttributes:\n    generated_at: Timestamp of the latest successful run.\n    cost_cents_today: Rounded prompt spend for today.\n    counts: Current triage counts.\n    must_read_preview: Newest must-read rows.\n    last_successful_run_at: Timestamp used for freshness warnings."
       },
       "DomainWasteEntry": {
         "properties": {
@@ -1102,6 +1916,139 @@
         ],
         "title": "DomainWasteEntry",
         "description": "One row in the hygiene-stats top-senders table.\n\nAttributes:\n    sender_domain: Normalized domain.\n    frequency_30d: Sum of emails across all sender_emails in this\n        domain.\n    waste_share: Fraction ``waste_30d / frequency_30d`` for the\n        domain (0 when the domain has no classified waste rows)."
+      },
+      "EmailBucketPatchRequest": {
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "enum": [
+              "must_read",
+              "good_to_read",
+              "ignore",
+              "waste"
+            ],
+            "title": "Bucket"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bucket"
+        ],
+        "title": "EmailBucketPatchRequest",
+        "description": "Request body for ``PATCH /emails/{email_id}/bucket``.\n\nAttributes:\n    bucket: User-selected destination bucket."
+      },
+      "EmailRowOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "account_email": {
+            "type": "string",
+            "format": "email",
+            "title": "Account Email"
+          },
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          },
+          "bucket": {
+            "type": "string",
+            "enum": [
+              "must_read",
+              "good_to_read",
+              "ignore",
+              "waste"
+            ],
+            "title": "Bucket"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "decision_source": {
+            "type": "string",
+            "enum": [
+              "rule",
+              "llm",
+              "hybrid"
+            ],
+            "title": "Decision Source"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": []
+          },
+          "summary_excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "account_email",
+          "thread_id",
+          "subject",
+          "sender",
+          "received_at",
+          "bucket",
+          "confidence",
+          "decision_source"
+        ],
+        "title": "EmailRowOut",
+        "description": "Single row shown in dashboard and bucket lists.\n\nAttributes:\n    id: Email primary key.\n    account_email: Connected mailbox address.\n    thread_id: Gmail thread id for deep-linking.\n    subject: Decoded subject.\n    sender: Raw sender address.\n    received_at: Provider internal date.\n    bucket: Primary triage bucket.\n    confidence: Classification confidence in ``[0, 1]``.\n    decision_source: Rule / LLM / hybrid source label.\n    reasons: Human-readable rationale entries.\n    summary_excerpt: Optional decrypted summary preview."
+      },
+      "EmailsListResponse": {
+        "properties": {
+          "emails": {
+            "items": {
+              "$ref": "#/components/schemas/EmailRowOut"
+            },
+            "type": "array",
+            "title": "Emails",
+            "default": []
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total"
+        ],
+        "title": "EmailsListResponse",
+        "description": "Envelope for ``GET /emails``.\n\nAttributes:\n    emails: Newest-first rows.\n    total: Total matching rows before the response ``limit``."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1404,6 +2351,179 @@
         "title": "JobMatchesListResponse",
         "description": "Envelope for ``GET /jobs``.\n\nAttributes:\n    matches: Newest-first list of :class:`JobMatchOut` rows the\n        caller is allowed to see."
       },
+      "ManualRunRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "manual",
+            "title": "Kind",
+            "default": "manual"
+          },
+          "account_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ManualRunRequest",
+        "description": "Request body for ``POST /runs``.\n\nAttributes:\n    kind: Only ``manual`` is supported by the HTTP trigger.\n    account_ids: Optional subset of connected accounts to scan."
+      },
+      "ManualRunResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "accounts_queued": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Accounts Queued"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "accounts_queued"
+        ],
+        "title": "ManualRunResponse",
+        "description": "Accepted manual-run response.\n\nAttributes:\n    run_id: New ``digest_runs.id`` for polling/history.\n    accounts_queued: Number of owned accounts included in the run."
+      },
+      "NewsCluster": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "summary_md": {
+            "type": "string",
+            "title": "Summary Md"
+          },
+          "email_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Email Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "summary_md"
+        ],
+        "title": "NewsCluster",
+        "description": "Tech-news cluster shown on ``/news``.\n\nAttributes:\n    id: Cluster primary key.\n    label: Human-readable topic label.\n    summary_md: Plaintext markdown summary.\n    email_ids: Source email ids in the cluster."
+      },
+      "NewsDigestResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "clusters": {
+            "items": {
+              "$ref": "#/components/schemas/NewsCluster"
+            },
+            "type": "array",
+            "title": "Clusters",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at"
+        ],
+        "title": "NewsDigestResponse",
+        "description": "Envelope for ``GET /news``."
+      },
+      "PreferencesPatchRequest": {
+        "properties": {
+          "auto_execution_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Execution Enabled"
+          },
+          "digest_send_hour_utc": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 23.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest Send Hour Utc"
+          },
+          "redact_pii": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redact Pii"
+          },
+          "secure_offline_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secure Offline Mode"
+          },
+          "retention_policy_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Policy Json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PreferencesPatchRequest",
+        "description": "Partial update body for ``PATCH /preferences``.\n\nAttributes mirror :class:`UserPreferencesOut`; omitted fields keep\ntheir current value."
+      },
       "RubricRuleIn": {
         "properties": {
           "priority": {
@@ -1507,6 +2627,131 @@
         "type": "object",
         "title": "RubricRulesListResponse",
         "description": "Envelope for ``GET /rubric``.\n\nAttributes:\n    rules: Every :class:`RubricRuleOut` owned by the caller,\n        ordered by ``priority DESC``."
+      },
+      "RunStats": {
+        "properties": {
+          "ingested": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ingested",
+            "default": 0
+          },
+          "classified": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Classified",
+            "default": 0
+          },
+          "summarized": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Summarized",
+            "default": 0
+          },
+          "new_must_read": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "New Must Read",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RunStats",
+        "description": "Compact run counters shown by history and progress polling."
+      },
+      "RunStatusResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "trigger_type": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "manual"
+            ],
+            "title": "Trigger Type"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/RunStats"
+          },
+          "cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Cents"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "trigger_type",
+          "started_at"
+        ],
+        "title": "RunStatusResponse",
+        "description": "Digest-run row returned by ``GET /runs/{id}`` and history.\n\nAttributes:\n    id: Run primary key.\n    status: Queue/progress state.\n    trigger_type: Scheduled or user-triggered.\n    started_at: Run start timestamp.\n    completed_at: Completion timestamp, if finished.\n    stats: Compact stage counters.\n    cost_cents: Rounded LLM spend, if known.\n    error: User-safe failure summary, if failed."
+      },
+      "RunsListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunStatusResponse"
+            },
+            "type": "array",
+            "title": "Runs",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "RunsListResponse",
+        "description": "Envelope for ``GET /history``.\n\nAttributes:\n    runs: Newest-first list of digest runs."
       },
       "UnsubscribeActionOut": {
         "properties": {
@@ -1681,6 +2926,43 @@
         "type": "object",
         "title": "UnsubscribeSuggestionsListResponse",
         "description": "Envelope for ``GET /unsubscribes``.\n\nAttributes:\n    suggestions: Highest-confidence-first list of suggestion rows\n        the caller is allowed to see."
+      },
+      "UserPreferencesOut": {
+        "properties": {
+          "auto_execution_enabled": {
+            "type": "boolean",
+            "title": "Auto Execution Enabled"
+          },
+          "digest_send_hour_utc": {
+            "type": "integer",
+            "maximum": 23.0,
+            "minimum": 0.0,
+            "title": "Digest Send Hour Utc"
+          },
+          "redact_pii": {
+            "type": "boolean",
+            "title": "Redact Pii"
+          },
+          "secure_offline_mode": {
+            "type": "boolean",
+            "title": "Secure Offline Mode"
+          },
+          "retention_policy_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Retention Policy Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_execution_enabled",
+          "digest_send_hour_utc",
+          "redact_pii",
+          "secure_offline_mode",
+          "retention_policy_json"
+        ],
+        "title": "UserPreferencesOut",
+        "description": "Current user's global PWA preferences.\n\nAttributes:\n    auto_execution_enabled: Global scheduled-scan switch.\n    digest_send_hour_utc: Hour of day for the daily digest.\n    redact_pii: Whether prompt input redaction is enabled.\n    secure_offline_mode: Whether the PWA should encrypt local offline\n        data with a passcode.\n    retention_policy_json: Operator-readable retention knobs."
       },
       "ValidationError": {
         "properties": {

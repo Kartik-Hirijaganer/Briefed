@@ -29,10 +29,8 @@ _ALLOWED_LABELS = frozenset(
     {
         "must_read",
         "good_to_read",
-        "newsletter",
         "ignore",
         "waste",
-        "job_candidate",
         "needs_review",
     },
 )
@@ -80,6 +78,10 @@ class RubricRuleIn(BaseModel):
             raise ValueError("action.confidence must be a number in [0, 1]") from exc
         if not 0.0 <= conf <= 1.0:
             raise ValueError("action.confidence must be in [0, 1]")
+        for flag_name in ("is_newsletter", "is_job_candidate"):
+            flag_value = value.get(flag_name)
+            if flag_value is not None and not isinstance(flag_value, bool):
+                raise ValueError(f"action.{flag_name} must be a boolean when present")
         return value
 
 

@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { Button } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
-import type { Schemas } from '../../api/schema';
+import type { Schemas } from '../../api/types';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useRunProgress } from '../../hooks/useRunProgress';
+
+/** Browser event used by dashboard pull-to-refresh to trigger Scan Now. */
+export const SCAN_NOW_EVENT = 'briefed-scan-now';
 
 /**
  * Starts a manual run (`POST /api/v1/runs`) and renders the four button
@@ -32,13 +35,24 @@ export function ScanNowButton(): JSX.Element {
   });
 
   const progress = useRunProgress(activeRunId);
+  const triggerScan = (): void => {
+    if (!online || activeRunId || startRun.isPending) return;
+    startRun.mutate();
+  };
+
+  useEffect(() => {
+    const handler = (): void => triggerScan();
+    window.addEventListener(SCAN_NOW_EVENT, handler);
+    return () => window.removeEventListener(SCAN_NOW_EVENT, handler);
+  });
 
   useEffect(() => {
     if (!activeRunId) return;
     const status = progress.status?.status;
     if (status === 'complete') {
-      setJustFinishedCount(progress.status?.stats.new_must_read ?? 0);
+      setJustFinishedCount(progress.status?.stats?.new_must_read ?? 0);
       setActiveRunId(null);
+      if ('vibrate' in navigator) navigator.vibrate(10);
       void client.invalidateQueries({ queryKey: ['digest-today'] });
       void client.invalidateQueries({ queryKey: ['emails'] });
     } else if (status === 'failed') {
@@ -62,7 +76,7 @@ export function ScanNowButton(): JSX.Element {
   const label = ((): string => {
     switch (mode) {
       case 'running': {
-        const done = progress.status?.stats.ingested ?? 0;
+        const done = progress.status?.stats?.ingested ?? 0;
         return `Scanning… ${done} emails`;
       }
       case 'success':
@@ -81,7 +95,7 @@ export function ScanNowButton(): JSX.Element {
       <Button
         variant="primary"
         size="lg"
-        onClick={() => startRun.mutate()}
+        onClick={triggerScan}
         disabled={!online || mode === 'running'}
         loading={mode === 'running'}
         title={tooltip}

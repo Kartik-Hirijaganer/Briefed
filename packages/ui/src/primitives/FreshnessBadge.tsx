@@ -12,7 +12,7 @@ export interface FreshnessBadgeProps {
   /** Current freshness state. */
   readonly state: FreshnessState;
   /** Optional timestamp rendered alongside the badge. */
-  readonly lastKnownGoodAt?: string;
+  readonly lastKnownGoodAt?: string | undefined;
 }
 
 const STATE_LABEL: Record<FreshnessState, string> = {
