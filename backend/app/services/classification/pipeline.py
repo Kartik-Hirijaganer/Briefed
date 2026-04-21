@@ -39,10 +39,12 @@ from app.services.classification.repository import (
     ClassificationWrite,
 )
 from app.services.classification.rubric import RuleDecision, RuleEngine, load_default_rules
+from app.services.ingestion.content import decrypt_excerpt
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.services.prompts.registry import RegisteredPrompt
 
 
@@ -67,6 +69,7 @@ class ClassifyInputs:
         llm: Configured :class:`LLMClient`.
         repo: Encrypt-on-write :class:`ClassificationsRepo`.
         prompt_version_id: ``prompt_versions.id`` matching ``prompt``.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     email_id: UUID
@@ -75,6 +78,7 @@ class ClassifyInputs:
     llm: LLMClient
     repo: ClassificationsRepo
     prompt_version_id: UUID
+    content_cipher: EnvelopeCipher | None = None
 
 
 @dataclass(frozen=True)
@@ -162,7 +166,12 @@ async def classify_one(
             "rubric_summary": _rubric_summary(rule_decision),
             "from_addr": email_bm.from_addr.email,
             "subject": email_bm.subject,
-            "plain_text_excerpt": _excerpt_for(email_bm, email_row),
+            "plain_text_excerpt": _excerpt_for(
+                email_bm,
+                email_row,
+                user_id=inputs.user_id,
+                cipher=inputs.content_cipher,
+            ),
         },
     )
 
@@ -415,11 +424,17 @@ def _rubric_summary(decision: RuleDecision | None) -> str:
     )
 
 
-def _excerpt_for(email: EmailMessage, row: Email) -> str:
+def _excerpt_for(
+    email: EmailMessage,
+    row: Email,
+    *,
+    user_id: UUID,
+    cipher: EnvelopeCipher | None,
+) -> str:
     """Return the best excerpt for the prompt: blob excerpt or snippet."""
-    blob = row.body
-    if blob is not None and blob.plain_text_excerpt:
-        return blob.plain_text_excerpt
+    excerpt = decrypt_excerpt(row.body, user_id=user_id, cipher=cipher)
+    if excerpt:
+        return excerpt
     return email.snippet or ""
 
 

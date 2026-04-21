@@ -201,6 +201,58 @@ class JobMatch(BaseModel):
         return stripped
 
 
+UnsubscribeCategory = Literal[
+    "promotional",
+    "newsletter",
+    "notification",
+    "social",
+    "other",
+]
+"""Sender archetype enum mirrored from ``unsubscribe_borderline.v1.json``."""
+
+
+class UnsubscribeDecision(BaseModel):
+    """Structured output of the ``unsubscribe_borderline`` prompt (plan §14 Phase 5).
+
+    Emitted by Gemini Flash (primary) or Claude Haiku 4.5 (fallback)
+    via :class:`app.llm.client.LLMClient` on senders the SQL aggregate
+    flagged as 2-of-3 borderline. Written — with ``rationale``
+    envelope-encrypted — to
+    :class:`app.db.models.UnsubscribeSuggestion` via
+    :class:`app.services.unsubscribe.repository.UnsubscribeSuggestionsRepo`.
+
+    The model refuses extra fields so a hallucinated ``action_url`` /
+    ``sender_is_spam`` key cannot leak onto disk; the value objects
+    the UI renders are the ones declared here.
+
+    Attributes:
+        should_recommend: Final verdict; ``True`` when the sender
+            should appear on the unsubscribe board.
+        confidence: Calibrated ``[0, 1]``. The prompt caps this at
+            0.95; values at or below 0.8 never auto-act.
+        category: Sender archetype (``promotional`` / ``newsletter``
+            / ``notification`` / ``social`` / ``other``).
+        rationale: One-sentence explanation citing the aggregate
+            signals. Encrypted at rest. Trimmed to 240 characters.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    should_recommend: bool
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    category: UnsubscribeCategory
+    rationale: str = Field(..., min_length=1, max_length=240)
+
+    @field_validator("rationale")
+    @classmethod
+    def _strip_rationale(cls, value: str) -> str:
+        """Trim surrounding whitespace; reject empty rationales."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("rationale must be non-empty")
+        return stripped
+
+
 class TechNewsClusterSummary(BaseModel):
     """Group summary for one newsletter cluster (plan §14 Phase 3).
 
@@ -259,4 +311,6 @@ __all__ = [
     "TechNewsClusterSummary",
     "TriageCategory",
     "TriageDecision",
+    "UnsubscribeCategory",
+    "UnsubscribeDecision",
 ]

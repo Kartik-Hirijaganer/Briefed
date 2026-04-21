@@ -15,5 +15,17 @@
       "Bash(git merge:*)",
       "Bash(git rebase:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/typecheck.sh", "timeout": 60 },
+          { "type": "command", "command": ".claude/hooks/test.sh", "timeout": 120 },
+          { "type": "command", "command": ".claude/hooks/build.sh", "timeout": 90 }
+        ]
+      }
+    ]
   }
 }

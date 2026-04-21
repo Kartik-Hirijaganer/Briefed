@@ -16,7 +16,7 @@ small.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from app.core.config import get_settings
 from app.core.logging import configure as configure_logging
@@ -29,6 +29,11 @@ _settings = get_settings()
 configure_logging(level=_settings.log_level, json_output=_settings.runtime != "local")
 
 logger = get_logger(__name__)
+
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.core.security import KmsClient
+    from app.services.classification.dispatch import SqsSender
 
 
 class _SqsRecord(TypedDict, total=False):
@@ -61,13 +66,32 @@ class _PartialBatchResponse(TypedDict):
     batchItemFailures: list[_BatchItemFailure]
 
 
+def _kms_client() -> KmsClient:
+    """Return a boto3 KMS client narrowed to the protocol this module needs."""
+    import boto3  # type: ignore[import-untyped]
+
+    return cast("KmsClient", boto3.client("kms"))
+
+
+def _sqs_client() -> SqsSender:
+    """Return a boto3 SQS client narrowed to the protocol this module needs."""
+    import boto3
+
+    return cast("SqsSender", boto3.client("sqs"))
+
+
 def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
     """Dispatch an SQS batch to the appropriate per-stage handler.
 
     Routing keys off the tail segment of ``eventSourceARN`` so one
-    Lambda can back every queue. Phase 1 wires ``ingest`` to
-    :func:`app.workers.handlers.ingest.handle_ingest`; later phases add
-    classify / summarize / jobs / unsubscribe / digest / maintenance.
+    Lambda can back every queue. Phases 1-5 wire ``ingest`` to
+    :func:`app.workers.handlers.ingest.handle_ingest`, ``classify`` to
+    :func:`app.workers.handlers.classify.handle_classify`, ``summarize``
+    to :mod:`app.workers.handlers.summarize`, ``jobs`` to
+    :func:`app.workers.handlers.jobs.handle_job_extract`, and
+    ``unsubscribe`` to
+    :func:`app.workers.handlers.unsubscribe.handle_unsubscribe`. Later
+    phases add ``digest`` / ``maintenance``.
 
     Args:
         event: SQS event envelope from Lambda; see AWS docs.
@@ -96,6 +120,10 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
                     await _handle_classify_record(record)
                 elif stage == "summarize":
                     await _handle_summarize_record(record)
+                elif stage == "jobs":
+                    await _handle_jobs_record(record)
+                elif stage == "unsubscribe":
+                    await _handle_unsubscribe_record(record)
                 else:
                     logger.warning(
                         "sqs_dispatcher.unknown_stage",
@@ -123,7 +151,6 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     """
     import os
 
-    import boto3  # type: ignore[import-untyped]
     import httpx
 
     from app.core.security import EnvelopeCipher
@@ -138,6 +165,9 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     alias = os.environ.get("BRIEFED_TOKEN_WRAP_KEY_ALIAS", "")
     if not alias:
         raise RuntimeError("BRIEFED_TOKEN_WRAP_KEY_ALIAS unset")
+    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    if not content_alias:
+        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     classify_queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL", "")
 
@@ -150,11 +180,12 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
             deps = IngestDeps(
                 session=session,
                 provider=provider,
-                cipher=EnvelopeCipher(key_id=alias, client=boto3.client("kms")),
+                cipher=EnvelopeCipher(key_id=alias, client=_kms_client()),
+                content_cipher=EnvelopeCipher(key_id=content_alias, client=_kms_client()),
             )
             stats = await handle_ingest(message, deps=deps)
             if stats.new and classify_queue_url:
-                sqs = boto3.client("sqs")
+                sqs = _sqs_client()
                 await enqueue_unclassified_for_account(
                     session=session,
                     user_id=message.user_id,
@@ -169,19 +200,16 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
 async def _handle_classify_record(record: _SqsRecord) -> None:
     """Decode + dispatch one classify-queue record (plan §14 Phase 2).
 
-    On the last classify record for an account, also enqueue the
-    matching ``summarize_*`` jobs. The flush happens opportunistically
-    per-message — idempotent because
-    :func:`app.services.summarization.dispatch.enqueue_unsummarized_for_run`
-    filters by ``summaries.email_id IS NULL`` so duplicate messages
-    never double-summarize.
+    After the classification lands, enqueue only this email's eligible
+    downstream work. The dispatch helpers require the target row to
+    still lack a summary/job-match row, so SQS retries do not rescan the
+    whole account or fan out duplicate LLM work.
 
     Args:
         record: Raw SQS record from the event envelope.
     """
     import os
 
-    import boto3
     import httpx
 
     from app.core.security import EnvelopeCipher
@@ -194,15 +222,21 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     )
     from app.services.classification.dispatch import parse_classify_body
     from app.services.classification.repository import ClassificationsRepo
+    from app.services.jobs.dispatch import enqueue_job_extract_for_email
     from app.services.prompts.registry import PromptRegistry
-    from app.services.summarization import enqueue_unsummarized_for_run
+    from app.services.summarization import enqueue_summary_for_email
+    from app.services.unsubscribe.dispatch import enqueue_hygiene_run_for_account
     from app.workers.handlers.classify import ClassifyDeps, handle_classify
 
     message = parse_classify_body(record.get("body", "{}"))
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    if not content_alias:
+        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
     gemini_key = _settings.gemini_api_key or ""
     anthropic_key = _settings.anthropic_api_key or ""
     summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
+    jobs_queue_url = os.environ.get("BRIEFED_JOBS_QUEUE_URL", "")
+    unsubscribe_queue_url = os.environ.get("BRIEFED_UNSUBSCRIBE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
         primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
@@ -214,9 +248,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
             fallbacks=fallbacks,
             rate_caps={"anthropic_direct": RateCap(max_calls=100)},
         )
-        cipher: EnvelopeCipher | None = None
-        if content_alias:
-            cipher = EnvelopeCipher(key_id=content_alias, client=boto3.client("kms"))
+        cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
@@ -225,15 +257,43 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                 llm=llm,
                 registry=registry,
                 repo=ClassificationsRepo(cipher=cipher),
+                content_cipher=cipher,
             )
             await handle_classify(message, deps=deps)
+            sqs_client = _sqs_client()
             if summarize_queue_url:
-                await enqueue_unsummarized_for_run(
+                await enqueue_summary_for_email(
                     session=session,
                     user_id=message.user_id,
                     account_id=message.account_id,
+                    email_id=message.email_id,
                     queue_url=summarize_queue_url,
-                    sqs=boto3.client("sqs"),
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                )
+            if jobs_queue_url:
+                await enqueue_job_extract_for_email(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    email_id=message.email_id,
+                    queue_url=jobs_queue_url,
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                )
+            if unsubscribe_queue_url:
+                # The hygiene aggregate runs over the trailing 30 days,
+                # so enqueueing once per classify record produces
+                # duplicate messages — cheap and idempotent (each run
+                # re-sweeps the same window and upserts rows while
+                # preserving ``dismissed`` state). A future
+                # optimization can debounce to one message per
+                # (account, run) when a run-scoped ledger lands.
+                await enqueue_hygiene_run_for_account(
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=unsubscribe_queue_url,
+                    sqs=sqs_client,
                     run_id=message.run_id,
                 )
             await session.commit()
@@ -250,7 +310,6 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
     """
     import os
 
-    import boto3
     import httpx
 
     from app.core.security import EnvelopeCipher
@@ -272,6 +331,8 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
 
     message = parse_summarize_body(record.get("body", "{}"))
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    if not content_alias:
+        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
     gemini_key = _settings.gemini_api_key or ""
     anthropic_key = _settings.anthropic_api_key or ""
 
@@ -285,9 +346,7 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
             fallbacks=fallbacks,
             rate_caps={"anthropic_direct": RateCap(max_calls=100)},
         )
-        cipher: EnvelopeCipher | None = None
-        if content_alias:
-            cipher = EnvelopeCipher(key_id=content_alias, client=boto3.client("kms"))
+        cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
@@ -296,11 +355,134 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
                 llm=llm,
                 registry=registry,
                 repo=SummariesRepo(cipher=cipher),
+                content_cipher=cipher,
             )
             if isinstance(message, SummarizeEmailMessage):
                 await handle_summarize_email(message, deps=deps)
             else:
                 await handle_tech_news_cluster(message, deps=deps)
+            await session.commit()
+
+
+async def _handle_jobs_record(record: _SqsRecord) -> None:
+    """Decode + dispatch one jobs-queue record (plan §14 Phase 4).
+
+    Wires the LLM client + content cipher + prompt registry into the
+    job-extract handler. The handler upserts a single ``job_matches`` row
+    keyed by ``email_id`` and writes one ``prompt_call_log`` row.
+
+    Args:
+        record: Raw SQS record from the event envelope.
+    """
+    import os
+
+    import httpx
+
+    from app.core.security import EnvelopeCipher
+    from app.db.session import get_sessionmaker
+    from app.llm.client import LLMClient, RateCap
+    from app.llm.providers import (
+        AnthropicDirectProvider,
+        GeminiProvider,
+        LLMProvider,
+    )
+    from app.services.jobs import JobMatchesRepo, parse_job_extract_body
+    from app.services.prompts.registry import PromptRegistry
+    from app.workers.handlers.jobs import JobExtractDeps, handle_job_extract
+
+    message = parse_job_extract_body(record.get("body", "{}"))
+    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    if not content_alias:
+        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
+    gemini_key = _settings.gemini_api_key or ""
+    anthropic_key = _settings.anthropic_api_key or ""
+
+    async with httpx.AsyncClient() as http:
+        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
+        fallbacks: tuple[LLMProvider, ...] = ()
+        if anthropic_key:
+            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
+        llm = LLMClient(
+            primary=primary,
+            fallbacks=fallbacks,
+            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        )
+        cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
+        async with get_sessionmaker()() as session:
+            registry = PromptRegistry.load()
+            await registry.sync_to_db(session)
+            deps = JobExtractDeps(
+                session=session,
+                llm=llm,
+                registry=registry,
+                repo=JobMatchesRepo(cipher=cipher),
+                content_cipher=cipher,
+            )
+            await handle_job_extract(message, deps=deps)
+            await session.commit()
+
+
+async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
+    """Decode + dispatch one unsubscribe-queue record (plan §14 Phase 5).
+
+    Wires the LLM client + content cipher + prompt registry into the
+    hygiene handler. The handler runs the 30-day SQL aggregate, scores
+    every sender, invokes the borderline LLM on 2-of-3 rule hits, and
+    upserts :class:`app.db.models.UnsubscribeSuggestion` rows.
+
+    Args:
+        record: Raw SQS record from the event envelope.
+    """
+    import os
+
+    import httpx
+
+    from app.core.security import EnvelopeCipher
+    from app.db.session import get_sessionmaker
+    from app.llm.client import LLMClient, RateCap
+    from app.llm.providers import (
+        AnthropicDirectProvider,
+        GeminiProvider,
+        LLMProvider,
+    )
+    from app.services.prompts.registry import PromptRegistry
+    from app.services.unsubscribe import (
+        UnsubscribeSuggestionsRepo,
+        parse_unsubscribe_body,
+    )
+    from app.workers.handlers.unsubscribe import (
+        UnsubscribeDeps,
+        handle_unsubscribe,
+    )
+
+    message = parse_unsubscribe_body(record.get("body", "{}"))
+    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
+    if not content_alias:
+        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
+    gemini_key = _settings.gemini_api_key or ""
+    anthropic_key = _settings.anthropic_api_key or ""
+
+    async with httpx.AsyncClient() as http:
+        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
+        fallbacks: tuple[LLMProvider, ...] = ()
+        if anthropic_key:
+            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
+        llm = LLMClient(
+            primary=primary,
+            fallbacks=fallbacks,
+            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        )
+        cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
+        async with get_sessionmaker()() as session:
+            registry = PromptRegistry.load()
+            await registry.sync_to_db(session)
+            deps = UnsubscribeDeps(
+                session=session,
+                llm=llm,
+                registry=registry,
+                repo=UnsubscribeSuggestionsRepo(cipher=cipher),
+            )
+            await handle_unsubscribe(message, deps=deps)
             await session.commit()
 
 
@@ -322,8 +504,6 @@ def fanout_handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
     """
     import asyncio
     import os
-
-    import boto3
 
     from app.db.session import get_sessionmaker
     from app.workers.handlers.fanout import FanoutDeps, run_fanout
@@ -347,7 +527,7 @@ def fanout_handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
         async with get_sessionmaker()() as session:
             deps = FanoutDeps(
                 session=session,
-                sqs=boto3.client("sqs"),
+                sqs=_sqs_client(),
                 ingest_queue_url=queue_url,
                 store_raw_mime=os.environ.get("BRIEFED_STORE_RAW_MIME", "0") == "1",
             )

@@ -95,6 +95,7 @@ class KmsClient(Protocol):
         EncryptionContext: dict[str, str],
     ) -> dict[str, Any]:
         """Wrap ``Plaintext`` with ``KeyId`` + ``EncryptionContext``."""
+        ...  # pragma: no cover
 
     def decrypt(
         self,
@@ -104,6 +105,7 @@ class KmsClient(Protocol):
         KeyId: str | None = None,
     ) -> dict[str, Any]:
         """Unwrap ``CiphertextBlob`` under ``EncryptionContext``."""
+        ...  # pragma: no cover
 
 
 class EnvelopeCipher:

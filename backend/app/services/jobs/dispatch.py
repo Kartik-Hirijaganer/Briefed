@@ -42,6 +42,7 @@ class SqsSender(Protocol):
         MessageBody: str,
     ) -> dict[str, Any]:
         """Enqueue one SQS message."""
+        ...
 
 
 async def enqueue_unextracted_for_account(
@@ -112,6 +113,53 @@ async def enqueue_unextracted_for_account(
     return enqueued
 
 
+async def enqueue_job_extract_for_email(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    account_id: UUID,
+    email_id: UUID,
+    queue_url: str,
+    sqs: SqsSender,
+    run_id: UUID | None,
+    prompt_name: str = "job_extract",
+    prompt_version: int = 1,
+) -> int:
+    """Enqueue one job-extract message if this email qualifies."""
+    stmt = (
+        select(Email.id)
+        .join(Classification, Classification.email_id == Email.id)
+        .outerjoin(JobMatch, JobMatch.email_id == Email.id)
+        .where(
+            Email.id == email_id,
+            Email.account_id == account_id,
+            Classification.label == _JOB_LABEL,
+            JobMatch.email_id.is_(None),
+        )
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return 0
+
+    message = JobExtractMessage(
+        user_id=user_id,
+        account_id=account_id,
+        email_id=email_id,
+        run_id=run_id,
+        prompt_name=prompt_name,
+        prompt_version=prompt_version,
+    )
+    sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
+    logger.info(
+        "jobs.dispatch.enqueued_email",
+        account_id=str(account_id),
+        email_id=str(email_id),
+        run_id=str(run_id) if run_id else None,
+    )
+    return 1
+
+
 def parse_job_extract_body(body: str) -> JobExtractMessage:
     """Validate + parse a raw SQS body into :class:`JobExtractMessage`.
 
@@ -133,6 +181,7 @@ def parse_job_extract_body(body: str) -> JobExtractMessage:
 
 __all__ = [
     "SqsSender",
+    "enqueue_job_extract_for_email",
     "enqueue_unextracted_for_account",
     "parse_job_extract_body",
 ]

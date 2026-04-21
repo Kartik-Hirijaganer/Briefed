@@ -40,6 +40,7 @@ class SqsSender(Protocol):
         MessageBody: str,
     ) -> dict[str, Any]:
         """Enqueue one message onto ``QueueUrl``."""
+        ...
 
 
 @dataclass

@@ -46,6 +46,7 @@ class ObjectStore(Protocol):
         ContentType: str,
     ) -> dict[str, Any]:
         """Upload ``Body`` to ``Bucket`` / ``Key``."""
+        ...
 
 
 @dataclass

@@ -32,6 +32,7 @@ from app.services.prompts.registry import PromptRegistry
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.llm.client import LLMClient
     from app.services.classification.pipeline import ClassifyOutcome
     from app.workers.messages import ClassifyMessage
@@ -49,12 +50,14 @@ class ClassifyDeps:
         llm: Configured :class:`LLMClient`.
         registry: In-memory :class:`PromptRegistry`.
         repo: Encrypt-on-write :class:`ClassificationsRepo`.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     session: AsyncSession
     llm: LLMClient
     registry: PromptRegistry
     repo: ClassificationsRepo
+    content_cipher: EnvelopeCipher | None = None
 
 
 async def handle_classify(
@@ -100,6 +103,7 @@ async def handle_classify(
         llm=deps.llm,
         repo=deps.repo,
         prompt_version_id=prompt_row.id,
+        content_cipher=deps.content_cipher,
     )
 
     started = utcnow()

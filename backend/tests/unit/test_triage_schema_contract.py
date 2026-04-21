@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
@@ -34,7 +35,7 @@ def test_schema_required_mirrors_model_required() -> None:
 def test_schema_categories_match_pydantic_literal() -> None:
     schema = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
     schema_categories = set(schema["properties"]["category"]["enum"])
-    pydantic_categories = set(TriageDecision.model_fields["category"].annotation.__args__)
+    pydantic_categories = set(get_args(TriageDecision.model_fields["category"].annotation))
     assert schema_categories == pydantic_categories
 
 

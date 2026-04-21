@@ -237,6 +237,48 @@ async def test_summarize_email_happy_path(test_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_email_skips_existing_summary(test_session) -> None:
+    user = User(email="me@example.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    _account, email = await _seed_email(test_session, user)
+    registered, prompt_version_id = await _registered_prompt(test_session)
+    test_session.add(
+        Summary(
+            kind="email",
+            email_id=email.id,
+            cluster_id=None,
+            prompt_version_id=prompt_version_id,
+            model="gemini-1.5-flash",
+            tokens_in=0,
+            tokens_out=0,
+            body_md_ct=b"\x00",
+            entities_ct=None,
+            cache_hit=False,
+            confidence=Decimal("0"),
+            batch_id=None,
+        ),
+    )
+    await test_session.flush()
+
+    cipher = EnvelopeCipher(key_id="alias/test", client=_FakeKms())
+    outcome = await summarize_email(
+        SummarizeInputs(
+            email_id=email.id,
+            user_id=user.id,
+            prompt=registered,
+            prompt_version_id=prompt_version_id,
+            llm=LLMClient(primary=_FakeProvider("gemini", [])),
+            repo=SummariesRepo(cipher=cipher),
+        ),
+        session=test_session,
+    )
+
+    assert outcome.ok is False
+    assert outcome.skipped_reason == "already summarized"
+
+
+@pytest.mark.asyncio
 async def test_summarize_email_records_cache_hit(test_session) -> None:
     user = User(email="me@example.com", tz="UTC", status="active")
     test_session.add(user)

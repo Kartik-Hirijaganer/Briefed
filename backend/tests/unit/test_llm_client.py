@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -260,6 +261,21 @@ async def test_all_providers_fail_raises_and_logs_error() -> None:
     assert logs and logs[-1].status == "error"
 
 
+async def test_all_providers_fail_without_logger_raises() -> None:
+    primary = _FakeProvider(
+        name="gemini",
+        responses=[LLMProviderError("x", retryable=False)],
+    )
+    client = LLMClient(primary=primary)
+    with pytest.raises(LLMClientError):
+        await client.call(
+            spec=_spec(),
+            rendered_prompt="hi",
+            schema=_Payload,
+            prompt_version_id=uuid.uuid4(),
+        )
+
+
 def test_render_prompt_interpolates() -> None:
     spec = _spec()
     rendered = render_prompt(spec, {"who": "world"})
@@ -278,3 +294,14 @@ def test_circuit_breaker_resets_on_success() -> None:
     breaker.record_success()
     assert breaker.consecutive_failures == 0
     assert breaker.opened_at is None
+
+
+def test_circuit_breaker_allows_half_open_after_cooldown() -> None:
+    breaker = CircuitBreaker(cool_down_seconds=0.0, opened_at=0.0)
+    breaker.before_call()
+
+
+def test_rate_cap_resets_on_new_day() -> None:
+    cap = RateCap(max_calls=1, day=date(2000, 1, 1), used=1)
+    cap.consume()
+    assert cap.used == 1

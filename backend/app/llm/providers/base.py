@@ -130,6 +130,7 @@ class LLMProvider(Protocol):
             LLMProviderError: When the provider itself fails — the
                 ``retryable`` flag decides retry vs fallback.
         """
+        ...
 
 
 __all__ = [

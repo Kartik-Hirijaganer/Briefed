@@ -19,7 +19,7 @@ Vite · PWA · AWS Lambda + SnapStart · Terraform
 .
 ├── backend/            FastAPI service + Lambda handlers + Dockerfile (Python 3.11+)
 │   ├── app/            Application code (api, core, db, domain, services, workers, …)
-│   ├── alembic/        SQLAlchemy migrations (Phase 1 + Phase 2 + Phase 3 + Phase 4 schema)
+│   ├── alembic/        SQLAlchemy migrations (Phase 1–5 schema)
 │   ├── eval/           Promptfoo config + golden set + thresholds
 │   └── tests/          unit/ + integration/ test suites
 ├── frontend/           React PWA dashboard (Vite + TypeScript)

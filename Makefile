@@ -86,6 +86,13 @@ typecheck: ## Strict type check (Python)
 
 .PHONY: test
 test: _artifacts_dir ## Run the full Briefed test suite and print a unified summary
+	rm -f $(ARTIFACTS_DIR)/pytest.json $(ARTIFACTS_DIR)/pytest.xml \
+	  $(ARTIFACTS_DIR)/vitest.json $(ARTIFACTS_DIR)/playwright.json \
+	  $(ARTIFACTS_DIR)/promptfoo.json
+ifdef EVAL
+	@command -v promptfoo >/dev/null || \
+	  (echo "promptfoo is required for make eval; install it before running evals." && exit 127)
+endif
 	@set -o pipefail; \
 	  pytest -m "not e2e and not eval" \
 	    --junitxml=$(ARTIFACTS_DIR)/pytest.xml \
@@ -124,6 +131,7 @@ coverage: _artifacts_dir ## Enforce the 80% line-coverage floor (+ listed 100% m
 	  --cov-report=term-missing \
 	  --cov-report=xml:$(COV_BE_XML) \
 	  --cov-fail-under=$(COVERAGE_FLOOR)
+	python backend/scripts/coverage_gate.py $(COV_BE_XML)
 ifdef FRONTEND_READY
 	npm --prefix frontend run test -- --coverage \
 	  --coverage.thresholds.lines=$(COVERAGE_FLOOR) \

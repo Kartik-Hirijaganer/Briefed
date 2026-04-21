@@ -30,6 +30,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "970385384114"
 
       - name: Ensure ECR repository exists
         # The repo must exist before ECR login + image push. Describe is

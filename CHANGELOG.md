@@ -10,6 +10,84 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Added
 
+- Phase 5 unsubscribe + inbox hygiene (plan §14 Phase 5):
+  - `app.services.unsubscribe.parser` — lenient RFC 2369 / RFC 8058
+    `List-Unsubscribe` parser. Handles bracketed entries, bare
+    whitespace/comma fallbacks, mailto / http / https classification,
+    URL + entry caps, and RFC 8058 one-click POST detection. Pure-
+    functional so it slots into any future mailbox provider.
+  - `app.llm.schemas.UnsubscribeDecision` — Pydantic mirror of the
+    borderline LLM output with `extra="forbid"` covering
+    `should_recommend` / `confidence` / `category` (controlled enum) /
+    `rationale`.
+  - `packages/prompts/unsubscribe_borderline/v1.md` +
+    `packages/prompts/schemas/unsubscribe_borderline.v1.json` —
+    versioned prompt + JSON Schema with `<untrusted_sample>`
+    delimiters, calibrated-confidence guidance, and a hard contract
+    against auto-acting (ADR 0006 recommend-only).
+  - `app.services.unsubscribe`:
+    - `aggregator.py` — SQL aggregate over `emails` × `classifications`
+      (trailing 30 days) that computes per-sender `frequency_30d`,
+      `engagement_score`, `waste_rate`, and latest `List-Unsubscribe`
+      target. `score_sender` maps signals onto three rule criteria
+      (noisy / low_value / disengaged); `rank_senders` is the
+      orchestrator — 3-of-3 → rule-only recommendation at 0.9
+      confidence; exactly 2-of-3 → borderline LLM call; ≤1 → skipped.
+      An LLM veto caps the persisted confidence below the policy
+      gate so the UI hides the row while keeping an audit trail.
+    - `repository.py` — `UnsubscribeSuggestionsRepo` with transparent
+      envelope encryption on `rationale` per §20.10; metadata stays
+      plaintext so the hygiene-stats endpoint can aggregate without
+      KMS round-trips. Upsert preserves `dismissed` + `dismissed_at`
+      across re-runs so dismissals survive the next aggregate.
+    - `dispatch.py` — `enqueue_hygiene_run_for_account` emits one
+      `UnsubscribeMessage` per account per run; `parse_unsubscribe_body`
+      validates the SQS body.
+  - `app.workers.handlers.unsubscribe.handle_unsubscribe` SQS handler
+    + `_handle_unsubscribe_record` wiring in `lambda_worker` (routes
+    the `unsubscribe` queue to the hygiene aggregator). The classify
+    handler opportunistically enqueues a hygiene run when
+    `BRIEFED_UNSUBSCRIBE_QUEUE_URL` is set (idempotent per-account
+    upsert protects against duplicate SQS messages).
+  - SQLAlchemy ORM + Alembic `0005_phase5_unsubscribe_suggestions`
+    migration for `unsubscribe_suggestions` (envelope-encrypted
+    `rationale_ct`, unique on `(account_id, sender_email)`, check
+    constraints on all ratios + `decision_source IN ('rule', 'model')`).
+  - API:
+    - `GET /api/v1/unsubscribes` — top-N recommendations,
+      confidence-desc, dismissed rows hidden by default
+      (`include_dismissed=true` opts in).
+    - `POST /api/v1/unsubscribes/{id}/dismiss` — persist dismissal;
+      aggregate re-runs preserve the flag.
+    - `POST /api/v1/unsubscribes/{id}/confirm` — recommend-only
+      confirm; dismisses the row without touching Gmail.
+    - `GET /api/v1/hygiene/stats` — total-candidate counter,
+      dismissed count, average frequency, top sender domains.
+  - New `UnsubscribeMessage` SQS payload + per-file N803 ignore for
+    the dispatch protocol kwargs.
+  - Tests (38 unit + 14 integration — 318 total, 84% coverage):
+    - `test_unsubscribe_parser` — 22-case matrix covering mailto,
+      https, http fallback, one-click RFC 8058, bracketless entries,
+      duplicates, scheme filtering, and the URL-length / entry-count
+      caps.
+    - `test_unsubscribe_scoring` — rule-engine threshold checks
+      (3-hit / 2-hit / 1-hit / empty-classification-set) +
+      `UnsubscribeDecision` extra-fields rejection + rationale trim.
+    - `test_unsubscribe_repo` — upsert inserts + replaces + preserves
+      user-side dismissal across re-runs.
+    - `test_unsubscribe_aggregate` — per-sender aggregate correctness,
+      rule + model branches coexisting, LLM-veto confidence capping.
+    - `test_unsubscribe_dispatch` — enqueue + body roundtrip + body
+      reject + handler happy path + missing-prompt-version raises.
+    - `test_unsubscribes_api` — confidence-desc ordering, dismiss
+      hides rows by default, cross-user isolation, dismiss requires
+      ownership, hygiene-stats counters + top domains, 401 without a
+      session cookie.
+- New optional env var `BRIEFED_UNSUBSCRIBE_QUEUE_URL` for the
+  Phase 5 hygiene queue (+ `BRIEFED_SUMMARIZE_QUEUE_URL` and
+  `BRIEFED_JOBS_QUEUE_URL` are now documented alongside it in
+  `.env.example`).
+
 - Phase 4 job extraction + filters (plan §14 Phase 4):
   - `app.llm.schemas.JobMatch` — Pydantic mirror with `extra="forbid"`
     covering title / company / location / remote (tri-state) /

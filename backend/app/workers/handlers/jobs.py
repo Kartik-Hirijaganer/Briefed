@@ -29,6 +29,7 @@ from app.services.jobs.repository import JobMatchesRepo
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.llm.client import LLMClient
     from app.services.jobs.extractor import ExtractOutcome
     from app.services.prompts.registry import PromptRegistry
@@ -49,6 +50,7 @@ class JobExtractDeps:
         repo: Encrypt-on-write :class:`JobMatchesRepo`.
         reader_profile: Optional override of the default reader
             context rendered into the prompt.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     session: AsyncSession
@@ -56,6 +58,7 @@ class JobExtractDeps:
     registry: PromptRegistry
     repo: JobMatchesRepo
     reader_profile: str | None = None
+    content_cipher: EnvelopeCipher | None = None
 
 
 async def handle_job_extract(
@@ -93,6 +96,7 @@ async def handle_job_extract(
             llm=deps.llm,
             repo=deps.repo,
             reader_profile=deps.reader_profile,
+            content_cipher=deps.content_cipher,
         ),
         session=deps.session,
         run_id=message.run_id,

@@ -30,14 +30,16 @@ from uuid import UUID
 
 from app.core.clock import utcnow
 from app.core.logging import get_logger
-from app.db.models import Classification, Email, EmailContentBlob, PromptCallLog
+from app.db.models import Classification, Email, EmailContentBlob, PromptCallLog, Summary
 from app.llm.client import LLMClient, LLMClientError, PromptCallRecord, render_prompt
 from app.llm.schemas import EmailSummary
+from app.services.ingestion.content import decrypt_excerpt
 from app.services.summarization.repository import SummariesRepo, SummaryEmailWrite
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.services.prompts.registry import RegisteredPrompt
 
 
@@ -59,6 +61,7 @@ class SummarizeInputs:
         llm: Configured :class:`LLMClient`.
         repo: Encrypt-on-write :class:`SummariesRepo`.
         batch_id: Optional Batch API job id; set by the batch driver.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     email_id: UUID
@@ -68,6 +71,7 @@ class SummarizeInputs:
     llm: LLMClient
     repo: SummariesRepo
     batch_id: str | None = None
+    content_cipher: EnvelopeCipher | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +125,19 @@ async def summarize_email(
     if email_row is None:
         raise LookupError(f"email {inputs.email_id} not found")
 
+    if await _has_email_summary(session, email_id=inputs.email_id):
+        return SummarizeOutcome(
+            email_id=inputs.email_id,
+            ok=False,
+            confidence=0.0,
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=Decimal("0"),
+            cache_hit=False,
+            fallback_used=False,
+            skipped_reason="already summarized",
+        )
+
     classification = await _load_classification(session, email_id=inputs.email_id)
     category = classification.label if classification is not None else "good_to_read"
 
@@ -130,7 +147,11 @@ async def summarize_email(
             "category": category,
             "from_addr": email_row.from_addr,
             "subject": email_row.subject,
-            "plain_text_excerpt": _excerpt_for(email_row),
+            "plain_text_excerpt": _excerpt_for(
+                email_row,
+                user_id=inputs.user_id,
+                cipher=inputs.content_cipher,
+            ),
         },
     )
 
@@ -252,11 +273,34 @@ async def _load_classification(
     )
 
 
-def _excerpt_for(row: Email) -> str:
+async def _has_email_summary(
+    session: AsyncSession,
+    *,
+    email_id: UUID,
+) -> bool:
+    """Return True when a per-email summary already exists."""
+    from sqlalchemy import select  # noqa: PLC0415 — keep module import light
+
+    existing = await session.execute(
+        select(Summary.id).where(
+            Summary.kind == "email",
+            Summary.email_id == email_id,
+        ),
+    )
+    return existing.scalar_one_or_none() is not None
+
+
+def _excerpt_for(
+    row: Email,
+    *,
+    user_id: UUID,
+    cipher: EnvelopeCipher | None,
+) -> str:
     """Return the best plaintext excerpt for the prompt."""
     blob: EmailContentBlob | None = row.body
-    if blob is not None and blob.plain_text_excerpt:
-        return blob.plain_text_excerpt
+    excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    if excerpt:
+        return excerpt
     return row.snippet or ""
 
 

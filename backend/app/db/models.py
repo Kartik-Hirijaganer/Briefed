@@ -16,8 +16,10 @@ Phase 3 tables (plan §14 Phase 3 + §20.10): ``summaries``,
 ``known_newsletters``, ``tech_news_clusters``.
 
 Phase 4 tables (plan §14 Phase 4 + §20.10): ``job_matches`` (with
-envelope-encrypted ``match_reason_ct``) + ``job_filters``. Later phases
-add ``unsubscribe_suggestions`` etc.
+envelope-encrypted ``match_reason_ct``) + ``job_filters``.
+
+Phase 5 tables (plan §14 Phase 5 + §7 unsubscribe recommender):
+``unsubscribe_suggestions``. Later phases add ``digest_runs`` etc.
 """
 
 from __future__ import annotations
@@ -301,7 +303,11 @@ class EmailContentBlob(Base, TimestampMixin):
         storage_backend: Either ``"pg"`` (excerpt in-row) or ``"s3"``
             (excerpt elided, full body in S3).
         object_key: S3 object key when ``storage_backend='s3'``.
-        plain_text_excerpt: First N chars of decoded text/plain.
+        plain_text_excerpt_ct: Envelope ciphertext for the first N
+            chars of decoded text/plain.
+        plain_text_dek_wrapped: Reserved for a future split-storage
+            layout; the current packed envelope already carries the
+            wrapped DEK.
         html_sanitized_key: Optional S3 key for the sanitized HTML.
         quoted_text_removed: True when the parser trimmed a reply tail.
         language: Detected language code.
@@ -324,13 +330,34 @@ class EmailContentBlob(Base, TimestampMixin):
     )
     storage_backend: Mapped[str] = mapped_column(String(8), nullable=False, default="pg")
     object_key: Mapped[str | None] = mapped_column(Text)
-    plain_text_excerpt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    plain_text_excerpt_ct: Mapped[bytes | None] = mapped_column(LargeBinary)
+    plain_text_dek_wrapped: Mapped[bytes | None] = mapped_column(LargeBinary)
     html_sanitized_key: Mapped[str | None] = mapped_column(Text)
     quoted_text_removed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     language: Mapped[str | None] = mapped_column(String(16))
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     email: Mapped[Email] = relationship(back_populates="body")
+
+    @property
+    def plain_text_excerpt(self) -> str:
+        """Compatibility accessor for tests that store plaintext bytes.
+
+        Production code should decrypt :attr:`plain_text_excerpt_ct`
+        through ``app.services.ingestion.content`` so ciphertext never
+        becomes prompt text by accident.
+        """
+        if not self.plain_text_excerpt_ct:
+            return ""
+        try:
+            return bytes(self.plain_text_excerpt_ct).decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+
+    @plain_text_excerpt.setter
+    def plain_text_excerpt(self, value: str) -> None:
+        """Store plaintext bytes for no-cipher test paths only."""
+        self.plain_text_excerpt_ct = value.encode("utf-8") if value else None
 
 
 _CLASSIFICATION_LABELS = (
@@ -872,6 +899,141 @@ class JobFilter(Base, TimestampMixin):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class UnsubscribeSuggestion(Base, TimestampMixin):
+    """Ranked unsubscribe recommendation per sender (plan §8, §14 Phase 5).
+
+    One row per ``(account_id, sender_email)``. The Phase 5 worker
+    aggregates :class:`Email` x :class:`Classification` over the
+    trailing 30 days and upserts this table with the computed
+    frequency, engagement, and waste signals.
+
+    ``list_unsubscribe`` mirrors the normalized JSON persisted on the
+    latest :attr:`Email.list_unsubscribe` row for the sender so the UI
+    can link straight to the action URL without rescanning emails.
+
+    Release 1.0.0 is **recommend-only** (ADR 0006) — this table never
+    triggers an automated action. The :attr:`dismissed` flag captures
+    user-side dismissals so subsequent aggregate runs preserve them.
+
+    Attributes:
+        id: Primary key.
+        account_id: Owning connected account (cascades on account
+            delete).
+        sender_domain: Normalized domain (``foo.bar`` — lowercased,
+            no surrounding whitespace).
+        sender_email: Full normalized ``local@domain`` address, lowercased.
+        frequency_30d: Count of emails received from this sender in
+            the last 30 days.
+        engagement_score: Ratio of classifications labelled
+            ``must_read`` / ``good_to_read`` / ``job_candidate`` over
+            the total classified count. ``[0, 1]``; lower = more
+            disengaged = better unsubscribe candidate.
+        waste_rate: Ratio of classifications labelled ``waste`` /
+            ``ignore`` over total. ``[0, 1]``; higher = better
+            unsubscribe candidate.
+        list_unsubscribe: Normalized parser output mirrored from the
+            latest email (``null`` when no email carried a
+            ``List-Unsubscribe`` header). Same shape as
+            :attr:`Email.list_unsubscribe`.
+        confidence: Recommender's calibrated confidence in ``[0, 1]``.
+            Rule-only recommendations with all three criteria hit default
+            to ``0.9``; borderline rows adopt the LLM's confidence.
+            Values below ``0.8`` never surface as automatic actions
+            (plan §7 policy gate).
+        decision_source: ``rule`` when the rule engine short-circuited
+            without an LLM call; ``model`` when the borderline prompt
+            decided.
+        rationale_ct: Envelope ciphertext over the plaintext rationale
+            text (LLM rationale or deterministic rule explanation).
+        prompt_version_id: FK into :class:`PromptVersion`; ``None`` for
+            rule-only rows.
+        model: Provider-scoped model identifier (empty for rule-only).
+        tokens_in: Input tokens billed (0 for rule-only).
+        tokens_out: Output tokens billed (0 for rule-only).
+        dismissed: User-side dismissal flag; preserved across re-runs.
+        dismissed_at: UTC timestamp of the dismissal; populated when
+            ``dismissed=True``. Drives the 180-day cleanup job.
+        last_email_at: UTC timestamp of the most recent email from this
+            sender that fed the aggregate — useful for the UI to show
+            "last seen" without a subquery.
+    """
+
+    __tablename__ = "unsubscribe_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "sender_email",
+            name="uq_unsubscribe_suggestions_account_sender",
+        ),
+        CheckConstraint(
+            "engagement_score >= 0 AND engagement_score <= 1",
+            name="ck_unsubscribe_suggestions_engagement_range",
+        ),
+        CheckConstraint(
+            "waste_rate >= 0 AND waste_rate <= 1",
+            name="ck_unsubscribe_suggestions_waste_range",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_unsubscribe_suggestions_confidence_range",
+        ),
+        CheckConstraint(
+            "decision_source IN ('rule','model')",
+            name="ck_unsubscribe_suggestions_decision_source",
+        ),
+        CheckConstraint(
+            "frequency_30d >= 0",
+            name="ck_unsubscribe_suggestions_frequency_non_negative",
+        ),
+        Index(
+            "ix_unsubscribe_suggestions_account_score",
+            "account_id",
+            "engagement_score",
+        ),
+        Index(
+            "ix_unsubscribe_suggestions_account_dismissed",
+            "account_id",
+            "dismissed",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("connected_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sender_domain: Mapped[str] = mapped_column(citext_column(253), nullable=False)
+    sender_email: Mapped[str] = mapped_column(citext_column(320), nullable=False)
+    frequency_30d: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    engagement_score: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3),
+        nullable=False,
+        default=Decimal("0.000"),
+    )
+    waste_rate: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3),
+        nullable=False,
+        default=Decimal("0.000"),
+    )
+    list_unsubscribe: Mapped[Any | None] = mapped_column(json_column())
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3),
+        nullable=False,
+        default=Decimal("0.000"),
+    )
+    decision_source: Mapped[str] = mapped_column(String(8), nullable=False, default="rule")
+    rationale_ct: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
+    )
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_email_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class KnownWasteSender(Base, TimestampMixin):
     """Curated list of senders the rule engine short-circuits to ``waste``.
 
@@ -914,5 +1076,6 @@ __all__ = [
     "TechNewsCluster",
     "TechNewsClusterMember",
     "TimestampMixin",
+    "UnsubscribeSuggestion",
     "User",
 ]

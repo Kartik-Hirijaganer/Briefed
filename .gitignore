@@ -34,7 +34,8 @@ token.json
 service-account*.json
 
 # -------- IDE / OS --------
-.vscode/
+.vscode/*
+!.vscode/
 !.vscode/settings.json
 !.vscode/extensions.json
 .idea/

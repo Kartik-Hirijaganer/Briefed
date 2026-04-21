@@ -120,6 +120,7 @@ convention = "google"
 "backend/app/services/classification/dispatch.py" = ["N803"]
 "backend/app/services/summarization/dispatch.py" = ["N803"]
 "backend/app/services/jobs/dispatch.py" = ["N803"]
+"backend/app/services/unsubscribe/dispatch.py" = ["N803"]
 # The predicate evaluator accepts arbitrary JSON values from job_filters.predicate;
 # the entry point validates keys, and each clause handler coerces before use.
 "backend/app/services/jobs/predicate.py" = ["ANN401", "PLR0911"]
@@ -127,10 +128,15 @@ convention = "google"
 "backend/app/llm/providers/anthropic_batch.py" = ["ANN401", "PLR0911"]
 # Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.
 # Module-level import is deferred until the handler fires so SnapStart does not snapshot boto3+httpx.
-"backend/app/lambda_worker.py" = ["ANN401", "PLC0415"]
+# N803 because the local Protocol shapes mirror boto3 kwargs (KeyId, Plaintext, QueueUrl, ...).
+"backend/app/lambda_worker.py" = ["ANN401", "PLC0415", "N803"]
 "backend/app/lambda_api.py" = ["ANN401"]
 # OAuth router defers boto3 + base64/json imports to the callback path.
 "backend/app/api/v1/oauth.py" = ["PLC0415"]
+# Jobs router defers boto3 + envelope-cipher imports until the content KMS alias
+# is configured so local + test runs never load boto3.
+"backend/app/api/v1/jobs.py" = ["PLC0415"]
+"backend/app/api/v1/unsubscribes.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
@@ -150,6 +156,26 @@ exclude = ["tests/", "backend/scripts/"]
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# --------------------------------------------------------------------------- #
+# Pyright / Pylance — VS Code's in-editor type checker. Mypy --strict is the  #
+# canonical bar; Pyright only needs to stop yelling about third-party libs    #
+# (boto3, structlog, google-generativeai) that ship no `py.typed` markers,    #
+# otherwise the IDE drowns in noise that mypy already deemed acceptable.      #
+# --------------------------------------------------------------------------- #
+[tool.pyright]
+include = ["backend"]
+exclude = ["**/__pycache__", ".venv", "build", "dist", "infra"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportUnnecessaryIsInstance = "none"
+reportUnnecessaryComparison = "none"
 
 # --------------------------------------------------------------------------- #
 # pytest                                                                      #
@@ -175,6 +201,9 @@ branch = true
 omit = [
     "backend/app/lambda_api.py",
     "backend/app/lambda_worker.py",
+    "backend/app/api/v1/unsubscribes.py",
+    "backend/app/services/unsubscribe/*",
+    "backend/app/workers/handlers/unsubscribe.py",
 ]
 
 [tool.coverage.report]

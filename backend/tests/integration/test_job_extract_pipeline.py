@@ -275,6 +275,43 @@ async def test_extract_happy_path_passes_filter(test_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_extract_job_skips_existing_match(test_session) -> None:
+    user = User(email="me@example.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    _account, email = await _seed_job_candidate(test_session, user, excerpt="body")
+    registered, prompt_version_id = await _registered_prompt(test_session)
+    test_session.add(
+        JobMatch(
+            email_id=email.id,
+            title="Existing",
+            company="Acme",
+            match_score=Decimal("0.8"),
+            match_reason_ct=b"\x00",
+            passed_filter=False,
+            filter_version=0,
+        ),
+    )
+    await test_session.flush()
+
+    cipher = EnvelopeCipher(key_id="alias/test", client=_FakeKms())
+    outcome = await extract_job(
+        ExtractInputs(
+            email_id=email.id,
+            user_id=user.id,
+            prompt=registered,
+            prompt_version_id=prompt_version_id,
+            llm=LLMClient(primary=_FakeProvider("gemini", [])),
+            repo=JobMatchesRepo(cipher=cipher),
+        ),
+        session=test_session,
+    )
+
+    assert outcome.ok is False
+    assert outcome.skipped_reason == "already extracted"
+
+
+@pytest.mark.asyncio
 async def test_extract_rejects_hallucinated_salary(test_session) -> None:
     user = User(email="me@example.com", tz="UTC", status="active")
     test_session.add(user)

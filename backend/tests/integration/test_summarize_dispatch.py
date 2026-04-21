@@ -27,6 +27,7 @@ from app.db.models import (
     User,
 )
 from app.services.summarization import (
+    enqueue_summary_for_email,
     enqueue_unsummarized_for_run,
     parse_summarize_body,
 )
@@ -135,6 +136,56 @@ async def test_enqueue_skips_already_summarized(test_session) -> None:
     kinds = [json.loads(m["Body"])["kind"] for m in sqs.messages]
     assert kinds.count("summarize_email") == 3
     assert kinds.count("tech_news_cluster") == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_summary_for_email_targets_single_eligible_row(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    enqueued = await enqueue_summary_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[1].id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert enqueued == 1
+    body = json.loads(sqs.messages[0]["Body"])
+    assert body["kind"] == "summarize_email"
+    assert body["email_id"] == str(emails[1].id)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_summary_for_email_skips_ineligible_rows(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    already_summarized = await enqueue_summary_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[0].id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+    )
+    ignored = await enqueue_summary_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[4].id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert already_summarized == 0
+    assert ignored == 0
+    assert sqs.messages == []
 
 
 @pytest.mark.asyncio

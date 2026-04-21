@@ -239,6 +239,7 @@ class MailboxProvider(Protocol):
             has :attr:`SyncCursor.stale` set to ``True`` when the provider
             refused the cursor and the caller must do a bounded backfill.
         """
+        ...
 
     async def get_messages(
         self,
@@ -255,6 +256,7 @@ class MailboxProvider(Protocol):
             A list aligned with ``ids``; missing messages (deleted between
             listing and fetch) are silently dropped rather than raising.
         """
+        ...
 
     async def refresh_cursor(
         self,
@@ -272,6 +274,7 @@ class MailboxProvider(Protocol):
         Returns:
             An advanced, non-stale cursor suitable for persistence.
         """
+        ...
 
     async def revoke(self, credentials: ProviderCredentials) -> None:
         """Revoke the provider-side grant for these credentials.
@@ -282,3 +285,4 @@ class MailboxProvider(Protocol):
         Args:
             credentials: Decrypted OAuth credentials to revoke.
         """
+        ...

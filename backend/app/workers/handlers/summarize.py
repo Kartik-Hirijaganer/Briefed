@@ -41,6 +41,7 @@ from app.services.summarization import (
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.llm.client import LLMClient
     from app.services.prompts.registry import PromptRegistry
     from app.services.summarization.relevant import SummarizeOutcome
@@ -62,6 +63,7 @@ class SummarizeDeps:
         repo: Encrypt-on-write :class:`SummariesRepo`.
         router: Optional pre-loaded :class:`ClusterRouter`. Handler
             lazy-loads from the DB when ``None``.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     session: AsyncSession
@@ -69,6 +71,7 @@ class SummarizeDeps:
     registry: PromptRegistry
     repo: SummariesRepo
     router: ClusterRouter | None = None
+    content_cipher: EnvelopeCipher | None = None
 
 
 async def handle_summarize_email(
@@ -106,6 +109,7 @@ async def handle_summarize_email(
             llm=deps.llm,
             repo=deps.repo,
             batch_id=message.batch_id,
+            content_cipher=deps.content_cipher,
         ),
         session=deps.session,
         run_id=message.run_id,
@@ -170,6 +174,7 @@ async def handle_tech_news_cluster(
             router=router,
             min_cluster_size=message.min_cluster_size,
             max_cluster_size=message.max_cluster_size,
+            content_cipher=deps.content_cipher,
         ),
         session=deps.session,
     )

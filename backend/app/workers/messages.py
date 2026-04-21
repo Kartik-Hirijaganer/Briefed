@@ -1,10 +1,10 @@
-"""Pydantic payloads for SQS messages (plan §14 Phase 1 through Phase 4).
+"""Pydantic payloads for SQS messages (plan §14 Phase 1 through Phase 5).
 
 Every queue carries a discriminated-union payload. Phase 1 shipped
 :class:`IngestMessage`; Phase 2 added :class:`ClassifyMessage`; Phase 3
 added :class:`SummarizeEmailMessage` and :class:`TechNewsClusterMessage`;
-Phase 4 adds :class:`JobExtractMessage`. Later phases add
-``UnsubscribeMessage`` etc.
+Phase 4 added :class:`JobExtractMessage`; Phase 5 adds
+:class:`UnsubscribeMessage` (per-account hygiene run).
 """
 
 from __future__ import annotations
@@ -154,6 +154,35 @@ class JobExtractMessage(BaseModel):
     prompt_version: int = Field(default=1, ge=1)
 
 
+class UnsubscribeMessage(BaseModel):
+    """SQS payload for the ``briefed-*-unsubscribe`` queue (plan §14 Phase 5).
+
+    One message per ``(user, account, run)`` triple. The worker runs
+    the 30-day SQL aggregate, scores each sender against the three
+    rule criteria, calls the borderline LLM for 2-of-3 hits, and
+    upserts :class:`app.db.models.UnsubscribeSuggestion` rows.
+
+    Attributes:
+        kind: Discriminator literal. Always ``"unsubscribe"`` on this
+            queue.
+        user_id: Owning user — bound into the encryption context.
+        account_id: Target connected account.
+        run_id: Optional digest-run scope for the prompt-call-log rows.
+        prompt_name: Prompt key to load from the registry; defaults to
+            ``"unsubscribe_borderline"``.
+        prompt_version: Prompt version; defaults to ``1``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["unsubscribe"] = "unsubscribe"
+    user_id: UUID
+    account_id: UUID
+    run_id: UUID | None = Field(default=None)
+    prompt_name: str = Field(default="unsubscribe_borderline")
+    prompt_version: int = Field(default=1, ge=1)
+
+
 class FanoutMessage(BaseModel):
     """Envelope produced by EventBridge Scheduler → fan-out Lambda.
 
@@ -178,4 +207,5 @@ __all__ = [
     "JobExtractMessage",
     "SummarizeEmailMessage",
     "TechNewsClusterMessage",
+    "UnsubscribeMessage",
 ]
