@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -130,13 +131,14 @@ def test_job_match_currency_must_be_three_letters() -> None:
 
 
 def test_job_match_seniority_enum() -> None:
+    invalid_seniority = cast(Any, "fellow")
     with pytest.raises(ValidationError):
         JobMatch(
             title="Engineer",
             company="Acme",
             match_reason="x",
             confidence=0.8,
-            seniority="fellow",
+            seniority=invalid_seniority,
         )
 
 

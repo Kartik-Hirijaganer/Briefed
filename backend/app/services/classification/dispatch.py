@@ -38,6 +38,7 @@ class SqsSender(Protocol):
         MessageBody: str,
     ) -> dict[str, Any]:
         """Enqueue one SQS message."""
+        ...
 
 
 async def enqueue_unclassified_for_account(

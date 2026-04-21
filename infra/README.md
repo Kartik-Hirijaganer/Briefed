@@ -27,6 +27,10 @@ bootstrap script at `infra/terraform/envs/dev/bootstrap.sh` creates them
 with `aws cloudformation deploy` (chicken-and-egg: Terraform can't create
 its own state backend). Bootstrap is a one-time manual step per account.
 
+The committed `dev` root module and deploy workflow are guarded to AWS
+account `970385384114` via Terraform `allowed_account_ids` and
+`configure-aws-credentials.allowed-account-ids`.
+
 ## Plans over applies
 
 CI runs `terraform plan` on every PR; `terraform apply` happens only from

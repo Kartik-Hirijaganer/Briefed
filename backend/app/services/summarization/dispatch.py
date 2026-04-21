@@ -53,6 +53,7 @@ class SqsSender(Protocol):
         MessageBody: str,
     ) -> dict[str, Any]:
         """Enqueue one SQS message."""
+        ...
 
 
 async def enqueue_unsummarized_for_run(
@@ -143,6 +144,58 @@ async def enqueue_unsummarized_for_run(
     return per_email, cluster_count
 
 
+async def enqueue_summary_for_email(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    account_id: UUID,
+    email_id: UUID,
+    queue_url: str,
+    sqs: SqsSender,
+    run_id: UUID | None,
+    prompt_name: str = "summarize_relevant",
+    prompt_version: int = 1,
+) -> int:
+    """Enqueue one summary message if the just-classified email qualifies.
+
+    This is the Lambda hot path after a single classify record. It keeps
+    retries idempotent by requiring the source email to lack a summary
+    row at enqueue time.
+    """
+    stmt = (
+        select(Email.id)
+        .join(Classification, Classification.email_id == Email.id)
+        .outerjoin(Summary, Summary.email_id == Email.id)
+        .where(
+            Email.id == email_id,
+            Email.account_id == account_id,
+            Classification.label.in_(_SUMMARIZABLE_LABELS),
+            Summary.email_id.is_(None),
+        )
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return 0
+
+    message = SummarizeEmailMessage(
+        user_id=user_id,
+        account_id=account_id,
+        email_id=email_id,
+        run_id=run_id,
+        prompt_name=prompt_name,
+        prompt_version=prompt_version,
+    )
+    sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
+    logger.info(
+        "summarize.dispatch.enqueued_email",
+        account_id=str(account_id),
+        email_id=str(email_id),
+        run_id=str(run_id) if run_id else None,
+    )
+    return 1
+
+
 def parse_summarize_body(
     body: str,
 ) -> SummarizeEmailMessage | TechNewsClusterMessage:
@@ -175,6 +228,7 @@ def parse_summarize_body(
 
 __all__ = [
     "SqsSender",
+    "enqueue_summary_for_email",
     "enqueue_unsummarized_for_run",
     "parse_summarize_body",
 ]

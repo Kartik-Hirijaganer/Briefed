@@ -42,14 +42,19 @@ from app.db.models import (
     JobFilter,
     PromptCallLog,
 )
+from app.db.models import (
+    JobMatch as JobMatchRow,
+)
 from app.llm.client import LLMClient, LLMClientError, PromptCallRecord, render_prompt
 from app.llm.schemas import JobMatch
+from app.services.ingestion.content import decrypt_excerpt
 from app.services.jobs.predicate import JobCandidate, evaluate_many
 from app.services.jobs.repository import JobMatchesRepo, JobMatchWrite
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.services.prompts.registry import RegisteredPrompt
 
 
@@ -83,6 +88,7 @@ class ExtractInputs:
         repo: Encrypt-on-write :class:`JobMatchesRepo`.
         reader_profile: Optional override of the default profile
             passed to the prompt.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     email_id: UUID
@@ -92,6 +98,7 @@ class ExtractInputs:
     llm: LLMClient
     repo: JobMatchesRepo
     reader_profile: str | None = None
+    content_cipher: EnvelopeCipher | None = None
 
 
 @dataclass(frozen=True)
@@ -153,7 +160,26 @@ async def extract_job(
     if email_row is None:
         raise LookupError(f"email {inputs.email_id} not found")
 
-    excerpt = _excerpt_for(email_row)
+    if await _has_job_match(session, email_id=inputs.email_id):
+        return ExtractOutcome(
+            email_id=inputs.email_id,
+            ok=False,
+            passed_filter=False,
+            match_score=0.0,
+            corroborated=True,
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=Decimal("0"),
+            cache_hit=False,
+            fallback_used=False,
+            skipped_reason="already extracted",
+        )
+
+    excerpt = _excerpt_for(
+        email_row,
+        user_id=inputs.user_id,
+        cipher=inputs.content_cipher,
+    )
     rendered = render_prompt(
         inputs.prompt.spec,
         variables={
@@ -379,6 +405,18 @@ async def _load_active_filters(
     return list(rows)
 
 
+async def _has_job_match(
+    session: AsyncSession,
+    *,
+    email_id: UUID,
+) -> bool:
+    """Return True when this email already has an extracted job row."""
+    existing = await session.execute(
+        select(JobMatchRow.id).where(JobMatchRow.email_id == email_id),
+    )
+    return existing.scalar_one_or_none() is not None
+
+
 def _current_filter_version(filters: list[JobFilter]) -> int:
     """Aggregate filter version — max across the active set.
 
@@ -392,11 +430,17 @@ def _current_filter_version(filters: list[JobFilter]) -> int:
     return max(int(f.version) for f in filters)
 
 
-def _excerpt_for(row: Email) -> str:
+def _excerpt_for(
+    row: Email,
+    *,
+    user_id: UUID,
+    cipher: EnvelopeCipher | None,
+) -> str:
     """Return the best plaintext excerpt for the prompt."""
     blob: EmailContentBlob | None = row.body
-    if blob is not None and blob.plain_text_excerpt:
-        return blob.plain_text_excerpt
+    excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    if excerpt:
+        return excerpt
     return row.snippet or ""
 
 

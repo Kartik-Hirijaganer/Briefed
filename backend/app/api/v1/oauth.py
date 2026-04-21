@@ -18,7 +18,7 @@ Secrets access: the OAuth client id + secret come from SSM via
 from __future__ import annotations
 
 import secrets
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
@@ -46,6 +46,8 @@ from app.services.gmail.oauth import (
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.core.security import KmsClient
 
 
 router = APIRouter(prefix="/oauth/gmail", tags=["oauth"])
@@ -282,7 +284,7 @@ def _build_token_cipher(settings: Settings) -> EnvelopeCipher:
         )
     import boto3  # type: ignore[import-untyped]
 
-    return EnvelopeCipher(key_id=alias, client=boto3.client("kms"))
+    return EnvelopeCipher(key_id=alias, client=cast("KmsClient", boto3.client("kms")))
 
 
 def _extract_email_from_id_token(id_token: str | None) -> str | None:

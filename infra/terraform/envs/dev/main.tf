@@ -17,12 +17,14 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region              = var.region
+  allowed_account_ids = ["970385384114"]
 }
 
 provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
+  alias               = "us_east_1"
+  region              = "us-east-1"
+  allowed_account_ids = ["970385384114"]
 }
 
 variable "region" {
@@ -86,8 +88,10 @@ module "api" {
   sqs_queue_arns       = values(module.sqs.queue_arns)
   tags                 = local.tags
   env_vars = {
-    BRIEFED_ENV        = "dev"
-    BRIEFED_SSM_PREFIX = module.ssm.parameter_prefix
+    BRIEFED_ENV                  = "dev"
+    BRIEFED_SSM_PREFIX           = module.ssm.parameter_prefix
+    BRIEFED_TOKEN_WRAP_KEY_ALIAS = module.kms.token_wrap_alias
+    BRIEFED_CONTENT_KEY_ALIAS    = module.kms.content_alias
   }
 }
 
@@ -101,8 +105,14 @@ module "worker" {
   s3_bucket_arns       = values(module.s3.bucket_arns)
   tags                 = local.tags
   env_vars = {
-    BRIEFED_ENV        = "dev"
-    BRIEFED_SSM_PREFIX = module.ssm.parameter_prefix
+    BRIEFED_ENV                  = "dev"
+    BRIEFED_SSM_PREFIX           = module.ssm.parameter_prefix
+    BRIEFED_TOKEN_WRAP_KEY_ALIAS = module.kms.token_wrap_alias
+    BRIEFED_CONTENT_KEY_ALIAS    = module.kms.content_alias
+    BRIEFED_CLASSIFY_QUEUE_URL   = module.sqs.queue_urls["classify"]
+    BRIEFED_SUMMARIZE_QUEUE_URL  = module.sqs.queue_urls["summarize"]
+    BRIEFED_JOBS_QUEUE_URL       = module.sqs.queue_urls["jobs"]
+    BRIEFED_STORE_RAW_MIME       = "0"
   }
 }
 
@@ -114,6 +124,11 @@ module "fanout" {
   ssm_parameter_prefix = module.ssm.parameter_prefix
   kms_key_arns         = [module.kms.token_wrap_key_arn]
   tags                 = local.tags
+  env_vars = {
+    BRIEFED_ENV              = "dev"
+    BRIEFED_SSM_PREFIX       = module.ssm.parameter_prefix
+    BRIEFED_INGEST_QUEUE_URL = module.sqs.queue_urls["ingest"]
+  }
 }
 
 # PWA bucket — separate from the three business buckets so CloudFront OAC

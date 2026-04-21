@@ -227,7 +227,8 @@ def upgrade() -> None:
         ),
         sa.Column("storage_backend", sa.String(8), nullable=False, server_default="pg"),
         sa.Column("object_key", sa.Text),
-        sa.Column("plain_text_excerpt", sa.Text, nullable=False, server_default=""),
+        sa.Column("plain_text_excerpt_ct", sa.LargeBinary),
+        sa.Column("plain_text_dek_wrapped", sa.LargeBinary),
         sa.Column("html_sanitized_key", sa.Text),
         sa.Column(
             "quoted_text_removed",

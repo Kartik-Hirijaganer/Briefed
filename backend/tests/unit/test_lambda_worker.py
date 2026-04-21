@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.lambda_worker import _SqsEvent as SqsEvent
 from app.lambda_worker import fanout_handler, sqs_dispatcher
 
 
@@ -11,7 +12,7 @@ def test_sqs_dispatcher_empty_batch_reports_no_failures() -> None:
 
 
 def test_sqs_dispatcher_reports_failure_on_bad_body() -> None:
-    event = {
+    event: SqsEvent = {
         "Records": [
             {
                 "eventSourceARN": "arn:aws:sqs:us-east-1:000000000000:briefed-dev-ingest",
@@ -25,7 +26,7 @@ def test_sqs_dispatcher_reports_failure_on_bad_body() -> None:
 
 
 def test_sqs_dispatcher_acks_unknown_stage() -> None:
-    event = {
+    event: SqsEvent = {
         "Records": [
             {
                 "eventSourceARN": "arn:aws:sqs:us-east-1:000000000000:briefed-dev-mystery",

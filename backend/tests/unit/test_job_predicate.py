@@ -10,6 +10,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.services.jobs import predicate
 from app.services.jobs.predicate import (
     JobCandidate,
     PredicateError,
@@ -58,9 +59,14 @@ def test_max_comp_passes_when_floor_is_under_ceiling() -> None:
     assert evaluate({"max_comp": 150_000}, _candidate()) is False
 
 
+def test_max_comp_rejects_row_with_unknown_floor() -> None:
+    assert evaluate({"max_comp": 300_000}, _candidate(comp_min=None)) is False
+
+
 def test_currency_case_insensitive() -> None:
     assert evaluate({"currency": "usd"}, _candidate()) is True
     assert evaluate({"currency": "GBP"}, _candidate()) is False
+    assert evaluate({"currency": "USD"}, _candidate(currency=None)) is False
 
 
 def test_remote_required_tri_state() -> None:
@@ -95,6 +101,7 @@ def test_location_none_blocks_matching_substring() -> None:
         )
         is True
     )
+    assert evaluate({"location_none": ["India"]}, _candidate(location=None)) is True
 
 
 def test_title_keywords_any_and_none() -> None:
@@ -134,6 +141,13 @@ def test_min_confidence_out_of_range_raises() -> None:
         evaluate({"min_confidence": 1.5}, _candidate())
 
 
+def test_min_confidence_rejects_non_numbers() -> None:
+    with pytest.raises(PredicateError):
+        evaluate({"min_confidence": True}, _candidate())
+    with pytest.raises(PredicateError):
+        evaluate({"min_confidence": "0.7"}, _candidate())
+
+
 def test_evaluate_many_requires_all_filters() -> None:
     preds = [
         {"min_comp": 150_000, "currency": "USD"},
@@ -158,6 +172,25 @@ def test_evaluate_rejects_wrong_types() -> None:
     with pytest.raises(PredicateError):
         evaluate({"location_any": "us"}, _candidate())
     with pytest.raises(PredicateError):
+        evaluate({"currency": 1}, _candidate())
+    with pytest.raises(PredicateError):
         evaluate({"currency": ""}, _candidate())
     with pytest.raises(PredicateError):
         evaluate({"remote_required": "yes"}, _candidate())
+
+
+def test_string_list_clauses_handle_empty_and_bad_entries() -> None:
+    assert evaluate({"location_any": []}, _candidate()) is True
+    assert evaluate({"location_none": []}, _candidate()) is True
+    assert evaluate({"title_keywords_any": []}, _candidate()) is True
+    assert evaluate({"title_keywords_none": []}, _candidate()) is True
+    assert evaluate({"location_any": ["  ", "remote"]}, _candidate()) is True
+    with pytest.raises(PredicateError):
+        evaluate({"location_any": [1]}, _candidate())
+    with pytest.raises(PredicateError):
+        evaluate({"seniority_in": []}, _candidate())
+
+
+def test_clause_dispatch_defensive_unhandled_key() -> None:
+    with pytest.raises(PredicateError):
+        predicate._check_clause("bogus", None, _candidate())

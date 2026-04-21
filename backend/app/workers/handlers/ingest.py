@@ -45,6 +45,7 @@ class IngestDeps:
         session: Open :class:`AsyncSession`.
         provider: :class:`MailboxProvider` implementation (Gmail in 1.0.0).
         cipher: :class:`EnvelopeCipher` for unwrapping refresh/access tokens.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
         raw_storage: Optional S3 client for raw MIME uploads.
         raw_bucket: Bucket name when raw MIME is enabled.
     """
@@ -52,6 +53,7 @@ class IngestDeps:
     session: AsyncSession
     provider: MailboxProvider
     cipher: EnvelopeCipher
+    content_cipher: EnvelopeCipher | None = None
     raw_storage: ObjectStore | None = None
     raw_bucket: str | None = None
 
@@ -112,6 +114,7 @@ async def handle_ingest(
         raw_storage=deps.raw_storage,
         raw_bucket=deps.raw_bucket,
         store_raw_mime=message.store_raw_mime,
+        content_cipher=deps.content_cipher,
     )
     logger.info(
         "ingest.handler.completed",

@@ -118,15 +118,19 @@ class BatchProvider(Protocol):
 
     async def submit(self, requests: tuple[BatchRequest, ...]) -> BatchSubmission:
         """Submit a batch and return the initial :class:`BatchSubmission`."""
+        ...
 
     async def poll(self, batch_id: str) -> BatchSubmission:
         """Return the latest :class:`BatchSubmission` for ``batch_id``."""
+        ...
 
     async def fetch_results(self, batch_id: str) -> tuple[BatchResult, ...]:
         """Fetch per-request outcomes once the batch is terminal."""
+        ...
 
     async def cancel(self, batch_id: str) -> None:
         """Best-effort cancel; raises :class:`LLMProviderError` on hard fail."""
+        ...
 
 
 _TERMINAL_STATES: frozenset[str] = frozenset({"completed", "failed", "canceled"})

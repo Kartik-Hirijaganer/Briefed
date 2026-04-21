@@ -46,6 +46,7 @@ from app.llm.client import (
     render_prompt,
 )
 from app.llm.schemas import TechNewsClusterSummary
+from app.services.ingestion.content import decrypt_excerpt
 from app.services.summarization.cluster_router import ClusterRoute, ClusterRouter
 from app.services.summarization.repository import (
     SummariesRepo,
@@ -57,6 +58,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.services.prompts.registry import RegisteredPrompt
 
 
@@ -89,6 +91,7 @@ class TechNewsInputs:
         max_cluster_size: Cap cluster size; extra sources are dropped
             from the prompt but remain on disk as members (default 8).
         batch_id: Optional Batch API job id when driven asynchronously.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
     """
 
     user_id: UUID
@@ -102,6 +105,7 @@ class TechNewsInputs:
     min_cluster_size: int = _DEFAULT_MIN_CLUSTER_SIZE
     max_cluster_size: int = _DEFAULT_MAX_CLUSTER_SIZE
     batch_id: str | None = None
+    content_cipher: EnvelopeCipher | None = None
 
 
 @dataclass(frozen=True)
@@ -196,7 +200,11 @@ async def cluster_and_summarize(
             variables={
                 "cluster_key": cluster_key,
                 "topic_hint": topic_hint or "",
-                "newsletters_block": _render_newsletters_block(capped_members),
+                "newsletters_block": _render_newsletters_block(
+                    capped_members,
+                    user_id=inputs.user_id,
+                    cipher=inputs.content_cipher,
+                ),
             },
         )
 
@@ -293,11 +301,18 @@ def _render_cluster_body_md(summary: TechNewsClusterSummary) -> str:
 
 def _render_newsletters_block(
     members: list[tuple[Email, ClusterRoute]],
+    *,
+    user_id: UUID,
+    cipher: EnvelopeCipher | None,
 ) -> str:
     """Render the per-source block the prompt consumes."""
     sections: list[str] = []
     for email_row, _route in members:
-        excerpt = _excerpt_for(email_row)[:_PER_SOURCE_EXCERPT_CHARS]
+        excerpt = _excerpt_for(
+            email_row,
+            user_id=user_id,
+            cipher=cipher,
+        )[:_PER_SOURCE_EXCERPT_CHARS]
         subject = email_row.subject.strip() or "(no subject)"
         sections.append(f"--- source subject: {subject} ---\n{excerpt}".rstrip())
     return "\n".join(sections)
@@ -405,11 +420,17 @@ async def _persist_call_log(
     await session.flush()
 
 
-def _excerpt_for(row: Email) -> str:
+def _excerpt_for(
+    row: Email,
+    *,
+    user_id: UUID,
+    cipher: EnvelopeCipher | None,
+) -> str:
     """Return the best plaintext excerpt for the clustering prompt."""
     blob: EmailContentBlob | None = row.body
-    if blob is not None and blob.plain_text_excerpt:
-        return blob.plain_text_excerpt
+    excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    if excerpt:
+        return excerpt
     return row.snippet or ""
 
 

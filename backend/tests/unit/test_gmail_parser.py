@@ -337,6 +337,16 @@ def test_parse_date_header_handles_none_and_bad_inputs() -> None:
     assert _parse_internal_date_from_headers("bogus") is None
 
 
+def test_parse_date_header_assumes_utc_for_naive_dates() -> None:
+    from datetime import UTC
+
+    from app.services.gmail.parser import _parse_internal_date_from_headers
+
+    parsed = _parse_internal_date_from_headers("Mon, 10 Feb 2026 12:00:00")
+    assert parsed is not None
+    assert parsed.tzinfo == UTC
+
+
 def test_parse_list_unsubscribe_with_none() -> None:
     from app.services.gmail.parser import _parse_list_unsubscribe
 
@@ -366,6 +376,86 @@ def test_extract_plain_text_ignores_attachments() -> None:
     assert result == ""
 
 
+def test_extract_plain_text_falls_back_when_charset_unknown() -> None:
+    from email import message_from_bytes
+
+    from app.services.gmail.parser import _extract_plain_text
+
+    mime = (
+        b"Content-Type: text/plain; charset=x-unknown\r\n"
+        b"Content-Transfer-Encoding: 8bit\r\n\r\n"
+        b"hello"
+    )
+    assert _extract_plain_text(message_from_bytes(mime)) == "hello"
+
+
+def test_extract_plain_text_skips_non_byte_payload() -> None:
+    from app.services.gmail.parser import _extract_plain_text
+
+    class _FakePart:
+        def is_multipart(self) -> bool:
+            return False
+
+        def get_content_type(self) -> str:
+            return "text/plain"
+
+        def get_payload(self, decode: bool = False) -> str:
+            return "not bytes"
+
+        def get_content_charset(self) -> str:
+            return "utf-8"
+
+    assert _extract_plain_text(_FakePart()) == ""  # type: ignore[arg-type]
+
+
+def test_extract_html_falls_back_when_charset_unknown() -> None:
+    from email import message_from_bytes
+
+    from app.services.gmail.parser import _extract_html
+
+    mime = (
+        b"Content-Type: text/html; charset=x-unknown\r\n"
+        b"Content-Transfer-Encoding: 8bit\r\n\r\n"
+        b"<b>hello</b>"
+    )
+    assert _extract_html(message_from_bytes(mime)) == "<b>hello</b>"
+
+
+def test_extract_html_skips_non_byte_payload() -> None:
+    from app.services.gmail.parser import _extract_html
+
+    class _FakePart:
+        def is_multipart(self) -> bool:
+            return False
+
+        def get_content_type(self) -> str:
+            return "text/html"
+
+        def get_payload(self, decode: bool = False) -> str:
+            return "not bytes"
+
+        def get_content_charset(self) -> str:
+            return "utf-8"
+
+    assert _extract_html(_FakePart()) is None  # type: ignore[arg-type]
+
+
+def test_parse_message_prefers_provided_header_map() -> None:
+    mime = (
+        b"Subject: MIME subject\r\nFrom: alice@example.com\r\nContent-Type: text/plain\r\n\r\nbody"
+    )
+    raw = RawMessage(
+        message_id="m14",
+        thread_id="t14",
+        internal_date_ms=1_700_000_000_000,
+        raw_mime=mime,
+        header_map={"Subject": "Header map subject"},
+        size_bytes=len(mime),
+    )
+    meta, _ = parse_message(raw, account_id=uuid4())
+    assert meta.subject == "Header map subject"
+
+
 def test_raw_from_gmail_full_without_raw_field() -> None:
     payload = {
         "id": "x",
@@ -382,7 +472,20 @@ def test_raw_from_gmail_full_without_raw_field() -> None:
 
 
 def test_raw_from_gmail_full_tolerates_missing_payload_body() -> None:
-    payload = {"id": "x", "threadId": "y", "internalDate": "0"}
+    payload: dict[str, object] = {"id": "x", "threadId": "y", "internalDate": "0"}
     raw = raw_from_gmail_full(payload)
     assert raw.header_map == {}
     assert raw.label_ids == ()
+
+
+def test_raw_from_gmail_full_ignores_non_list_labels_and_bad_headers() -> None:
+    payload = {
+        "id": "x",
+        "threadId": "y",
+        "internalDate": "1",
+        "labelIds": "INBOX",
+        "payload": {"headers": ["bad", {"name": "Subject", "value": "S"}]},
+    }
+    raw = raw_from_gmail_full(payload)
+    assert raw.label_ids == ()
+    assert raw.header_map == {"Subject": "S"}

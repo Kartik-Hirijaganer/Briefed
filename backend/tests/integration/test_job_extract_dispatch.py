@@ -27,6 +27,7 @@ from app.db.models import (
     User,
 )
 from app.services.jobs import (
+    enqueue_job_extract_for_email,
     enqueue_unextracted_for_account,
     parse_job_extract_body,
 )
@@ -184,6 +185,56 @@ async def test_enqueue_ignores_non_job_rows(test_session) -> None:
         run_id=None,
     )
     assert enqueued == 0
+    assert sqs.messages == []
+
+
+@pytest.mark.asyncio
+async def test_enqueue_job_extract_for_email_targets_single_candidate(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    enqueued = await enqueue_job_extract_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[1].id,
+        queue_url="https://sqs.example/jobs",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert enqueued == 1
+    body = json.loads(sqs.messages[0]["Body"])
+    assert body["kind"] == "job_extract"
+    assert body["email_id"] == str(emails[1].id)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_job_extract_for_email_skips_ineligible_rows(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    already_extracted = await enqueue_job_extract_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[0].id,
+        queue_url="https://sqs.example/jobs",
+        sqs=sqs,
+        run_id=None,
+    )
+    not_a_job = await enqueue_job_extract_for_email(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        email_id=emails[2].id,
+        queue_url="https://sqs.example/jobs",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert already_extracted == 0
+    assert not_a_job == 0
     assert sqs.messages == []
 
 

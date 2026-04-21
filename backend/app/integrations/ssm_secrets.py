@@ -26,7 +26,7 @@ Design notes
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import Protocol
@@ -79,8 +79,7 @@ def _build_client() -> _SsmClient:
     """
     import boto3  # type: ignore[import-untyped]  # noqa: PLC0415 — deliberately lazy
 
-    client: _SsmClient = boto3.client("ssm")
-    return client
+    return cast("_SsmClient", boto3.client("ssm"))
 
 
 def fetch_parameters(

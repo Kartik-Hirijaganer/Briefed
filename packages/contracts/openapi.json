@@ -31,6 +31,1697 @@
           }
         }
       }
+    },
+    "/api/v1/oauth/gmail/start": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Start Google OAuth authorization-code flow",
+        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path, e.g. ``/settings/accounts``).\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
+        "operationId": "gmail_oauth_start_api_v1_oauth_gmail_start_get",
+        "parameters": [
+          {
+            "name": "return_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/gmail/callback": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Google OAuth callback \u2014 exchange code, persist account",
+        "description": "Handle the Google consent-screen redirect.\n\nArgs:\n    request: FastAPI request.\n    code: Authorization code from Google.\n    state: State parameter Google echoed back.\n    oauth_state_cookie: Pre-authorize cookie set by :func:`start`.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect back to the UI (``return_to`` or ``/``).\n\nRaises:\n    HTTPException: 400 when the state mismatch / cookie missing.",
+        "operationId": "gmail_oauth_callback_api_v1_oauth_gmail_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "State"
+            }
+          },
+          {
+            "name": "briefed_oauth_state",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Oauth State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List connected accounts",
+        "description": "Return every connected account owned by ``user_id``.\n\nArgs:\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nReturns:\n    An :class:`AccountsListResponse` envelope.",
+        "operationId": "list_accounts_api_v1_accounts_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}": {
+      "delete": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Disconnect a mailbox",
+        "description": "Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).\n\nArgs:\n    account_id: Target account.\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the account does not belong to the caller.",
+        "operationId": "delete_account_api_v1_accounts__account_id__delete",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rubric": {
+      "get": {
+        "tags": [
+          "rubric"
+        ],
+        "summary": "List classification rules",
+        "description": "Return every rubric rule the authenticated user owns.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    :class:`RubricRulesListResponse` with rules ordered by\n    ``priority DESC``.",
+        "operationId": "list_rules_api_v1_rubric_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubricRulesListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rubric"
+        ],
+        "summary": "Create a classification rule",
+        "description": "Insert a new rule for the authenticated user.\n\nArgs:\n    payload: Request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The created :class:`RubricRuleOut`.",
+        "operationId": "create_rule_api_v1_rubric_post",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubricRuleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubricRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rubric/{rule_id}": {
+      "put": {
+        "tags": [
+          "rubric"
+        ],
+        "summary": "Replace a classification rule",
+        "description": "Replace ``rule_id``'s predicate + action, bumping ``version``.\n\nArgs:\n    rule_id: Target rule.\n    payload: Request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The updated :class:`RubricRuleOut`.\n\nRaises:\n    HTTPException: 404 when the rule does not belong to the caller.",
+        "operationId": "update_rule_api_v1_rubric__rule_id__put",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubricRuleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubricRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rubric"
+        ],
+        "summary": "Delete a classification rule",
+        "description": "Hard-delete ``rule_id``.\n\nArgs:\n    rule_id: Target rule.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the rule does not belong to the caller.",
+        "operationId": "delete_rule_api_v1_rubric__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List curated job matches",
+        "description": "Return job matches the caller owns.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n    include_filtered: Override the curated default.\n    limit: Maximum rows to return.\n\nReturns:\n    :class:`JobMatchesListResponse` with newest matches first.",
+        "operationId": "list_job_matches_api_v1_jobs_get",
+        "parameters": [
+          {
+            "name": "include_filtered",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor.",
+              "default": false,
+              "title": "Include Filtered"
+            },
+            "description": "When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobMatchesListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/job-filters": {
+      "get": {
+        "tags": [
+          "job-filters"
+        ],
+        "summary": "List job filters",
+        "description": "Return every filter the authenticated user owns.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    :class:`JobFiltersListResponse` ordered by ``created_at ASC``.",
+        "operationId": "list_filters_api_v1_job_filters_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobFiltersListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "job-filters"
+        ],
+        "summary": "Create a job filter",
+        "description": "Insert a new filter for the authenticated user.\n\nArgs:\n    payload: Validated request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The created :class:`JobFilterOut`.\n\nRaises:\n    HTTPException: 409 when ``name`` already exists for the user.",
+        "operationId": "create_filter_api_v1_job_filters_post",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobFilterIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobFilterOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/job-filters/{filter_id}": {
+      "put": {
+        "tags": [
+          "job-filters"
+        ],
+        "summary": "Replace a job filter",
+        "description": "Replace ``filter_id``'s predicate + active flag, bumping ``version``.\n\nArgs:\n    filter_id: Target filter.\n    payload: Validated request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The updated :class:`JobFilterOut`.\n\nRaises:\n    HTTPException: 404 when the filter does not belong to the caller.\n    HTTPException: 409 when the rename collides with another filter.",
+        "operationId": "update_filter_api_v1_job_filters__filter_id__put",
+        "parameters": [
+          {
+            "name": "filter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Filter Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobFilterIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobFilterOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "job-filters"
+        ],
+        "summary": "Delete a job filter",
+        "description": "Hard-delete ``filter_id``.\n\nArgs:\n    filter_id: Target filter.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the filter does not belong to the caller.",
+        "operationId": "delete_filter_api_v1_job_filters__filter_id__delete",
+        "parameters": [
+          {
+            "name": "filter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Filter Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/unsubscribes": {
+      "get": {
+        "tags": [
+          "unsubscribes"
+        ],
+        "summary": "List unsubscribe recommendations",
+        "description": "Return the caller's unsubscribe suggestions.\n\nRows are scoped to the caller via\n``UnsubscribeSuggestion.account_id -> ConnectedAccount.user_id``.\nDefault order is ``confidence DESC`` so the most-actionable rows\nsurface first.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n    include_dismissed: Override the curated default.\n    limit: Maximum rows to return.\n\nReturns:\n    :class:`UnsubscribeSuggestionsListResponse`.",
+        "operationId": "list_suggestions_api_v1_unsubscribes_get",
+        "parameters": [
+          {
+            "name": "include_dismissed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include rows the user has dismissed (for an undo UI).",
+              "default": false,
+              "title": "Include Dismissed"
+            },
+            "description": "Include rows the user has dismissed (for an undo UI)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeSuggestionsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/unsubscribes/{suggestion_id}/dismiss": {
+      "post": {
+        "tags": [
+          "unsubscribes"
+        ],
+        "summary": "Dismiss an unsubscribe suggestion",
+        "description": "Mark ``suggestion_id`` as dismissed.\n\nThe dismissal survives across aggregate re-runs: the repo's upsert\npath only replaces the numeric + rationale columns.\n\nArgs:\n    suggestion_id: Target suggestion.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the row does not belong to the caller.",
+        "operationId": "dismiss_suggestion_api_v1_unsubscribes__suggestion_id__dismiss_post",
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Suggestion Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/unsubscribes/{suggestion_id}/confirm": {
+      "post": {
+        "tags": [
+          "unsubscribes"
+        ],
+        "summary": "Confirm the user acted on the unsubscribe suggestion",
+        "description": "Record that the user followed through on the recommendation.\n\nRelease 1.0.0 is recommend-only (ADR 0006) \u2014 the server never\nreaches out to the provider. This endpoint marks the row\n``dismissed=True`` so it no longer surfaces.\n\nArgs:\n    suggestion_id: Target suggestion.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the row does not belong to the caller.",
+        "operationId": "confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post",
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Suggestion Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hygiene/stats": {
+      "get": {
+        "tags": [
+          "hygiene"
+        ],
+        "summary": "Inbox-hygiene summary counters",
+        "description": "Return small aggregates over the caller's suggestions.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    :class:`HygieneStatsResponse`.",
+        "operationId": "hygiene_stats_api_v1_hygiene_stats_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HygieneStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountsListResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectedAccountOut"
+            },
+            "type": "array",
+            "title": "Accounts",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "AccountsListResponse",
+        "description": "Envelope wrapping the ``GET /accounts`` list.\n\nAttributes:\n    accounts: Every :class:`ConnectedAccountOut` owned by the caller."
+      },
+      "ConnectedAccountOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "gmail"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "status",
+          "created_at"
+        ],
+        "title": "ConnectedAccountOut",
+        "description": "Public view of a ``connected_accounts`` row.\n\nAttributes:\n    id: ``connected_accounts.id``.\n    email: Mailbox address.\n    provider: Always ``\"gmail\"`` in 1.0.0.\n    status: Lifecycle state (``active``/``disabled``/``revoked``).\n    created_at: When the account was connected.\n    last_sync_at: Latest successful ingest timestamp, if any."
+      },
+      "DomainWasteEntry": {
+        "properties": {
+          "sender_domain": {
+            "type": "string",
+            "title": "Sender Domain"
+          },
+          "frequency_30d": {
+            "type": "integer",
+            "title": "Frequency 30D"
+          },
+          "waste_share": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Waste Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender_domain",
+          "frequency_30d",
+          "waste_share"
+        ],
+        "title": "DomainWasteEntry",
+        "description": "One row in the hygiene-stats top-senders table.\n\nAttributes:\n    sender_domain: Normalized domain.\n    frequency_30d: Sum of emails across all sender_emails in this\n        domain.\n    waste_share: Fraction ``waste_30d / frequency_30d`` for the\n        domain (0 when the domain has no classified waste rows)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HygieneStatsResponse": {
+        "properties": {
+          "total_candidates": {
+            "type": "integer",
+            "title": "Total Candidates"
+          },
+          "dismissed_count": {
+            "type": "integer",
+            "title": "Dismissed Count"
+          },
+          "average_frequency": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Frequency"
+          },
+          "top_domains": {
+            "items": {
+              "$ref": "#/components/schemas/DomainWasteEntry"
+            },
+            "type": "array",
+            "title": "Top Domains",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_candidates",
+          "dismissed_count",
+          "average_frequency"
+        ],
+        "title": "HygieneStatsResponse",
+        "description": "Envelope for ``GET /hygiene/stats``.\n\nAttributes:\n    total_candidates: Count of active (``dismissed=False``)\n        suggestion rows.\n    dismissed_count: Count of rows the user has dismissed.\n    average_frequency: Mean ``frequency_30d`` over active\n        suggestions. ``0`` when there are none.\n    top_domains: Up to ten highest-volume sender domains in the\n        30-day window, by summed frequency."
+      },
+      "JobFilterIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "predicate": {
+            "additionalProperties": true,
+            "type": "object",
+            "minProperties": 1,
+            "title": "Predicate"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "predicate"
+        ],
+        "title": "JobFilterIn",
+        "description": "Request body for ``POST /job-filters`` and ``PUT /job-filters/{id}``.\n\nAttributes:\n    name: Human-readable label, unique per user (DB enforces).\n    predicate: JSONB document consumed by\n        :func:`app.services.jobs.predicate.evaluate`.\n    active: Soft-delete switch. Defaults to ``True``."
+      },
+      "JobFilterOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "predicate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Predicate"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "predicate",
+          "version",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobFilterOut",
+        "description": "Response body for any ``/job-filters`` endpoint.\n\nAttributes:\n    id: Filter primary key.\n    name: Label.\n    predicate: JSONB document.\n    version: Bumped on every PUT.\n    active: Soft-delete switch.\n    created_at: First-insert timestamp.\n    updated_at: Last-modified timestamp."
+      },
+      "JobFiltersListResponse": {
+        "properties": {
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/JobFilterOut"
+            },
+            "type": "array",
+            "title": "Filters",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "JobFiltersListResponse",
+        "description": "Envelope for ``GET /job-filters``.\n\nAttributes:\n    filters: Every :class:`JobFilterOut` owned by the caller,\n        ordered by ``created_at ASC`` so client-side ordering is\n        stable across requests."
+      },
+      "JobMatchOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Email Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "remote": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote"
+          },
+          "comp_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comp Min"
+          },
+          "comp_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comp Max"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "seniority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seniority"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "match_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Match Score"
+          },
+          "filter_version": {
+            "type": "integer",
+            "title": "Filter Version"
+          },
+          "passed_filter": {
+            "type": "boolean",
+            "title": "Passed Filter"
+          },
+          "match_reason": {
+            "type": "string",
+            "title": "Match Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email_id",
+          "title",
+          "company",
+          "location",
+          "remote",
+          "comp_min",
+          "comp_max",
+          "currency",
+          "seniority",
+          "source_url",
+          "match_score",
+          "filter_version",
+          "passed_filter",
+          "match_reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobMatchOut",
+        "description": "Response row for ``GET /jobs``.\n\nAttributes:\n    id: Match primary key.\n    email_id: Source email FK.\n    title: Role title.\n    company: Hiring company / firm.\n    location: Free-text location, ``None`` when the posting omitted it.\n    remote: Tri-state remote flag.\n    comp_min: Lower compensation bound.\n    comp_max: Upper compensation bound.\n    currency: ISO-4217 code.\n    seniority: Normalized tier string.\n    source_url: Apply / posting URL with tracking params stripped.\n    match_score: Calibrated confidence, three-decimal precision.\n    filter_version: Active-filter version snapshot at extract time.\n    passed_filter: ``True`` when the row cleared every active filter\n        and the confidence floor; the curated board surfaces only\n        these.\n    match_reason: Plaintext rationale (decrypted by the router).\n    created_at: When the match row was first written.\n    updated_at: When it was last replaced (re-extraction)."
+      },
+      "JobMatchesListResponse": {
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/JobMatchOut"
+            },
+            "type": "array",
+            "title": "Matches",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "JobMatchesListResponse",
+        "description": "Envelope for ``GET /jobs``.\n\nAttributes:\n    matches: Newest-first list of :class:`JobMatchOut` rows the\n        caller is allowed to see."
+      },
+      "RubricRuleIn": {
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "match": {
+            "additionalProperties": true,
+            "type": "object",
+            "minProperties": 1,
+            "title": "Match"
+          },
+          "action": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Action"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "match",
+          "action"
+        ],
+        "title": "RubricRuleIn",
+        "description": "Request body for POST / PUT.\n\nAttributes:\n    priority: Higher wins. Defaults to ``100``.\n    match: Predicate dict; keys limited to\n        :data:`_ALLOWED_MATCH_KEYS`.\n    action: Verdict dict; must contain ``label`` \u2208\n        :data:`_ALLOWED_LABELS` and ``confidence`` \u2208 ``[0, 1]``.\n    active: Soft-delete switch. Defaults to ``True``."
+      },
+      "RubricRuleOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "match": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Match"
+          },
+          "action": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Action"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "priority",
+          "match",
+          "action",
+          "version",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RubricRuleOut",
+        "description": "Response body for list / create / update.\n\nAttributes:\n    id: Rule primary key.\n    priority: Priority plumbed through from the DB row.\n    match: Predicate dict.\n    action: Verdict dict.\n    version: Monotonically increasing version.\n    active: Soft-delete switch.\n    created_at: When the rule was first inserted.\n    updated_at: Last-modified timestamp."
+      },
+      "RubricRulesListResponse": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RubricRuleOut"
+            },
+            "type": "array",
+            "title": "Rules",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "RubricRulesListResponse",
+        "description": "Envelope for ``GET /rubric``.\n\nAttributes:\n    rules: Every :class:`RubricRuleOut` owned by the caller,\n        ordered by ``priority DESC``."
+      },
+      "UnsubscribeActionOut": {
+        "properties": {
+          "http_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Http Urls",
+            "default": []
+          },
+          "mailto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailto"
+          },
+          "one_click": {
+            "type": "boolean",
+            "title": "One Click",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "UnsubscribeActionOut",
+        "description": "Normalized ``List-Unsubscribe`` target surfaced to the UI.\n\nAttributes:\n    http_urls: Every HTTP/HTTPS URL advertised by the sender.\n    mailto: First ``mailto:`` URI, if present.\n    one_click: RFC 8058 one-click POST is supported."
+      },
+      "UnsubscribeSuggestionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "sender_domain": {
+            "type": "string",
+            "title": "Sender Domain"
+          },
+          "sender_email": {
+            "type": "string",
+            "title": "Sender Email"
+          },
+          "frequency_30d": {
+            "type": "integer",
+            "title": "Frequency 30D"
+          },
+          "engagement_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Engagement Score"
+          },
+          "waste_rate": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Waste Rate"
+          },
+          "confidence": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence"
+          },
+          "decision_source": {
+            "type": "string",
+            "enum": [
+              "rule",
+              "model"
+            ],
+            "title": "Decision Source"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "list_unsubscribe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnsubscribeActionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dismissed": {
+            "type": "boolean",
+            "title": "Dismissed"
+          },
+          "dismissed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismissed At"
+          },
+          "last_email_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Email At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sender_domain",
+          "sender_email",
+          "frequency_30d",
+          "engagement_score",
+          "waste_rate",
+          "confidence",
+          "decision_source",
+          "category",
+          "rationale",
+          "list_unsubscribe",
+          "dismissed",
+          "dismissed_at",
+          "last_email_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UnsubscribeSuggestionOut",
+        "description": "Response row for ``GET /unsubscribes``.\n\nAttributes:\n    id: Suggestion primary key.\n    sender_domain: Normalized sender domain.\n    sender_email: Full normalized address.\n    frequency_30d: Emails received in the trailing 30 days.\n    engagement_score: Positive-label ratio, 3-decimal precision.\n    waste_rate: Waste/ignore ratio, 3-decimal precision.\n    confidence: Calibrated ``[0, 1]`` \u2014 the UI hides rows below\n        ``0.5`` by default.\n    decision_source: ``rule`` or ``model``.\n    category: Sender archetype when the model decided; ``None`` for\n        rule-only rows (the UI can still render a heuristic badge).\n    rationale: Plaintext rationale (decrypted by the router).\n    list_unsubscribe: Normalized action payload. ``None`` when no\n        email from this sender in the window carried a\n        ``List-Unsubscribe`` header.\n    dismissed: User-side dismissal flag.\n    dismissed_at: When the user dismissed (``None`` while active).\n    last_email_at: Most recent email time from this sender.\n    created_at: First-insert timestamp of the suggestion row.\n    updated_at: Last aggregate-update timestamp."
+      },
+      "UnsubscribeSuggestionsListResponse": {
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/UnsubscribeSuggestionOut"
+            },
+            "type": "array",
+            "title": "Suggestions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "UnsubscribeSuggestionsListResponse",
+        "description": "Envelope for ``GET /unsubscribes``.\n\nAttributes:\n    suggestions: Highest-confidence-first list of suggestion rows\n        the caller is allowed to see."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
     }
   }
 }

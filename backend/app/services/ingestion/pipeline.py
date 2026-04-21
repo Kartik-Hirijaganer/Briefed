@@ -25,6 +25,7 @@ from app.core.logging import get_logger
 from app.db.models import ConnectedAccount, Email, EmailContentBlob, SyncCursor
 from app.domain.providers import SyncCursor as DomainCursor
 from app.services.gmail.parser import parse_message
+from app.services.ingestion.content import encrypt_excerpt
 from app.services.ingestion.dedup import (
     classify_incoming,
     existing_message_hashes,
@@ -36,6 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.security import EnvelopeCipher
     from app.domain.providers import (
         MailboxProvider,
         ProviderCredentials,
@@ -75,6 +77,7 @@ async def run_ingest(
     raw_storage: ObjectStore | None = None,
     raw_bucket: str | None = None,
     store_raw_mime: bool = False,
+    content_cipher: EnvelopeCipher | None = None,
 ) -> IngestStats:
     """Run the ingestion pipeline for a single connected account.
 
@@ -86,11 +89,15 @@ async def run_ingest(
         raw_storage: Optional :class:`ObjectStore` for raw MIME uploads.
         raw_bucket: Bucket to upload to when ``store_raw_mime`` is True.
         store_raw_mime: Per-user toggle.
+        content_cipher: Optional content-at-rest cipher for body excerpts.
 
     Returns:
         An :class:`IngestStats` summary.
     """
     cursor_row = await _get_or_create_cursor(session, account_id=account_id)
+    account = await session.get(ConnectedAccount, account_id)
+    if account is None:
+        raise LookupError(f"unknown connected_account {account_id}")
     cursor = _cursor_to_domain(cursor_row)
 
     new_ids, advanced_cursor = await provider.list_new_ids(credentials, cursor)
@@ -133,7 +140,13 @@ async def run_ingest(
         email.body = EmailContentBlob(
             message_id=email.id,
             storage_backend="pg",
-            plain_text_excerpt=body.plain_text_excerpt,
+            plain_text_excerpt_ct=encrypt_excerpt(
+                body.plain_text_excerpt,
+                message_id=email.id,
+                user_id=account.user_id,
+                cipher=content_cipher,
+            ),
+            plain_text_dek_wrapped=None,
             quoted_text_removed=body.quoted_text_removed,
             language=body.language,
             size_bytes=body.size_bytes,

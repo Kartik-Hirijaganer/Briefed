@@ -258,7 +258,9 @@ async def test_llm_path_records_prompt_call_log(test_session) -> None:
     ).scalar_one()
     assert row.reasons_ct is not None
     reasons = repo.decrypt_reasons(row=row, user_id=user.id)
-    assert reasons["model_reasons"].startswith("direct")
+    model_reasons = reasons["model_reasons"]
+    assert isinstance(model_reasons, str)
+    assert model_reasons.startswith("direct")
 
 
 @pytest.mark.asyncio

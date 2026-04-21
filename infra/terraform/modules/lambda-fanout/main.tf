@@ -41,6 +41,11 @@ variable "schedule_expression" {
   default     = "cron(0 6 * * ? *)"
 }
 
+variable "env_vars" {
+  type    = map(string)
+  default = {}
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
@@ -102,7 +107,7 @@ resource "aws_lambda_function" "this" {
   }
 
   environment {
-    variables = { BRIEFED_RUNTIME = "lambda-fanout" }
+    variables = merge({ BRIEFED_RUNTIME = "lambda-fanout" }, var.env_vars)
   }
 
   tags = var.tags

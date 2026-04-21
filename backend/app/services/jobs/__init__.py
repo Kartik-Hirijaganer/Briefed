@@ -16,6 +16,7 @@ Public entrypoints:
 """
 
 from app.services.jobs.dispatch import (
+    enqueue_job_extract_for_email,
     enqueue_unextracted_for_account,
     parse_job_extract_body,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "JobMatchesRepo",
     "PredicateError",
     "corroborate_comp",
+    "enqueue_job_extract_for_email",
     "enqueue_unextracted_for_account",
     "evaluate",
     "evaluate_many",
