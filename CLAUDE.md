@@ -172,7 +172,7 @@ Queue URLs are injected via env (`BRIEFED_*_QUEUE_URL`). The ingest handler oppo
 ### LLM abstraction — one client, many providers
 Every LLM call goes through [backend/app/llm/client.py](backend/app/llm/client.py) `LLMClient`, which owns:
 
-- **Fallback chain** — `settings.llm.fallback_chain` (Gemini Flash primary, Claude Haiku 4.5 fallback per ADR 0002).
+- **Fallback chain** — catalog-driven `[CATALOG primary, *CATALOG fallbacks]` from [backend/app/llm/catalog.py](backend/app/llm/catalog.py) (Gemini Flash primary, Claude Haiku 4.5 fallback, both routed via OpenRouter per ADR 0009).
 - **Retries** — 3 attempts, exponential backoff + jitter, only on `retryable=True` errors.
 - **Circuit breaker** — trips after 5 consecutive failures; fallback kicks in while open.
 - **Cost + token logging** — one `PromptCallLog` row per call.

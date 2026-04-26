@@ -28,6 +28,7 @@ def build_default_chain(
     user_name: str | None = None,
     user_id: str | None = None,
     aliases: tuple[str, ...] = (),
+    email_aliases: tuple[str, ...] = (),
     presidio_enabled: bool = True,
 ) -> SanitizerChain:
     """Construct the Briefed default sanitizer chain.
@@ -40,6 +41,9 @@ def build_default_chain(
         user_id: Opaque user-id; folded into ``<USER_ID>``.
         aliases: Additional aliases / nicknames; folded into
             ``<USER_NAME>`` so the same placeholder covers them.
+        email_aliases: Additional email addresses; folded into
+            ``<USER_EMAIL>``. Track C populates this from the user
+            profile's ``email_aliases`` column.
         presidio_enabled: Track B Phase 6 escape hatch — when ``False``
             the chain runs only identity + regex.
 
@@ -47,8 +51,9 @@ def build_default_chain(
         A :class:`SanitizerChain` ready to pass to ``LLMClient.call``.
     """
     identities: dict[str, list[str]] = {}
-    if user_email:
-        identities["<USER_EMAIL>"] = [user_email]
+    email_candidates = [e for e in (user_email, *email_aliases) if e]
+    if email_candidates:
+        identities["<USER_EMAIL>"] = email_candidates
     name_candidates = [n for n in (user_name, *aliases) if n]
     if name_candidates:
         identities["<USER_NAME>"] = list(name_candidates)

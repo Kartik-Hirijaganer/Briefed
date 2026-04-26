@@ -283,6 +283,23 @@ def test_build_default_chain_skips_identity_when_no_envs() -> None:
     assert all(not isinstance(s, IdentityScrubber) for s in chain.sanitizers)
 
 
+def test_build_default_chain_email_aliases_redact_alongside_primary() -> None:
+    """Track C wires ``email_aliases`` into ``<USER_EMAIL>`` so an alias
+    redacts to the same placeholder kind as the primary address.
+    """
+    chain = build_default_chain(
+        user_email="me@example.com",
+        email_aliases=("alias@example.com",),
+        presidio_enabled=False,
+    )
+    result = chain.sanitize(
+        "primary me@example.com and secondary alias@example.com",
+    )
+    assert "me@example.com" not in result.text
+    assert "alias@example.com" not in result.text
+    assert result.counts_by_kind.get("USER_EMAIL") == 2
+
+
 def test_protocol_runtime_check() -> None:
     assert isinstance(RegexSanitizer(), Sanitizer)
     assert isinstance(

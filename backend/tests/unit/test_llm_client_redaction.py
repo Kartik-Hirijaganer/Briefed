@@ -204,3 +204,120 @@ def test_prompt_call_record_does_not_carry_reversal_map() -> None:
     fields = set(PromptCallRecord.__dataclass_fields__)
     assert "reversal_map" not in fields
     assert "redaction_counts" in fields
+
+
+# --------------------------------------------------------------------------- #
+# Reidentify success path — gated behind a temporarily-extended allowlist.    #
+# These tests preserve LLMClient at 100% coverage (Track A Phase 7 + plan     #
+# §20.1) by exercising the branch the empty production allowlist hides.       #
+# --------------------------------------------------------------------------- #
+
+
+class _NestedSanitizer:
+    """Stub sanitizer that produces a non-trivial reversal map."""
+
+    def sanitize(self, text: str) -> RedactionResult:
+        return RedactionResult(
+            text=text.replace("user@example.com", "<USER_EMAIL_0>"),
+            reversal_map={"<USER_EMAIL_0>": "user@example.com"},
+            counts_by_kind={"USER_EMAIL": 1},
+        )
+
+
+async def test_reidentify_success_walks_dict_list_tuple_and_scalars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Happy reidentify path covers every branch of ``_reidentify_node``.
+
+    Provider returns a payload with: a string holding a placeholder, a
+    string without one, a list (with placeholder), a tuple (with
+    placeholder), and a non-string scalar (int / None / bool). All of
+    these are walked by ``_reidentify_node``; the assertions below
+    verify each branch.
+    """
+    from app.llm import client as _client_module
+
+    monkeypatch.setattr(
+        _client_module,
+        "REIDENTIFY_FLOW_ALLOWLIST",
+        frozenset({"unit-test-flow"}),
+    )
+
+    nested_payload: dict[str, Any] = {
+        "note": "ping <USER_EMAIL_0> please",
+        "no_placeholder": "nothing to swap",
+        "tags": ["plain", "<USER_EMAIL_0>"],
+        "tuple_field": ("a", "<USER_EMAIL_0>"),
+        "count": 7,
+        "nullable": None,
+        "flag": True,
+    }
+
+    class _PayloadSchema(BaseModel):
+        model_config = ConfigDict(extra="allow", frozen=True)
+
+        note: str
+
+    provider = _CapturingProvider(nested_payload)
+    client = LLMClient(primary=provider)
+
+    response = await client.call(
+        spec=_spec(),
+        rendered_prompt="ping user@example.com",
+        schema=_PayloadSchema,
+        prompt_version_id=uuid.uuid4(),
+        sanitizer=_NestedSanitizer(),
+        reidentify=True,
+        flow="unit-test-flow",
+    )
+
+    # Provider received the redacted prompt.
+    assert provider.seen_prompt == "ping <USER_EMAIL_0>"
+
+    # Reidentified values land on the parsed model, not on
+    # call_result.payload (which preserves the placeholder form).
+    parsed = response.parsed.model_dump()
+    assert parsed["note"] == "ping user@example.com please"
+    assert parsed["no_placeholder"] == "nothing to swap"
+    assert parsed["tags"] == ["plain", "user@example.com"]
+    assert parsed["tuple_field"] == ("a", "user@example.com")
+    # Non-string scalars walk through untouched.
+    assert parsed["count"] == 7
+    assert parsed["nullable"] is None
+    assert parsed["flag"] is True
+
+
+async def test_reidentify_with_empty_reversal_map_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sanitizer that produces no replacements still allows reidentify.
+
+    Exercises the early-return branch in ``_reidentify_payload`` when the
+    reversal map is empty — the payload is returned unchanged without
+    walking the tree.
+    """
+    from app.llm import client as _client_module
+
+    monkeypatch.setattr(
+        _client_module,
+        "REIDENTIFY_FLOW_ALLOWLIST",
+        frozenset({"unit-test-flow"}),
+    )
+
+    class _NoMatchSanitizer:
+        def sanitize(self, text: str) -> RedactionResult:
+            return RedactionResult(text=text)
+
+    provider = _CapturingProvider({"note": "no replacement happened"})
+    client = LLMClient(primary=provider)
+
+    response = await client.call(
+        spec=_spec(),
+        rendered_prompt="nothing sensitive here",
+        schema=_Payload,
+        prompt_version_id=uuid.uuid4(),
+        sanitizer=_NoMatchSanitizer(),
+        reidentify=True,
+        flow="unit-test-flow",
+    )
+    assert response.call_result.payload == {"note": "no replacement happened"}
