@@ -56,10 +56,15 @@ def configure(*, level: str = "info", json_output: bool = True) -> None:
         force=True,
     )
 
+    # OTel correlation lives in a sibling module to keep the import graph
+    # small for tests that stub logging without an OTel SDK.
+    from app.core.tracing import trace_context_processor  # noqa: PLC0415
+
     processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
+        trace_context_processor,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]

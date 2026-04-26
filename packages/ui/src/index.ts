@@ -22,6 +22,11 @@ export {
 export { InstallPromptIOS, type InstallPromptIOSProps } from './primitives/InstallPromptIOS';
 export { Motion, type MotionProps } from './primitives/Motion';
 export { OpenInGmailLink, type OpenInGmailLinkProps } from './primitives/OpenInGmailLink';
+export {
+  SafeMarkdown,
+  SAFE_MARKDOWN_SCHEMA,
+  type SafeMarkdownProps,
+} from './primitives/SafeMarkdown';
 export { Sheet, type SheetProps } from './primitives/Sheet';
 export { Skeleton, type SkeletonProps } from './primitives/Skeleton';
 export { Switch, type SwitchProps } from './primitives/Switch';

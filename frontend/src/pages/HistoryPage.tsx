@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import {
   Badge,
@@ -59,30 +60,35 @@ export default function HistoryPage(): JSX.Element {
         <ul className="flex flex-col gap-3">
           {runsQuery.data.runs.map((run) => (
             <li key={run.id}>
-              <Card className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-fg">
-                      {new Date(run.started_at).toLocaleString()}
-                    </span>
-                    <span className="text-xs text-fg-muted">{run.trigger_type}</span>
+              <Link
+                to={`/history/${run.id}`}
+                className="block rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              >
+                <Card className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-fg">
+                        {new Date(run.started_at).toLocaleString()}
+                      </span>
+                      <span className="text-xs text-fg-muted">{run.trigger_type}</span>
+                    </div>
+                    <Badge tone={STATUS_TONE[run.status] ?? 'neutral'}>{run.status}</Badge>
                   </div>
-                  <Badge tone={STATUS_TONE[run.status] ?? 'neutral'}>{run.status}</Badge>
-                </div>
-                <div className="flex gap-4 text-xs text-fg-muted">
-                  <span>Ingested {run.stats?.ingested ?? 0}</span>
-                  <span>Classified {run.stats?.classified ?? 0}</span>
-                  <span>Summarized {run.stats?.summarized ?? 0}</span>
-                  {run.cost_cents !== undefined && run.cost_cents !== null ? (
-                    <span>${(run.cost_cents / 100).toFixed(2)}</span>
+                  <div className="flex gap-4 text-xs text-fg-muted">
+                    <span>Ingested {run.stats?.ingested ?? 0}</span>
+                    <span>Classified {run.stats?.classified ?? 0}</span>
+                    <span>Summarized {run.stats?.summarized ?? 0}</span>
+                    {run.cost_cents !== undefined && run.cost_cents !== null ? (
+                      <span>${(run.cost_cents / 100).toFixed(2)}</span>
+                    ) : null}
+                  </div>
+                  {run.error ? (
+                    <p className="text-xs text-danger" role="alert">
+                      {run.error}
+                    </p>
                   ) : null}
-                </div>
-                {run.error ? (
-                  <p className="text-xs text-danger" role="alert">
-                    {run.error}
-                  </p>
-                ) : null}
-              </Card>
+                </Card>
+              </Link>
             </li>
           ))}
         </ul>

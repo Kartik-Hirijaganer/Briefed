@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from app.api.deps import current_user_id, db_session
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import enforce_manual_run
 from app.db.models import (
     Classification,
     ConnectedAccount,
@@ -108,7 +109,13 @@ async def start_manual_run(
     user_id: UUID = Depends(current_user_id),
     session: AsyncSession = Depends(db_session),
 ) -> ManualRunResponse:
-    """Create a digest run and enqueue one ingest message per selected account."""
+    """Create a digest run and enqueue one ingest message per selected account.
+
+    Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
+    per user per rolling 24h window; the limiter raises ``429`` with a
+    ``Retry-After`` header when exhausted.
+    """
+    enforce_manual_run(user_id)
     accounts = await _selected_accounts(
         session=session,
         user_id=user_id,

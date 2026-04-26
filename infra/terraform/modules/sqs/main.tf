@@ -71,6 +71,11 @@ output "dlq_arn" {
   value = aws_sqs_queue.dlq.arn
 }
 
+output "dlq_name" {
+  value       = aws_sqs_queue.dlq.name
+  description = "DLQ queue name (used by CloudWatch SQS alarm dimensions)."
+}
+
 output "queue_arns" {
   value       = { for k, q in aws_sqs_queue.stage : k => q.arn }
   description = "Map stage → queue ARN. Used by worker Lambda event source mappings."
