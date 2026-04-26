@@ -147,6 +147,27 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
+      - name: Generate Terraform backend config
+        # backend.tf is gitignored (account-id-bound bucket name);
+        # generate it from the bootstrapped CloudFormation stack so the
+        # workflow has a real S3 backend across runs. Without this,
+        # state is ephemeral and every apply tries to re-create
+        # already-existing AWS resources.
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "briefed-tf-state-prod-${ACCOUNT_ID}"
+              key            = "prod/terraform.tfstate"
+              region         = "us-east-1"
+              dynamodb_table = "briefed-tf-lock-prod"
+              encrypt        = true
+            }
+          }
+          EOF
+
       - name: Terraform init
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
