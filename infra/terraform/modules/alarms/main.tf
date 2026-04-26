@@ -92,6 +92,20 @@ resource "aws_sns_topic_subscription" "alarms_email" {
 }
 
 # --------------------------------------------------------------------------- #
+# Lambda log groups — pre-created so metric filters below don't race the      #
+# first Lambda invocation. Lambda would auto-create these on first invoke,    #
+# but terraform applies the metric filters during apply (before any           #
+# invocation), so we need them to exist explicitly.                           #
+# --------------------------------------------------------------------------- #
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  for_each          = var.log_group_names
+  name              = each.value
+  retention_in_days = 14
+  tags              = var.tags
+}
+
+# --------------------------------------------------------------------------- #
 # Metric filters that lift EMF + structlog JSON onto CloudWatch metrics.      #
 # `backend/app/observability/metrics.py` emits namespace `Briefed/...`        #
 # directly via EMF; we still need filters for `LlmSpendUsd` (computed by      #
@@ -100,7 +114,7 @@ resource "aws_sns_topic_subscription" "alarms_email" {
 
 resource "aws_cloudwatch_log_metric_filter" "llm_spend" {
   name           = "${var.name_prefix}-llm-spend"
-  log_group_name = var.log_group_names["worker"]
+  log_group_name = aws_cloudwatch_log_group.lambda["worker"].name
   pattern        = "{ $.event = \"llm.call\" && $.cost_usd > 0 }"
 
   metric_transformation {
@@ -113,7 +127,7 @@ resource "aws_cloudwatch_log_metric_filter" "llm_spend" {
 
 resource "aws_cloudwatch_log_metric_filter" "gmail_quota" {
   name           = "${var.name_prefix}-gmail-quota"
-  log_group_name = var.log_group_names["worker"]
+  log_group_name = aws_cloudwatch_log_group.lambda["worker"].name
   pattern        = "{ $.event = \"gmail.quota\" && $.percent_used > 0 }"
 
   metric_transformation {
@@ -126,7 +140,7 @@ resource "aws_cloudwatch_log_metric_filter" "gmail_quota" {
 
 resource "aws_cloudwatch_log_metric_filter" "digest_failure" {
   name           = "${var.name_prefix}-digest-failure"
-  log_group_name = var.log_group_names["worker"]
+  log_group_name = aws_cloudwatch_log_group.lambda["worker"].name
   pattern        = "{ $.event = \"digest.run\" && $.status = \"failed\" }"
 
   metric_transformation {
@@ -140,7 +154,7 @@ resource "aws_cloudwatch_log_metric_filter" "digest_failure" {
 # ADR 0009 / Track A Phase 7 — daily LLM budget tripped.
 resource "aws_cloudwatch_log_metric_filter" "llm_budget_exceeded" {
   name           = "${var.name_prefix}-llm-budget-exceeded"
-  log_group_name = var.log_group_names["worker"]
+  log_group_name = aws_cloudwatch_log_group.lambda["worker"].name
   pattern        = "{ $.event = \"llm.budget.exceeded\" }"
 
   metric_transformation {
@@ -155,7 +169,7 @@ resource "aws_cloudwatch_log_metric_filter" "llm_budget_exceeded" {
 # (renamed from Gemini / Anthropic to OpenRouter:gemini-flash etc.).
 resource "aws_cloudwatch_log_metric_filter" "llm_breaker_opened" {
   name           = "${var.name_prefix}-llm-breaker-opened"
-  log_group_name = var.log_group_names["worker"]
+  log_group_name = aws_cloudwatch_log_group.lambda["worker"].name
   pattern        = "{ $.event = \"llm.breaker.opened\" }"
 
   metric_transformation {

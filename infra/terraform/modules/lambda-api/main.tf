@@ -155,7 +155,10 @@ resource "aws_lambda_function_url" "this" {
 
   cors {
     allow_origins = ["*"]
-    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    # OPTIONS (7 chars) violates AWS's 6-char-per-method constraint on
+    # cors.allowMethods. Browser preflight requests work without it
+    # being in this list — the API handles OPTIONS implicitly.
+    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
     allow_headers = ["content-type", "authorization"]
     max_age       = 86400
   }
