@@ -205,13 +205,64 @@ tf-fmt:
 	terraform -chdir=infra/terraform fmt -recursive
 
 .PHONY: tf-validate
-tf-validate:
-	cd infra/terraform/envs/dev && terraform init -backend=false && terraform validate
+tf-validate: ## terraform fmt -check + validate (dev + prod) — mirrors CI
+	terraform -chdir=infra/terraform fmt -check -recursive
+	cd infra/terraform/envs/dev  && terraform init -backend=false && terraform validate
+	cd infra/terraform/envs/prod && terraform init -backend=false && terraform validate
 
 .PHONY: deploy-dev
 deploy-dev: ## Terraform apply the dev env (requires IMAGE_URI=...)
 	@test -n "$(IMAGE_URI)" || (echo "usage: make deploy-dev IMAGE_URI=..." && exit 1)
 	cd infra/terraform/envs/dev && terraform apply -var "image_uri=$(IMAGE_URI)"
+
+# --------------------------------------------------------------------------- #
+# CI parity                                                                   #
+# --------------------------------------------------------------------------- #
+#
+# ``make ci`` runs the same gates GitHub Actions runs in .github/workflows/
+# ci.yml so a clean run locally is a strong signal that PR checks will pass.
+# Order mirrors the workflow: lint → test → coverage → docs drift → security
+# → terraform.
+#
+# Skips that match CI:
+#   - frontend-side steps short-circuit until package-lock.json exists
+#     (FRONTEND_READY gate, same as the ``detect`` job).
+#   - npm audit is gated on FRONTEND_READY (same as CI).
+# Skips that DIFFER from CI (clearly called out below):
+#   - gitleaks: requires the gitleaks binary on PATH; skipped if missing.
+#   - trivy: same — skipped if the trivy binary is missing.
+# Both run on every CI run, so install them locally if you want full parity:
+#   ``brew install gitleaks trivy``.
+
+.PHONY: ci
+ci: ## Run every CI gate locally (lint, test, coverage, docs-drift, security, terraform)
+	@echo "==> [1/6] lint"
+	@$(MAKE) lint
+	@echo "==> [2/6] test"
+	@$(MAKE) test
+	@echo "==> [3/6] coverage (floor=$(COVERAGE_FLOOR)%)"
+	@$(MAKE) coverage
+	@echo "==> [4/6] docs drift"
+	@$(MAKE) docs
+	@git diff --exit-code packages/contracts/openapi.json docs/ \
+	  || (echo "docs drift detected — commit the regenerated artifacts" && exit 1)
+	@$(MAKE) link-check
+	@echo "==> [5/6] security audit"
+	@$(MAKE) audit
+	@if command -v gitleaks >/dev/null 2>&1; then \
+	  $(MAKE) secrets-lint; \
+	else \
+	  echo "skip: gitleaks not installed (brew install gitleaks)"; \
+	fi
+	@if command -v trivy >/dev/null 2>&1; then \
+	  trivy fs --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed \
+	    --skip-dirs node_modules,.venv,build,dist,frontend/node_modules .; \
+	else \
+	  echo "skip: trivy not installed (brew install trivy)"; \
+	fi
+	@echo "==> [6/6] terraform fmt + validate"
+	@$(MAKE) tf-validate
+	@echo "==> CI parity OK"
 
 # --------------------------------------------------------------------------- #
 # Internal helpers                                                            #
