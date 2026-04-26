@@ -1,0 +1,14 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Darwin",
+  "extraPaths": ["backend"],
+  "exclude": [
+    ".venv",
+    "**/__pycache__",
+    "**/node_modules",
+    "frontend",
+    "infra"
+  ]
+}

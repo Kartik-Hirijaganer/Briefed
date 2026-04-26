@@ -2,10 +2,11 @@
 
 Run from the repo root::
 
-    python -m backend.scripts.export_openapi
+    python backend/scripts/export_openapi.py
 
-Writes the spec to ``docs/openapi.json`` with the version pinned to the
-package version declared in :mod:`app`.
+Writes the spec to ``packages/contracts/openapi.json`` with the version pinned
+to the package version declared in :mod:`app`. ``make docs`` wraps this script
+so the OpenAPI JSON + frontend TypeScript client regenerate together.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from pathlib import Path
 from app import __version__
 from app.main import app
 
-OUTPUT_PATH = Path(__file__).resolve().parents[2] / "docs" / "openapi.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_PATH = REPO_ROOT / "packages" / "contracts" / "openapi.json"
 
 
 def main() -> None:

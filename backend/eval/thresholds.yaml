@@ -1,0 +1,18 @@
+# Eval metric thresholds (plan §6). `backend/scripts/test_summary.py`
+# reads this file to decide whether the Phase 2 eval job is green.
+
+triage:
+  macro_f1_min: 0.90
+  per_class_recall_min: 0.80
+  expected_calibration_error_max: 0.08
+
+summary:
+  faithfulness_min: 4.3           # Opus-as-judge 5-point rubric (per-email).
+  cache_hit_rate_min: 0.65        # Rolling 24h cache-hit rate for summarize.
+  batch_latency_p95_seconds_max: 21600  # 6h batch SLO (plan §14 Phase 3).
+  cluster_summary_faithfulness_min: 4.0  # Cluster summaries are allowed a
+                                          # slightly lower bar than per-email.
+
+jobs:
+  field_precision_min: 0.85
+  field_recall_min: 0.85

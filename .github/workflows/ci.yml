@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Frontend is scaffolded in Phase 6; until the root workspace lockfile
+# lands, frontend-side CI steps short-circuit on the ``frontend-ready``
+# output of the ``detect`` job. This keeps Phase 0 CI green on main.
+
+jobs:
+  detect:
+    name: Detect frontend scaffold
+    runs-on: ubuntu-latest
+    outputs:
+      frontend-ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    name: Lint (Python + Frontend)
+    runs-on: ubuntu-latest
+    needs: detect
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Set up Node
+        if: needs.detect.outputs.frontend-ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Python deps
+        run: pip install -e ".[dev]"
+
+      - name: Install frontend deps
+        if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+
+      - name: make lint
+        run: make lint
+
+  test:
+    name: Test (Python + Frontend)
+    runs-on: ubuntu-latest
+    needs: [detect, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        if: needs.detect.outputs.frontend-ready == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: pip install -e ".[dev]"
+
+      - if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+
+      - run: make test
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: .artifacts/
+
+  coverage:
+    name: Coverage gate (80%)
+    runs-on: ubuntu-latest
+    needs: [detect, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-node@v4
+        if: needs.detect.outputs.frontend-ready == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: pip install -e ".[dev]"
+      - if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+      - run: make coverage
+
+  docs-drift:
+    name: Schema drift check
+    runs-on: ubuntu-latest
+    needs: [detect, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-node@v4
+        if: needs.detect.outputs.frontend-ready == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: pip install -e ".[dev]"
+      - if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+      - run: make docs
+      - name: Fail on drift
+        run: |
+          git diff --exit-code packages/contracts/openapi.json docs/ \
+            || { echo "make docs produced drift — commit the regenerated artifacts"; exit 1; }
+      - name: Markdown link-check (Phase 9 release gate)
+        run: make link-check
+
+  security:
+    name: Security audit (pip-audit + bandit + trivy + npm audit + gitleaks)
+    runs-on: ubuntu-latest
+    needs: [detect, lint]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-node@v4
+        if: needs.detect.outputs.frontend-ready == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: pip install -e ".[dev]"
+      - if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+
+      - name: pip-audit
+        # --skip-editable so the local briefed-backend package isn't flagged
+        # as missing from PyPI. Real vulnerabilities in deps still fail.
+        run: pip-audit --skip-editable
+
+      # Phase 8: Python SAST. Config lives in pyproject.toml [tool.bandit].
+      - name: bandit (Python SAST)
+        run: bandit -c pyproject.toml -r backend/app
+
+      # Phase 8: filesystem CVE scan. Fails on HIGH/CRITICAL findings only.
+      - name: trivy fs
+        # Pinned to master SHA — every published trivy-action tag (v0.28-v0.33)
+        # transitively pins setup-trivy@v0.2.{1,2,3} and aquasecurity has
+        # deleted those tags, leaving only v0.2.6. master tracks v0.2.6.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+          skip-dirs: "node_modules,.venv,build,dist,frontend/node_modules"
+
+      # Phase 8: frontend dependency audit. Soft-fail until lockfile lands.
+      - name: npm audit
+        if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm --workspace frontend audit --audit-level=high
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform fmt
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+      - name: terraform validate (dev env)
+        run: |
+          cd infra/terraform/envs/dev
+          terraform init -backend=false
+          terraform validate
+      - name: terraform validate (prod env)
+        run: |
+          cd infra/terraform/envs/prod
+          terraform init -backend=false
+          terraform validate

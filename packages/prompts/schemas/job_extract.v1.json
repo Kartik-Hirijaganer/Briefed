@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/job_extract.v1.json",
+  "title": "JobMatch",
+  "description": "Structured output produced by the job_extract prompt (plan §14 Phase 4). Generated JSON must match this schema exactly; extra properties are rejected by the Pydantic mirror in app.llm.schemas.JobMatch. Numeric salaries must be accompanied by a verbatim comp_phrase that the backend regex-corroborates against the source email body before writing the row — fabricated salaries fail the guard and are dropped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "company", "match_reason", "confidence"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Role title copied verbatim from the posting."
+    },
+    "company": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Hiring company or recruiting firm."
+    },
+    "location": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Free-text location (city / region / country). Null if the posting does not state one."
+    },
+    "remote": {
+      "type": ["boolean", "null"],
+      "description": "Tri-state: true when remote is explicitly offered, false when on-site-only, null when ambiguous."
+    },
+    "comp_min": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 10000000,
+      "description": "Inclusive lower bound of the salary range in currency units."
+    },
+    "comp_max": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 10000000,
+      "description": "Inclusive upper bound of the salary range in currency units."
+    },
+    "currency": {
+      "type": ["string", "null"],
+      "minLength": 3,
+      "maxLength": 3,
+      "description": "ISO-4217 currency code matching comp_min/comp_max."
+    },
+    "comp_phrase": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Verbatim salary phrase copied from the email body. Required when comp_min or comp_max is set."
+    },
+    "seniority": {
+      "type": ["string", "null"],
+      "enum": [
+        "intern",
+        "junior",
+        "mid",
+        "senior",
+        "staff",
+        "principal",
+        "director",
+        "executive",
+        null
+      ],
+      "description": "Normalized seniority tier; null when the posting does not state one."
+    },
+    "source_url": {
+      "type": ["string", "null"],
+      "maxLength": 2048,
+      "description": "Apply / posting URL lifted from the email body or headers."
+    },
+    "match_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600,
+      "description": "One-paragraph rationale for why this posting is or is not a fit. Encrypted at rest."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calibrated probability the extracted fields are faithful to the email. Rows below 0.7 are suppressed from the digest by the pipeline policy gate."
+    }
+  }
+}

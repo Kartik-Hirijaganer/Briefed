@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind v4 `@theme` block mirrors the design tokens defined in
+ * frontend/src/styles/tokens.css so utility classes resolve to the same
+ * CSS custom properties the primitives consume. DESIGN.md is the
+ * canonical reference for token semantics.
+ */
+
+@theme {
+  /* Canonical token names (DESIGN.md) */
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-muted: var(--bg-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-fg-on-accent: var(--fg-on-accent);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-success: var(--success);
+
+  /* Legacy aliases — kept until @briefed/ui primitives migrate to the
+     canonical names. Point at the same CSS custom properties so a
+     single source of truth wins. */
+  --color-bg: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-accent-contrast: var(--fg-on-accent);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100dvh;
+  background: var(--bg-canvas);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Disable hover transforms on touch devices — plan §19.16 §6. */
+@media (hover: none) {
+  .hover\:bg-surface:hover {
+    background: inherit;
+  }
+}
