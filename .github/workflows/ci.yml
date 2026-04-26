@@ -172,7 +172,10 @@ jobs:
 
       # Phase 8: filesystem CVE scan. Fails on HIGH/CRITICAL findings only.
       - name: trivy fs
-        uses: aquasecurity/trivy-action@v0.29.0
+        # Pinned to master SHA — every published trivy-action tag (v0.28-v0.33)
+        # transitively pins setup-trivy@v0.2.{1,2,3} and aquasecurity has
+        # deleted those tags, leaving only v0.2.6. master tracks v0.2.6.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: fs
           scan-ref: .

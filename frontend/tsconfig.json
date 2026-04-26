@@ -18,7 +18,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
-    "baseUrl": ".",
     "paths": {
       "@briefed/ui": ["../packages/ui/src/index.ts"],
       "@briefed/ui/tokens.css": ["../packages/ui/src/tokens.css"],
