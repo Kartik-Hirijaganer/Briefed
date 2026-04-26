@@ -39,11 +39,12 @@ import {
   type UserSchedule,
 } from './profileApi';
 
-const FREQUENCY_OPTIONS: ReadonlyArray<{ value: ScheduleFrequency; label: string; slots: number }> = [
-  { value: 'once_daily', label: 'Once a day', slots: 1 },
-  { value: 'twice_daily', label: 'Twice a day', slots: 2 },
-  { value: 'disabled', label: 'Disabled', slots: 0 },
-];
+const FREQUENCY_OPTIONS: ReadonlyArray<{ value: ScheduleFrequency; label: string; slots: number }> =
+  [
+    { value: 'once_daily', label: 'Once a day', slots: 1 },
+    { value: 'twice_daily', label: 'Twice a day', slots: 2 },
+    { value: 'disabled', label: 'Disabled', slots: 0 },
+  ];
 
 /**
  * Pad a candidate slot value out to exactly the required slot count.
@@ -68,9 +69,8 @@ function padSlots(slots: readonly string[], required: number): string[] {
  * @returns A sorted list of timezone names.
  */
 function listTimezones(): string[] {
-  const supported = typeof Intl.supportedValuesOf === 'function'
-    ? Intl.supportedValuesOf('timeZone')
-    : [];
+  const supported =
+    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
   if (!supported.length) {
     return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London'];
   }
@@ -115,9 +115,7 @@ export function ProfileSettings(): JSX.Element {
     return (
       <ErrorState
         title="Could not load profile"
-        detail={
-          profileQuery.error instanceof Error ? profileQuery.error.message : undefined
-        }
+        detail={profileQuery.error instanceof Error ? profileQuery.error.message : undefined}
       />
     );
   }
@@ -125,9 +123,7 @@ export function ProfileSettings(): JSX.Element {
     return (
       <ErrorState
         title="Could not load schedule"
-        detail={
-          scheduleQuery.error instanceof Error ? scheduleQuery.error.message : undefined
-        }
+        detail={scheduleQuery.error instanceof Error ? scheduleQuery.error.message : undefined}
       />
     );
   }
@@ -135,14 +131,9 @@ export function ProfileSettings(): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       <ProfileCard profile={profileQuery.data} onSave={profileMutation.mutate} />
-      <ScheduleCard
-        schedule={scheduleQuery.data}
-        onSave={scheduleMutation.mutate}
-      />
+      <ScheduleCard schedule={scheduleQuery.data} onSave={scheduleMutation.mutate} />
       <AppearanceCard
-        onPreferenceChange={(next) =>
-          profileMutation.mutate({ theme_preference: next })
-        }
+        onPreferenceChange={(next) => profileMutation.mutate({ theme_preference: next })}
       />
       <PrivacyCard
         profile={profileQuery.data}
@@ -154,7 +145,11 @@ export function ProfileSettings(): JSX.Element {
 
 interface ProfileCardProps {
   readonly profile: UserProfile;
-  readonly onSave: (body: { display_name?: string | null; email_aliases?: readonly string[]; redaction_aliases?: readonly string[] }) => void;
+  readonly onSave: (body: {
+    display_name?: string | null;
+    email_aliases?: readonly string[];
+    redaction_aliases?: readonly string[];
+  }) => void;
 }
 
 /**
@@ -165,9 +160,7 @@ interface ProfileCardProps {
  */
 function ProfileCard(props: ProfileCardProps): JSX.Element {
   const [displayName, setDisplayName] = useState<string>(props.profile.display_name ?? '');
-  const [emailAliases, setEmailAliases] = useState<string>(
-    props.profile.email_aliases.join(', '),
-  );
+  const [emailAliases, setEmailAliases] = useState<string>(props.profile.email_aliases.join(', '));
   const [redactionAliases, setRedactionAliases] = useState<string>(
     props.profile.redaction_aliases.join(', '),
   );
@@ -260,9 +253,7 @@ interface ScheduleCardProps {
  * @returns The rendered card.
  */
 function ScheduleCard(props: ScheduleCardProps): JSX.Element {
-  const [frequency, setFrequency] = useState<ScheduleFrequency>(
-    props.schedule.schedule_frequency,
-  );
+  const [frequency, setFrequency] = useState<ScheduleFrequency>(props.schedule.schedule_frequency);
   const [times, setTimes] = useState<string[]>([...props.schedule.schedule_times_local]);
   const [timezone, setTimezone] = useState<string>(props.schedule.schedule_timezone);
   const timezones = useMemo(listTimezones, []);
@@ -287,17 +278,15 @@ function ScheduleCard(props: ScheduleCardProps): JSX.Element {
     props.onSave({ schedule_timezone: next });
   };
 
-  const nextRun = props.schedule.next_run_at_utc
-    ? new Date(props.schedule.next_run_at_utc)
-    : null;
+  const nextRun = props.schedule.next_run_at_utc ? new Date(props.schedule.next_run_at_utc) : null;
 
   return (
     <Card className="flex flex-col gap-4">
       <header>
         <h2 className="text-base font-semibold text-fg">Schedule</h2>
         <p className="text-sm text-fg-muted">
-          When Briefed scans your inbox automatically. The next run preview is
-          computed by the same predicate the server uses to fan out work.
+          When Briefed scans your inbox automatically. The next run preview is computed by the same
+          predicate the server uses to fan out work.
         </p>
       </header>
       <fieldset className="flex flex-col gap-2">
@@ -319,7 +308,6 @@ function ScheduleCard(props: ScheduleCardProps): JSX.Element {
           <div className="flex flex-wrap gap-2">
             {times.map((time, index) => (
               <input
-                // eslint-disable-next-line react/no-array-index-key -- positions are stable per cadence
                 key={index}
                 id={`schedule-time-${index}`}
                 type="time"
@@ -346,10 +334,7 @@ function ScheduleCard(props: ScheduleCardProps): JSX.Element {
         </select>
       </Field>
       <p className="text-xs text-fg-muted">
-        Next run:{' '}
-        <span className="font-mono">
-          {nextRun ? nextRun.toLocaleString() : '—'}
-        </span>
+        Next run: <span className="font-mono">{nextRun ? nextRun.toLocaleString() : '—'}</span>
       </p>
     </Card>
   );
@@ -386,15 +371,19 @@ interface PrivacyCardProps {
   readonly onToggle: (next: boolean) => void;
 }
 
-/** Privacy card — Presidio toggle. */
+/**
+ * Privacy card — Presidio toggle.
+ *
+ * @param props - Component props (current profile + toggle handler).
+ * @returns The privacy card section.
+ */
 function PrivacyCard(props: PrivacyCardProps): JSX.Element {
   return (
     <Card className="flex flex-col gap-3">
       <header>
         <h2 className="text-base font-semibold text-fg">Privacy</h2>
         <p className="text-sm text-fg-muted">
-          Run the Microsoft Presidio entity scrubber ahead of regex /
-          alias redaction.
+          Run the Microsoft Presidio entity scrubber ahead of regex / alias redaction.
         </p>
       </header>
       <Field label="Presidio enabled" htmlFor="presidio-toggle">

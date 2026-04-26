@@ -45,9 +45,7 @@ export default function PreferencesPage(): JSX.Element {
       <ErrorState
         title="Could not load preferences"
         detail={
-          preferencesQuery.error instanceof Error
-            ? preferencesQuery.error.message
-            : undefined
+          preferencesQuery.error instanceof Error ? preferencesQuery.error.message : undefined
         }
       />
     );
@@ -102,8 +100,7 @@ function applyPreferencesPatch(
   body: Schemas['PreferencesPatchRequest'],
 ): Schemas['UserPreferences'] {
   return {
-    auto_execution_enabled:
-      body.auto_execution_enabled ?? current.auto_execution_enabled,
+    auto_execution_enabled: body.auto_execution_enabled ?? current.auto_execution_enabled,
     digest_send_hour_utc: body.digest_send_hour_utc ?? current.digest_send_hour_utc,
     redact_pii: body.redact_pii ?? current.redact_pii,
     secure_offline_mode: body.secure_offline_mode ?? current.secure_offline_mode,

@@ -58,9 +58,7 @@ export default function AccountsPage(): JSX.Element {
       ) : accountsQuery.isError ? (
         <ErrorState
           title="Could not load accounts"
-          detail={
-            accountsQuery.error instanceof Error ? accountsQuery.error.message : undefined
-          }
+          detail={accountsQuery.error instanceof Error ? accountsQuery.error.message : undefined}
         />
       ) : accountsQuery.data && accountsQuery.data.accounts.length > 0 ? (
         <ul className="flex flex-col gap-3">

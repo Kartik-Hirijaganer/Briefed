@@ -86,7 +86,7 @@ typecheck: ## Strict type check (Python)
 dead-check: ## Find unused code (Python: vulture, Frontend: knip)
 	vulture backend/app --min-confidence 80
 ifdef FRONTEND_READY
-	npm --workspace frontend run dead-check
+	npx --no-install knip
 endif
 
 # --------------------------------------------------------------------------- #

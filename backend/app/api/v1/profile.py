@@ -172,11 +172,9 @@ async def patch_schedule(
 
     new_frequency = updates.get("schedule_frequency", user.schedule_frequency)
     raw_times = updates.get("schedule_times_local")
-    new_times: tuple[str, ...]
-    if raw_times is None:
-        new_times = tuple(user.schedule_times_local or ())
-    else:
-        new_times = tuple(raw_times)
+    new_times: tuple[str, ...] = (
+        tuple(user.schedule_times_local or ()) if raw_times is None else tuple(raw_times)
+    )
     try:
         _validate_frequency_consistency(new_frequency, new_times)
     except ValueError as exc:

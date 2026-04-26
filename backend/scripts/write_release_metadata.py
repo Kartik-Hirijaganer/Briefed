@@ -1,4 +1,4 @@
-"""Insert a ``release_metadata`` row from the deploy workflow.
+r"""Insert a ``release_metadata`` row from the deploy workflow.
 
 Plan §8 + §19.7 + §14 Phase 9. Called as the last step of
 ``deploy-prod.yml`` after ``aws lambda update-alias`` succeeds, so the
@@ -157,11 +157,15 @@ async def write_row(
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            existing_stmt = sa.select(sa.func.count()).select_from(ReleaseMetadata).where(
-                sa.and_(
-                    ReleaseMetadata.version == version,
-                    ReleaseMetadata.git_sha == git_sha,
-                ),
+            existing_stmt = (
+                sa.select(sa.func.count())
+                .select_from(ReleaseMetadata)
+                .where(
+                    sa.and_(
+                        ReleaseMetadata.version == version,
+                        ReleaseMetadata.git_sha == git_sha,
+                    ),
+                )
             )
             existing = (await session.execute(existing_stmt)).scalar_one()
             return existing == 0
@@ -173,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--version", required=True, help="Tag (with or without leading 'v').")
-    parser.add_argument("--git-sha", required=True, help="40-char commit SHA the image was built from.")
+    parser.add_argument(
+        "--git-sha", required=True, help="40-char commit SHA the image was built from."
+    )
     parser.add_argument("--notes", default=None, help="Free-form release-engineer note.")
     parser.add_argument(
         "--frontend-build-id",
@@ -230,4 +236,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:] or [arg for arg in os.environ.get("RELEASE_ARGS", "").split() if arg]))
+    _argv = sys.argv[1:] or [arg for arg in os.environ.get("RELEASE_ARGS", "").split() if arg]
+    sys.exit(main(_argv))

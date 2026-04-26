@@ -8,9 +8,18 @@
  * surface.
  */
 
+/**
+ *
+ */
 export type ScheduleFrequency = 'once_daily' | 'twice_daily' | 'disabled';
+/**
+ *
+ */
 export type ThemePreference = 'system' | 'light' | 'dark';
 
+/**
+ *
+ */
 export interface UserProfile {
   readonly display_name: string | null;
   readonly email_aliases: readonly string[];
@@ -22,6 +31,9 @@ export interface UserProfile {
   readonly schedule_timezone: string;
 }
 
+/**
+ *
+ */
 export interface UserSchedule {
   readonly schedule_frequency: ScheduleFrequency;
   readonly schedule_times_local: readonly string[];
@@ -29,6 +41,9 @@ export interface UserSchedule {
   readonly next_run_at_utc: string | null;
 }
 
+/**
+ *
+ */
 export interface UserProfilePatch {
   readonly display_name?: string | null;
   readonly email_aliases?: readonly string[];
@@ -37,6 +52,9 @@ export interface UserProfilePatch {
   readonly theme_preference?: ThemePreference;
 }
 
+/**
+ *
+ */
 export interface UserSchedulePatch {
   readonly schedule_frequency?: ScheduleFrequency;
   readonly schedule_times_local?: readonly string[];
@@ -85,12 +103,21 @@ async function jsonFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** GET /api/v1/profile/me */
+/**
+ * GET /api/v1/profile/me — fetch the authenticated user's profile.
+ *
+ * @returns The current user profile.
+ */
 export function fetchProfile(): Promise<UserProfile> {
   return jsonFetch<UserProfile>('/api/v1/profile/me');
 }
 
-/** PATCH /api/v1/profile/me */
+/**
+ * PATCH /api/v1/profile/me — apply partial profile updates.
+ *
+ * @param body - Subset of profile fields to update.
+ * @returns The updated profile after the patch.
+ */
 export function patchProfile(body: UserProfilePatch): Promise<UserProfile> {
   return jsonFetch<UserProfile>('/api/v1/profile/me', {
     method: 'PATCH',
@@ -98,12 +125,21 @@ export function patchProfile(body: UserProfilePatch): Promise<UserProfile> {
   });
 }
 
-/** GET /api/v1/profile/me/schedule */
+/**
+ * GET /api/v1/profile/me/schedule — fetch the user's schedule + next run.
+ *
+ * @returns The current schedule.
+ */
 export function fetchSchedule(): Promise<UserSchedule> {
   return jsonFetch<UserSchedule>('/api/v1/profile/me/schedule');
 }
 
-/** PATCH /api/v1/profile/me/schedule */
+/**
+ * PATCH /api/v1/profile/me/schedule — apply partial schedule updates.
+ *
+ * @param body - Subset of schedule fields to update.
+ * @returns The updated schedule.
+ */
 export function patchSchedule(body: UserSchedulePatch): Promise<UserSchedule> {
   return jsonFetch<UserSchedule>('/api/v1/profile/me/schedule', {
     method: 'PATCH',

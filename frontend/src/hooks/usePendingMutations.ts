@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import {
-  listPendingMutations,
-  subscribeToPendingMutations,
-} from '../offline/mutations';
+import { listPendingMutations, subscribeToPendingMutations } from '../offline/mutations';
 import type { PendingMutationRecord } from '../offline/db';
 
 /**
@@ -30,4 +27,3 @@ export function usePendingMutations(): {
 
   return { pendingMutations, refreshPendingMutations };
 }
-

@@ -98,7 +98,7 @@ def _iter_targets() -> list[Path]:
     return targets
 
 
-def _check_link(source: Path, href: str) -> str | None:
+def _check_link(source: Path, href: str) -> str | None:  # noqa: PLR0911 — distinct early-exit cases
     """Return an error string if a link is broken; ``None`` if OK."""
     if _is_external(href):
         return None
@@ -113,9 +113,8 @@ def _check_link(source: Path, href: str) -> str | None:
     resolved = _resolve(source, target)
     if not resolved.exists():
         return f"missing target {target}"
-    if anchor and resolved.suffix == ".md":
-        if anchor not in _collect_anchors(resolved):
-            return f"missing anchor #{anchor} in {target}"
+    if anchor and resolved.suffix == ".md" and anchor not in _collect_anchors(resolved):
+        return f"missing anchor #{anchor} in {target}"
     return None
 
 

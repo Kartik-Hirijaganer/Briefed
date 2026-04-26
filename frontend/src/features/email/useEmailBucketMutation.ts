@@ -60,19 +60,16 @@ function updateEmailLists(
   bucket: Schemas['EmailRow']['bucket'],
   queryClient: ReturnType<typeof useQueryClient>,
 ): void {
-  queryClient.setQueriesData<Schemas['EmailsListResponse']>(
-    { queryKey: ['emails'] },
-    (current) => {
-      if (!current) return current;
-      const nextEmails = current.emails
-        .filter((email) => email.id !== emailId || email.bucket === bucket)
-        .map((email) => (email.id === emailId ? { ...email, bucket } : email));
-      const removed = current.emails.length - nextEmails.length;
-      return {
-        ...current,
-        emails: nextEmails,
-        total: Math.max(current.total - removed, 0),
-      };
-    },
-  );
+  queryClient.setQueriesData<Schemas['EmailsListResponse']>({ queryKey: ['emails'] }, (current) => {
+    if (!current) return current;
+    const nextEmails = current.emails
+      .filter((email) => email.id !== emailId || email.bucket === bucket)
+      .map((email) => (email.id === emailId ? { ...email, bucket } : email));
+    const removed = current.emails.length - nextEmails.length;
+    return {
+      ...current,
+      emails: nextEmails,
+      total: Math.max(current.total - removed, 0),
+    };
+  });
 }

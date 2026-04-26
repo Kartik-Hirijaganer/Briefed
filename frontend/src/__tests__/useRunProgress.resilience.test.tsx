@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { useRunProgress } from '../hooks/useRunProgress';
@@ -24,7 +25,7 @@ describe('useRunProgress polling resilience', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
     const { result, rerender } = renderHook(({ id }) => useRunProgress(id), {

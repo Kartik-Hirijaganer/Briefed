@@ -93,10 +93,14 @@ async def test_release_metadata_rollback_emits_new_row(test_session: AsyncSessio
     await test_session.commit()
 
     rows = (
-        await test_session.execute(
-            sa.select(ReleaseMetadata).order_by(ReleaseMetadata.deployed_at.asc()),
+        (
+            await test_session.execute(
+                sa.select(ReleaseMetadata).order_by(ReleaseMetadata.deployed_at.asc()),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert [row.version for row in rows] == ["1.1.0", "1.0.0"]
     assert rows[-1].notes is not None and "rollback" in rows[-1].notes

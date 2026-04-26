@@ -21,16 +21,10 @@ function installMatchMedia(): void {
         onchange: null,
         addListener: () => undefined,
         removeListener: () => undefined,
-        addEventListener: (
-          _event: 'change',
-          listener: (event: MediaQueryListEvent) => void,
-        ) => {
+        addEventListener: (_event: 'change', listener: (event: MediaQueryListEvent) => void) => {
           mediaState.listeners.push(listener);
         },
-        removeEventListener: (
-          _event: 'change',
-          listener: (event: MediaQueryListEvent) => void,
-        ) => {
+        removeEventListener: (_event: 'change', listener: (event: MediaQueryListEvent) => void) => {
           mediaState.listeners = mediaState.listeners.filter((l) => l !== listener);
         },
         dispatchEvent: () => false,

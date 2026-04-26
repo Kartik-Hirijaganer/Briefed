@@ -80,10 +80,14 @@ def _load_engines() -> tuple[_AnalyzerProtocol, _AnonymizerProtocol]:
     with _ENGINE_LOCK:
         cached = _ENGINE_CACHE[0]
         if cached is None:
-            from presidio_analyzer import AnalyzerEngine  # type: ignore[import-not-found]  # noqa: PLC0415
-            from presidio_anonymizer import AnonymizerEngine  # type: ignore[import-not-found]  # noqa: PLC0415
+            from presidio_analyzer import (
+                AnalyzerEngine,  # type: ignore[import-not-found, unused-ignore]
+            )
+            from presidio_anonymizer import (
+                AnonymizerEngine,  # type: ignore[import-not-found, unused-ignore]
+            )
 
-            cached = (AnalyzerEngine(), AnonymizerEngine())
+            cached = (AnalyzerEngine(), AnonymizerEngine())  # type: ignore[no-untyped-call, unused-ignore]
             _ENGINE_CACHE[0] = cached
         return cached
 

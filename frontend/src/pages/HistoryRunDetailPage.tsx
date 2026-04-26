@@ -68,9 +68,7 @@ export default function HistoryRunDetailPage(): JSX.Element {
           <Button variant="link" href="/history">
             ← Back to history
           </Button>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight">
-            Run {run.id.slice(0, 8)}
-          </h1>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">Run {run.id.slice(0, 8)}</h1>
           <p className="text-xs text-fg-muted">
             {run.trigger_type} · started {new Date(run.started_at).toLocaleString()} · finished{' '}
             {completedLabel}

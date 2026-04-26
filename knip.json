@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "tags": ["-internal"],
+  "workspaces": {
+    "frontend": {
+      "entry": [
+        "index.html",
+        "src/**/*.test.{ts,tsx}",
+        "src/__tests__/**/*.{ts,tsx}"
+      ],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": [
+        "@briefed/contracts",
+        "tailwindcss"
+      ]
+    },
+    "packages/ui": {
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/contracts": {
+      "project": ["src/**/*.ts"]
+    }
+  }
+}

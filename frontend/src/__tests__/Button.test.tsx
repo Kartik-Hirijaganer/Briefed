@@ -56,7 +56,11 @@ describe('<Button>', () => {
     // @ts-expect-error — link requires href
     const missingHref = <Button variant="link">x</Button>;
     // @ts-expect-error — non-link variants cannot accept href
-    const houseHasHref = <Button variant="primary" href="/x">x</Button>;
+    const houseHasHref = (
+      <Button variant="primary" href="/x">
+        x
+      </Button>
+    );
     // Reference the vars so ESLint does not flag unused locals.
     expect(missingHref).toBeDefined();
     expect(houseHasHref).toBeDefined();

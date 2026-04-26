@@ -28,9 +28,7 @@ export default function SettingsLayout(): JSX.Element {
             to={tab.to}
             className={({ isActive }) =>
               `px-3 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'border-b-2 border-accent text-accent'
-                  : 'text-fg-muted hover:text-fg'
+                isActive ? 'border-b-2 border-accent text-accent' : 'text-fg-muted hover:text-fg'
               }`
             }
           >

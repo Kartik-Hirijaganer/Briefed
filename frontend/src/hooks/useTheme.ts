@@ -19,7 +19,13 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
+/**
+ *
+ */
 export type ThemePreference = 'system' | 'light' | 'dark';
+/**
+ *
+ */
 export type ResolvedTheme = 'light' | 'dark';
 
 const STORAGE_KEY = 'briefed.theme';
@@ -120,10 +126,7 @@ let cachedSnapshot: ThemeSnapshot = { preference: 'system', resolved: 'light' };
 function snapshotStore(): ThemeSnapshot {
   const preference = readStoredPreference();
   const resolved = resolvePreference(preference);
-  if (
-    cachedSnapshot.preference === preference &&
-    cachedSnapshot.resolved === resolved
-  ) {
+  if (cachedSnapshot.preference === preference && cachedSnapshot.resolved === resolved) {
     return cachedSnapshot;
   }
   cachedSnapshot = { preference, resolved };
@@ -207,6 +210,11 @@ export function useTheme(): UseThemeResult {
   );
 }
 
+/**
+ * Test-only escape hatch into module-private helpers.
+ *
+ * @internal
+ */
 export const _internals = {
   STORAGE_KEY,
   readStoredPreference,

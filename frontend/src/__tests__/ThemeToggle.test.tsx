@@ -24,10 +24,7 @@ describe('<ThemeToggle>', () => {
   it('selects the persisted preference', () => {
     window.localStorage.setItem('briefed.theme', 'dark');
     render(<ThemeToggle />);
-    expect(screen.getByRole('radio', { name: 'Dark' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
+    expect(screen.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('cycles to a new preference + persists + invokes onChange', async () => {
@@ -37,9 +34,6 @@ describe('<ThemeToggle>', () => {
     await user.click(screen.getByRole('radio', { name: 'Dark' }));
     expect(handler).toHaveBeenCalledWith('dark');
     expect(window.localStorage.getItem('briefed.theme')).toBe('dark');
-    expect(screen.getByRole('radio', { name: 'Dark' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
+    expect(screen.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
   });
 });

@@ -48,4 +48,3 @@ export function useStorageEstimate(): StorageEstimateState {
 
   return state;
 }
-

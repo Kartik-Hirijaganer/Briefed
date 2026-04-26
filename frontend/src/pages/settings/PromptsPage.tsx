@@ -46,7 +46,8 @@ export default function PromptsPage(): JSX.Element {
                 {String(rule.action.label ?? 'Rule')}
               </h3>
               <span className="text-xs text-fg-muted">
-                priority {rule.priority} · {String(rule.action.label ?? 'unknown').replace('_', ' ')}
+                priority {rule.priority} ·{' '}
+                {String(rule.action.label ?? 'unknown').replace('_', ' ')}
               </span>
             </div>
             <pre className="overflow-x-auto rounded-[var(--radius-sm)] bg-bg-muted p-2 text-xs text-fg-muted">
