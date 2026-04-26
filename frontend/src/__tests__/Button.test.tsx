@@ -55,8 +55,8 @@ describe('<Button>', () => {
     // they fail to compile if the union ever loosens.
     // @ts-expect-error — link requires href
     const missingHref = <Button variant="link">x</Button>;
-    // @ts-expect-error — non-link variants cannot accept href
     const houseHasHref = (
+      // @ts-expect-error — non-link variants cannot accept href
       <Button variant="primary" href="/x">
         x
       </Button>

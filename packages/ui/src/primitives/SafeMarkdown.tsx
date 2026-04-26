@@ -1,6 +1,8 @@
 import ReactMarkdown from 'react-markdown';
-import rehypeSanitize, { defaultSchema, type Schema } from 'rehype-sanitize';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { type JSX } from 'react';
+
+type Schema = typeof defaultSchema;
 
 /**
  * Allowlist used by {@link SafeMarkdown}. Whitelists exactly the elements
