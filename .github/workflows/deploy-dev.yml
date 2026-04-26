@@ -28,7 +28,16 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          allowed-account-ids: "970385384114"
+          role-session-name: gha-deploy-dev-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify caller account
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          if [ "$ACCOUNT_ID" != "970385384114" ]; then
+            echo "::error::Assumed role belongs to account $ACCOUNT_ID, expected 970385384114"
+            exit 1
+          fi
 
       - name: Ensure ECR repository exists
         # The repo must exist before ECR login + image push. Describe is
@@ -64,6 +73,37 @@ jobs:
           terraform init
           terraform apply -auto-approve \
             -var "image_uri=${{ steps.image.outputs.image_uri }}"
+
+      - name: Sync runtime secrets to SSM
+        # Must run AFTER terraform apply so the parameters exist (TF
+        # creates them with PLACEHOLDER; this step writes the real
+        # value). The new Lambda version cold-starts at the smoke check
+        # below, so it sees the fresh value. See deploy-prod.yml for
+        # the full rationale.
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SESSION_SIGNING_KEY: ${{ secrets.SESSION_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          put_secret() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              echo "skip: $name (no GitHub secret set)"
+              return
+            fi
+            aws ssm put-parameter \
+              --name "$name" --type SecureString \
+              --value "$value" --overwrite >/dev/null
+            echo "updated: $name"
+          }
+          put_secret /briefed/dev/openrouter_api_key          "$OPENROUTER_API_KEY"
+          put_secret /briefed/dev/supabase_db_url             "$DEV_DATABASE_URL"
+          put_secret /briefed/dev/google_oauth_client_id      "$GOOGLE_OAUTH_CLIENT_ID"
+          put_secret /briefed/dev/google_oauth_client_secret  "$GOOGLE_OAUTH_CLIENT_SECRET"
+          put_secret /briefed/dev/session_signing_key         "$SESSION_SIGNING_KEY"
 
       - name: Smoke check /health
         run: |

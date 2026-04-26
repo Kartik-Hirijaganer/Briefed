@@ -99,10 +99,9 @@ the digest land.
 
 ## Thank-you
 
-This release was built and shipped solo. The plan
-([.claude/plans/2026-04-19-release-1-0-0.md](../../.claude/plans/2026-04-19-release-1-0-0.md))
-and the ADRs ([docs/adr/](../adr/)) capture every load-bearing
-decision; PRs and issues welcome.
+This release was built and shipped solo. The ADRs
+([docs/adr/](../adr/)) capture every load-bearing decision; PRs and
+issues welcome.
 
 ---
 
