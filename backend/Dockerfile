@@ -13,9 +13,9 @@ FROM public.ecr.aws/lambda/python:3.11
 
 # ---- OS build deps ------------------------------------------------------------
 # Needed to build native wheels for asyncpg / cryptography.
-RUN dnf install -y gcc gcc-c++ libffi-devel openssl-devel \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
+RUN yum install -y gcc gcc-c++ libffi-devel openssl-devel \
+    && yum clean all \
+    && rm -rf /var/cache/yum
 
 # ---- Python package install ---------------------------------------------------
 # The pyproject is the sole source of deps. We copy the whole project
