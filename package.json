@@ -1,0 +1,14 @@
+{
+  "name": "briefed-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Briefed root workspace — hoists deps across frontend + packages/*.",
+  "type": "module",
+  "workspaces": ["frontend", "packages/ui", "packages/contracts"],
+  "scripts": {
+    "dev": "npm --workspace frontend run dev",
+    "build": "npm --workspace frontend run build",
+    "lint": "npm --workspace frontend run lint",
+    "test": "npm --workspace frontend run test"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/newsletter_group.v1.json",
+  "title": "TechNewsClusterSummary",
+  "description": "Group summary for one newsletter cluster (plan §14 Phase 3). Generated JSON must match this schema exactly; extra properties are rejected by the Pydantic mirror in app.llm.schemas.TechNewsClusterSummary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cluster_key", "headline", "confidence"],
+  "properties": {
+    "cluster_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Stable lowercase slug identifying the cluster."
+    },
+    "headline": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "bullets": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240
+      },
+      "default": []
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240
+      },
+      "default": []
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    }
+  }
+}

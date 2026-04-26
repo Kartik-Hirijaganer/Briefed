@@ -1,0 +1,219 @@
+name: Deploy — prod
+
+# Phase 9 (plan §13 + §14 Phase 9): blue/green prod deploy.
+# Triggered by an annotated semver tag pushed to ``main`` (e.g. ``v1.0.0``)
+# or via ``workflow_dispatch`` for break-glass redeploys. Manual approval
+# is enforced by the ``prod`` GitHub Environment.
+#
+# Atomic cutover semantics: ``terraform apply`` publishes a new Lambda
+# version and rolls the ``live`` alias to it as one operation. Rollback
+# is a single ``aws lambda update-alias`` against each function back to
+# the version captured before the apply ran (see the post-deploy smoke
+# step). PWA + Alembic are forward-compatible per plan §12 (additive
+# columns first, drop in the following minor) so the previous Lambda
+# version still serves correctly mid-deploy.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Existing ECR tag to promote (default: tag SHA)."
+        required: false
+        type: string
+      release_notes:
+        description: "Free-form notes written into release_metadata."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # OIDC federation to AWS (plan §13)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: briefed
+  TF_DIR: infra/terraform/envs/prod
+
+jobs:
+  deploy:
+    name: Build → publish version → alias swing → record release_metadata
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version + sha
+        id: meta
+        run: |
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="$(git describe --tags --abbrev=0 || echo "v0.0.0-${GITHUB_SHA::7}")"
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "sha=${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Python deps
+        run: pip install -e ".[dev]"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "970385384114"
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" \
+            --region "${AWS_REGION}" > /dev/null 2>&1 \
+            || aws ecr create-repository --repository-name "${ECR_REPOSITORY}" \
+                 --region "${AWS_REGION}" \
+                 --image-scanning-configuration scanOnPush=true \
+                 --encryption-configuration encryptionType=AES256
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build + push image
+        id: image
+        run: |
+          IMAGE_TAG="${{ inputs.image_tag }}"
+          if [ -z "${IMAGE_TAG}" ]; then
+            IMAGE_TAG="${GITHUB_SHA}"
+          fi
+          IMAGE="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker build -f backend/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          # Also tag with the semver alias so rollback tooling can resolve
+          # ``aws ecr describe-images --image-ids imageTag=v1.0.0`` and
+          # find the SHA-tagged image alongside it.
+          SEMVER_TAG="${{ steps.meta.outputs.version }}"
+          docker tag "$IMAGE" \
+            "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${SEMVER_TAG}"
+          docker push \
+            "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${SEMVER_TAG}"
+          echo "image_uri=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend (PWA bundle)
+        id: frontend
+        run: |
+          npm --workspace frontend run build
+          BUILD_ID=$(cd frontend/dist && find . -type f -print0 | sort -z \
+            | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}' | cut -c1-16)
+          echo "frontend_build_id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Capture pre-deploy live alias versions (for rollback)
+        id: pre
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          # If state already exists the function names are queryable;
+          # on a first-ever deploy these will be empty and rollback is
+          # a no-op (there is no prior version to revert to).
+          API=$(terraform output -raw api_function_name 2>/dev/null || echo "")
+          WORKER=$(terraform output -raw worker_function_name 2>/dev/null || echo "")
+          FANOUT=$(terraform output -raw fanout_function_name 2>/dev/null || echo "")
+          alias_version() {
+            local fn="$1"
+            [ -z "$fn" ] && { echo ""; return; }
+            aws lambda get-alias --function-name "$fn" --name live \
+              --query 'FunctionVersion' --output text 2>/dev/null || echo ""
+          }
+          {
+            echo "api=${API}"
+            echo "worker=${WORKER}"
+            echo "fanout=${FANOUT}"
+            echo "api_version=$(alias_version "$API")"
+            echo "worker_version=$(alias_version "$WORKER")"
+            echo "fanout_version=$(alias_version "$FANOUT")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Alembic migrations against prod
+        # Forward-only in prod (plan §12); additive-first columns mean
+        # the previous Lambda version still serves correctly while we
+        # are mid-deploy. ``BRIEFED_RUNTIME=local`` so Settings reads
+        # ``BRIEFED_DATABASE_URL`` straight from env (no SSM hop).
+        env:
+          BRIEFED_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          BRIEFED_RUNTIME: local
+        run: |
+          alembic -c backend/alembic.ini upgrade head
+
+      - name: Terraform apply (publish version + atomic alias swing)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -var "image_uri=${{ steps.image.outputs.image_uri }}"
+
+      - name: Deploy PWA to S3 + invalidate CloudFront
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          BUCKET=$(terraform output -raw pwa_bucket)
+          aws s3 sync ../../../../frontend/dist "s3://${BUCKET}" --delete
+          DIST_DOMAIN=$(terraform output -raw cloudfront_domain)
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?DomainName=='${DIST_DOMAIN}'].Id" \
+            --output text)
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+
+      - name: Smoke check live /health
+        id: smoke
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          URL=$(terraform output -raw function_url)
+          curl --fail --retry 5 --retry-delay 3 "${URL}health"
+
+      - name: Auto-rollback on smoke failure
+        if: failure() && steps.smoke.conclusion == 'failure' && steps.pre.outputs.api_version != ''
+        run: |
+          echo "Smoke check failed. Reverting live alias to pre-deploy versions."
+          aws lambda update-alias --function-name "${{ steps.pre.outputs.api }}"    --name live --function-version "${{ steps.pre.outputs.api_version }}"
+          aws lambda update-alias --function-name "${{ steps.pre.outputs.worker }}" --name live --function-version "${{ steps.pre.outputs.worker_version }}"
+          aws lambda update-alias --function-name "${{ steps.pre.outputs.fanout }}" --name live --function-version "${{ steps.pre.outputs.fanout_version }}"
+          exit 1
+
+      - name: Record release_metadata row
+        env:
+          BRIEFED_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          BRIEFED_RUNTIME: local
+        run: |
+          python backend/scripts/write_release_metadata.py \
+            --version "${{ steps.meta.outputs.version }}" \
+            --git-sha "${{ steps.meta.outputs.sha }}" \
+            --frontend-build-id "${{ steps.frontend.outputs.frontend_build_id }}" \
+            --notes "${{ inputs.release_notes || format('automated deploy of {0}', steps.meta.outputs.version) }}"

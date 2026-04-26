@@ -1,0 +1,111 @@
+/*
+ * Briefed design tokens (plan §10 + §19.16 §4).
+ *
+ * Exposed as CSS custom properties so Storybook, Playwright visual tests,
+ * and runtime theme switches all work without a rebuild. Primitives in
+ * src/primitives/ reference these by name (never hardcoded hex or px).
+ * Tailwind v4 `@theme` block in frontend/src/index.css mirrors these so
+ * utility classes compile to the same tokens.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Color — surfaces */
+  --color-bg: #ffffff;
+  --color-bg-muted: #f4f4f5;
+  --color-surface: #f7f7f8;
+  --color-border: #e4e4e7;
+  --color-fg: #18181b;
+  --color-fg-muted: #52525b;
+
+  /* Color — intent */
+  --color-accent: #2563eb;
+  --color-accent-fg: #ffffff;
+  --color-danger: #dc2626;
+  --color-warn: #d97706;
+  --color-ok: #16a34a;
+  --color-success: #16a34a;
+
+  /* Focus + interaction */
+  --focus-ring: rgba(37, 99, 235, 0.35);
+
+  /* Spacing — 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 4px 10px rgba(0, 0, 0, 0.08);
+  --shadow-3: 0 10px 30px rgba(0, 0, 0, 0.12);
+
+  /* Typography */
+  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+  --lh-xs: 16px;
+  --lh-sm: 20px;
+  --lh-base: 24px;
+  --lh-lg: 28px;
+  --lh-xl: 28px;
+  --lh-2xl: 32px;
+  --lh-3xl: 40px;
+
+  /* Motion — plan §19.16 §4, canonicalized in §20.6 */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #09090b;
+  --color-bg-muted: #18181b;
+  --color-surface: #18181b;
+  --color-border: #27272a;
+  --color-fg: #fafafa;
+  --color-fg-muted: #a1a1aa;
+  --color-accent: #60a5fa;
+  --color-accent-fg: #0b1020;
+  --focus-ring: rgba(96, 165, 250, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #09090b;
+    --color-bg-muted: #18181b;
+    --color-surface: #18181b;
+    --color-border: #27272a;
+    --color-fg: #fafafa;
+    --color-fg-muted: #a1a1aa;
+    --color-accent: #60a5fa;
+    --color-accent-fg: #0b1020;
+    --focus-ring: rgba(96, 165, 250, 0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/unsubscribe_borderline.v1.json",
+  "title": "UnsubscribeDecision",
+  "description": "Structured output produced by the unsubscribe_borderline prompt (plan §14 Phase 5). The recommender pipeline calls the LLM only on senders that hit 2-of-3 rule criteria; this schema mirrors the Pydantic UnsubscribeDecision in app.llm.schemas so a hallucinated field surfaces as a 422 at the ingestion boundary. Confidence is capped at 0.95 by contract — the prompt instructions forbid exceeding that ceiling.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["should_recommend", "confidence", "category", "rationale"],
+  "properties": {
+    "should_recommend": {
+      "type": "boolean",
+      "description": "Final verdict: true when the recommender should surface this sender for unsubscribe."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calibrated probability the decision is correct. Values at or below 0.8 never auto-act (plan §7 policy gate). The prompt caps this at 0.95."
+    },
+    "category": {
+      "type": "string",
+      "enum": ["promotional", "newsletter", "notification", "social", "other"],
+      "description": "Dominant sender archetype — drives the UI badge color."
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "One-sentence explanation citing the specific aggregate signals. Encrypted at rest."
+    }
+  }
+}

@@ -1,0 +1,46 @@
+version: "3.9"
+
+# Local dev services for Briefed.
+#
+# Postgres mirrors the Supabase free-tier schema expectations (Postgres 15);
+# the app connects via the transaction-mode pooler in prod (§19.15) but talks
+# directly to this instance in dev. LocalStack stands in for SQS + SSM + S3
+# so workers can be exercised without AWS credentials.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: briefed-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: briefed
+      POSTGRES_PASSWORD: briefed
+      POSTGRES_DB: briefed
+    ports:
+      - "5432:5432"
+    volumes:
+      - briefed_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U briefed -d briefed"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: briefed-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: sqs,ssm,s3,kms,events,scheduler
+      DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      DISABLE_CORS_CHECKS: "1"
+    ports:
+      - "4566:4566"
+    volumes:
+      - briefed_localstack:/var/lib/localstack
+
+volumes:
+  briefed_pgdata:
+  briefed_localstack:

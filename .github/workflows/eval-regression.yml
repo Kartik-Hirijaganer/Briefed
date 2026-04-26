@@ -1,0 +1,49 @@
+name: Eval Regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/prompts/**"
+      - "backend/app/llm/**"
+      - "backend/eval/**"
+      - "backend/scripts/test_summary.py"
+      - "Makefile"
+  push:
+    branches: [main]
+    paths:
+      - "packages/prompts/**"
+      - "backend/app/llm/**"
+      - "backend/eval/**"
+      - "backend/scripts/test_summary.py"
+      - "Makefile"
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  promptfoo:
+    name: Prompt regression suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: pip install -e ".[dev]"
+      - run: npm install -g promptfoo
+      - run: make eval
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

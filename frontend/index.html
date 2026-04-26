@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#09090b" />
+    <!--
+      Phase 8 (plan §11, §14, §19.14): defense-in-depth CSP for direct
+      S3 / dev-server hits. Production responses additionally carry the
+      same header from `backend/app/core/security_headers.py` and the
+      CloudFront response-headers policy.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'sha256-fR2NYStsW2BshKwCzIT9vedLP8WxYCyrqpkonquA9ss='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests"
+    />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Briefed" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Briefed</title>
+    <!--
+      FOUC mitigation (Track C — Phase I.5). Resolves the user's theme
+      preference from localStorage *before* any token-consuming CSS
+      paints, so the canvas renders in the correct mode on first
+      frame. Failure mode is silent — light wins by default. The CSP
+      script-src above pins this script body via SHA-256 hash; if the
+      content changes, recompute the hash and update both meta CSP
+      and `backend/app/core/security_headers.py`.
+    -->
+    <script>(function(){try{var p=localStorage.getItem('briefed.theme')||'system';var r=p==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p;document.documentElement.setAttribute('data-theme',r);}catch(e){}})();</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

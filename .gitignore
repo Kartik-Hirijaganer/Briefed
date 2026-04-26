@@ -34,7 +34,8 @@ token.json
 service-account*.json
 
 # -------- IDE / OS --------
-.vscode/
+.vscode/*
+!.vscode/
 !.vscode/settings.json
 !.vscode/extensions.json
 .idea/
@@ -44,5 +45,18 @@ Thumbs.db
 # -------- Generated docs --------
 docs/openapi.json.bak
 
+# -------- Test / CI artifacts --------
+.artifacts/
+
+# -------- Terraform --------
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/terraform/envs/*/backend.tf
+!infra/terraform/envs/*/backend.tf.example
+
 # -------- Claude Code --------
 .claude/settings.local.json
+# Added by code-review-graph
+.code-review-graph/

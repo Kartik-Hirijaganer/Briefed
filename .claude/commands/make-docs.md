@@ -21,16 +21,16 @@ Pin the release version to **`1.0.0`** unless the user passed `--version <x.y.z>
 
    If any of these disagree with the target release version, update them to match (this is the source of truth that flows into `app.openapi()["info"]["version"]`).
 
-2. **Regenerate the OpenAPI JSON** by running the export script:
+2. **Regenerate the OpenAPI JSON** by running `make docs` at the repo root (wraps the export script + `openapi-typescript` frontend client regen):
 
    ```bash
-   cd backend && python -m scripts.export_openapi
+   make docs
    ```
 
-   This writes `docs/openapi.json` at the repo root with `info.version` pinned to the release version.
+   This writes `packages/contracts/openapi.json` with `info.version` pinned to the release version, and regenerates `frontend/src/api/schema.d.ts` from it.
 
 3. **Verify** the emitted spec:
-   - `docs/openapi.json` exists and is valid JSON.
+   - `packages/contracts/openapi.json` exists and is valid JSON.
    - `info.version` equals the target release version.
    - `info.title` is `"Briefed API"`.
    - Every route in `backend/app/` is represented (spot-check by counting `paths`).
