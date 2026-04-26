@@ -12,8 +12,12 @@
 FROM public.ecr.aws/lambda/python:3.11
 
 # ---- OS build deps ------------------------------------------------------------
-# Needed to build native wheels for asyncpg / cryptography.
-RUN yum install -y gcc gcc-c++ libffi-devel openssl-devel \
+# gcc + libffi-devel cover any source builds we still need; openssl-devel
+# is intentionally omitted because it conflicts with openssl-snapsafe-libs
+# (pre-installed in the Lambda Python 3.11 base for SnapStart). cryptography
+# and asyncpg both ship pre-built manylinux wheels, so a source compile of
+# their crypto bindings is not required.
+RUN yum install -y gcc gcc-c++ libffi-devel \
     && yum clean all \
     && rm -rf /var/cache/yum
 
