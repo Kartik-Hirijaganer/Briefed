@@ -7,8 +7,10 @@ in production; tests stay on SQLite so they run without docker-compose).
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Iterator
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -19,6 +21,38 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import StaticPool
 
 from app.db.models import Base
+
+
+# Tests assume KMS aliases + AWS creds are unset, matching CI's environment.
+# Locally, ``.env`` populates these and ``~/.aws/credentials`` supplies creds,
+# which routes integration tests through real KMS instead of the unset-alias
+# fallback paths. Empty strings beat the ``.env`` values because
+# ``pydantic-settings`` reads env vars *after* the env_file. CI never sets
+# these, so the fixture is a no-op there.
+_POLLUTED_ENV_VARS: tuple[str, ...] = (
+    "BRIEFED_TOKEN_WRAP_KEY_ALIAS",
+    "BRIEFED_CONTENT_KEY_ALIAS",
+    "AWS_PROFILE",
+)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _scrub_local_env_pollution() -> Iterator[None]:
+    """Override developer ``.env`` values that diverge from CI defaults."""
+    snapshot = {key: os.environ.get(key) for key in _POLLUTED_ENV_VARS}
+    for key in _POLLUTED_ENV_VARS:
+        if key.startswith("AWS_"):
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = ""
+    try:
+        yield
+    finally:
+        for key, value in snapshot.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 @pytest_asyncio.fixture()

@@ -24,7 +24,9 @@ const setCsrfCookie = (token: string | null): void => {
   Object.defineProperty(document, 'cookie', {
     configurable: true,
     get: () => (token ? `briefed_csrf=${encodeURIComponent(token)}` : ''),
-    set: () => undefined,
+    set(_value: string) {
+      // No-op stub — tests only exercise the read path.
+    },
   });
 };
 
