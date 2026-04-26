@@ -35,6 +35,8 @@ dependencies = [
     "opentelemetry-api>=1.27",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
+    "sentry-sdk>=2.18",
     # Supabase client (kept for admin / file-storage paths)
     "supabase>=2.9",
 ]
@@ -52,6 +54,7 @@ dev = [
     "mypy>=1.13",
     "types-requests",
     "pip-audit>=2.7",
+    "bandit[toml]>=1.8",
     # gitleaks is distributed as a binary; install via brew / apt / the
     # gitleaks GitHub Action rather than pip.
 ]
@@ -192,6 +195,7 @@ markers = [
     "integration: tests that touch Postgres / SQS / other services",
     "e2e: full-stack end-to-end tests (Playwright)",
     "eval: prompt-evaluation tests (Promptfoo)",
+    "chaos: induced-failure drills for Phase 8 alarm classes",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -203,6 +207,30 @@ branch = true
 omit = [
     "backend/app/lambda_api.py",
     "backend/app/lambda_worker.py",
+]
+
+# --------------------------------------------------------------------------- #
+# Bandit (Python SAST) — Phase 8 hardening; CI ``security`` job invokes      #
+# ``bandit -c pyproject.toml -r backend/app``. Test files use ``assert``,    #
+# subprocess fixtures, and other patterns Bandit flags as low-severity in    #
+# product code; we exclude the test tree and the alembic scaffolding.        #
+# --------------------------------------------------------------------------- #
+[tool.bandit]
+exclude_dirs = [
+    "backend/tests",
+    "backend/scripts",
+    "backend/alembic",
+    "frontend",
+    "infra",
+    "packages",
+    ".venv",
+    "build",
+    "dist",
+]
+skips = [
+    # Tests + fixtures use ``assert`` intentionally; kept here so a future
+    # ``bandit -r backend`` (without ``--exclude``) still passes.
+    "B101",
 ]
 
 [tool.coverage.report]

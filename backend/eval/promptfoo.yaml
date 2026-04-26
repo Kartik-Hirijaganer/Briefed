@@ -45,10 +45,14 @@ tests:
     file: golden/triage_v1_adversarial.jsonl
   - description: "summarize_relevant — faithfulness fixtures"
     file: golden/summarize_relevant_v1.jsonl
+  - description: "summarize_relevant — adversarial fixtures (§19.11 Phase 8)"
+    file: golden/summarize_relevant_v1_adversarial.jsonl
   - description: "newsletter_group — cluster fixtures"
     file: golden/newsletter_group_v1.jsonl
   - description: "job_extract — field precision/recall + salary corroboration"
     file: golden/job_extract_v1.jsonl
+  - description: "job_extract — adversarial fixtures (§19.11 Phase 8)"
+    file: golden/job_extract_v1_adversarial.jsonl
 
 defaultTest:
   assert:

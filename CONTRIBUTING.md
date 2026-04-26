@@ -33,9 +33,10 @@ make dev                    # backend on :8000, frontend on :5173
 ```bash
 make test          # unit + integration (Python + frontend)
 make lint          # formatter + linter + type-check
-make coverage      # 80% line-coverage gate
+make coverage      # 80% line-coverage gate (+ listed 100% modules)
 make e2e           # Playwright (slow; needs PLAYWRIGHT=1)
 make eval          # Promptfoo prompt evals (needs EVAL=1)
+make link-check    # Verify markdown links across README + docs/**
 ```
 
 CI runs the same Make targets, so passing locally means passing in CI —
@@ -52,8 +53,9 @@ no environment drift.
 ## Pull requests
 
 - Fill in the PR template.
-- Linked CI checks must pass: `lint`, `test`, `coverage`, `docs-drift`,
-  `security`, `terraform`.
+- Linked CI checks must pass: `lint`, `test`, `coverage`, `docs-drift`
+  (includes `make link-check`), `security`, `terraform` (validates dev
+  + prod envs).
 - If you change a user-visible command, env var, or setup step, update
   the root [README.md](README.md) in the same PR (CLAUDE.md §5).
 - Add a `[Unreleased]` entry to [CHANGELOG.md](CHANGELOG.md).
@@ -63,6 +65,16 @@ no environment drift.
 Please do not file public issues for security problems. See
 [docs/security/SECURITY.md](docs/security/SECURITY.md) for the disclosure
 process.
+
+## Releases
+
+Cutting a tag is a release-engineer task — see
+[`docs/release/v1.0.0.md`](docs/release/v1.0.0.md) for the
+1.0.0 cut and [`docs/operations/rollback.md`](docs/operations/rollback.md)
+for the rehearsal we run before every prod tag. The
+[`deploy-prod`](.github/workflows/deploy-prod.yml) workflow performs
+the blue/green alias swing and writes the audit row in
+`release_metadata`.
 
 ## License
 

@@ -139,22 +139,54 @@ jobs:
         run: |
           git diff --exit-code packages/contracts/openapi.json docs/ \
             || { echo "make docs produced drift — commit the regenerated artifacts"; exit 1; }
+      - name: Markdown link-check (Phase 9 release gate)
+        run: make link-check
 
   security:
-    name: Security audit (pip-audit + gitleaks)
+    name: Security audit (pip-audit + bandit + trivy + npm audit + gitleaks)
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect, lint]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-node@v4
+        if: needs.detect.outputs.frontend-ready == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
       - run: pip install -e ".[dev]"
+      - if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm ci
+
       - name: pip-audit
         # --skip-editable so the local briefed-backend package isn't flagged
         # as missing from PyPI. Real vulnerabilities in deps still fail.
         run: pip-audit --skip-editable
+
+      # Phase 8: Python SAST. Config lives in pyproject.toml [tool.bandit].
+      - name: bandit (Python SAST)
+        run: bandit -c pyproject.toml -r backend/app
+
+      # Phase 8: filesystem CVE scan. Fails on HIGH/CRITICAL findings only.
+      - name: trivy fs
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+          skip-dirs: "node_modules,.venv,build,dist,frontend/node_modules"
+
+      # Phase 8: frontend dependency audit. Soft-fail until lockfile lands.
+      - name: npm audit
+        if: needs.detect.outputs.frontend-ready == 'true'
+        run: npm --workspace frontend audit --audit-level=high
+
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -174,5 +206,10 @@ jobs:
       - name: terraform validate (dev env)
         run: |
           cd infra/terraform/envs/dev
+          terraform init -backend=false
+          terraform validate
+      - name: terraform validate (prod env)
+        run: |
+          cd infra/terraform/envs/prod
           terraform init -backend=false
           terraform validate

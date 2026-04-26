@@ -8,7 +8,51 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-25
+
+First public release. Cuts the release tag, records the first
+`release_metadata` row, and ships the blue/green Lambda deploy +
+rollback runbook (plan §14 Phase 9, §20.6 amended release criteria —
+80% coverage, listed 100% modules at 100%, critical-path e2e flows
+1–4, 6, 8, 11 green, prompt-eval thresholds met).
+
 ### Added
+
+- Phase 9 release engineering (plan §14 Phase 9, §8 + §19.7):
+  - `release_metadata` table + Alembic migration
+    `0007_phase9_release_metadata`. Columns per §19.7:
+    `version`, `git_sha`, `alembic_head`, `api_schema_version`,
+    `db_schema_version`, `frontend_build_id`,
+    `prompt_bundle_version`, `deployed_at`, `notes`. Unique on
+    `(version, git_sha)` + index on `deployed_at`. The row is
+    append-only — a rollback emits a *new* row pointing at the
+    previous SHA.
+  - `backend/scripts/write_release_metadata.py` — deploy-side helper
+    that inspects `backend/alembic/versions/`,
+    `packages/contracts/openapi.json`, `packages/prompts/**`, and the
+    optional `frontend/dist` to compute every artifact id, then
+    writes the ledger row. Idempotent on re-run.
+  - `.github/workflows/deploy-prod.yml` — blue/green prod deploy:
+    OIDC auth, ECR build + dual-tag (sha + semver), frontend build
+    with stable build-id hash, pre-deploy alias version capture,
+    Alembic upgrade against prod, terraform apply (publishes new
+    Lambda version + atomic alias swing), PWA sync + CloudFront
+    invalidation, post-deploy `/health` smoke, auto-rollback on
+    smoke failure, and `release_metadata` row insertion.
+  - `infra/terraform/envs/prod/` — production env wiring (mirrors
+    dev with `BRIEFED_STORE_RAW_MIME=1` and per-function `function_name`
+    outputs that the rollback runbook + workflow consume).
+  - `docs/operations/rollback.md` — operator-facing rollback playbook
+    *and* the pre-cut rehearsal script we run against dev before
+    every prod tag.
+  - `docs/release/v1.0.0.md` — release notes; `docs/release/announcement.md`
+    — public announcement draft.
+  - `backend/scripts/link_check.py` + `make link-check` target +
+    `docs-drift` CI job step — verifies every relative link in
+    README, CONTRIBUTING, CHANGELOG, CLAUDE.md, `docs/**`, and
+    `.claude/plans/**` resolves. Phase 9 release gate.
+  - CI `terraform` job extended with `terraform validate` against
+    the prod env so prod drift is caught at PR time, not on tag.
 
 - Phase 7 offline + mobile polish (plan §14 Phase 7, §19.16):
   - Workbox runtime caching for digest, email-list, jobs, news,
@@ -333,4 +377,5 @@ Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
   structlog, tenacity, pybreaker, OpenTelemetry) plus the 80% coverage
   gate from plan §20.1.
 
-[Unreleased]: https://github.com/Kartik-Hirijaganer/Briefed/compare/main...HEAD
+[Unreleased]: https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Kartik-Hirijaganer/Briefed/releases/tag/v1.0.0

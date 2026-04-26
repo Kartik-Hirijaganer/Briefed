@@ -4,6 +4,8 @@ import { Button, EmptyState, ErrorState, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
 import { AccountCard } from '../../features/settings/AccountCard';
+import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 /**
  * Connected-mailbox list + Add Gmail flow (plan §19.16 §1).
@@ -15,9 +17,12 @@ export default function AccountsPage(): JSX.Element {
     queryKey: ['accounts'],
     queryFn: async () => unwrap(await api.GET('/api/v1/accounts')),
   });
+  const breakpoint = useBreakpoint();
+  const isMobile = breakpoint === 'sm';
+  const addGmail = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4 pb-24 md:pb-0">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Gmail accounts</h2>
@@ -25,9 +30,16 @@ export default function AccountsPage(): JSX.Element {
             Connect as many Gmail inboxes as you want. Each is scanned independently.
           </p>
         </div>
-        <Button variant="link" href="/api/v1/oauth/gmail/start?link=true&return_to=/settings/accounts">
-          + Add Gmail
-        </Button>
+        {!isMobile ? (
+          <Button
+            variant="primary"
+            size="md"
+            onClick={addGmail.start}
+            aria-label="Add Gmail account"
+          >
+            + Add Gmail
+          </Button>
+        ) : null}
       </header>
 
       {accountsQuery.isPending ? (
@@ -56,12 +68,29 @@ export default function AccountsPage(): JSX.Element {
           title="No Gmail accounts yet"
           description="Connect your first inbox. Briefed requests read-only Gmail access and never sends, archives, or unsubscribes on your behalf."
           cta={
-            <Button variant="link" href="/api/v1/oauth/gmail/start?link=true&return_to=/settings/accounts">
+            <Button variant="primary" onClick={addGmail.start} aria-label="Add Gmail account">
               Add Gmail
             </Button>
           }
         />
       )}
+
+      {isMobile ? (
+        <div
+          className="fixed inset-x-0 bottom-[76px] z-20 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur md:hidden"
+          style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + 12px)` }}
+        >
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={addGmail.start}
+            aria-label="Add Gmail account"
+            className="w-full"
+          >
+            + Add Gmail
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }

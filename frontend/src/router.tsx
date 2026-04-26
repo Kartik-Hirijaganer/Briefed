@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import DashboardPage from './pages/DashboardPage';
 import HistoryPage from './pages/HistoryPage';
+import HistoryRunDetailPage from './pages/HistoryRunDetailPage';
 import JobsPage from './pages/JobsPage';
 import LoginPage from './pages/LoginPage';
 import NewsPage from './pages/NewsPage';
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: 'news', element: <NewsPage /> },
       { path: 'unsubscribe', element: <UnsubscribePage /> },
       { path: 'history', element: <HistoryPage /> },
+      { path: 'history/:runId', element: <HistoryRunDetailPage /> },
       {
         path: 'settings',
         element: <SettingsLayout />,

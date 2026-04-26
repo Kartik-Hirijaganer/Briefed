@@ -21,12 +21,17 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 from app.core.config import get_settings
 from app.core.logging import configure as configure_logging
 from app.core.logging import get_logger
+from app.core.sentry import configure_sentry
+from app.core.tracing import configure_tracing
 
 # SnapStart-friendly module init: load settings (SSM hydration happens
-# here on cold start) + configure logging before any handler runs. Both
-# calls are idempotent — repeated imports during tests are cheap.
+# here on cold start) + configure logging + tracing + sentry before any
+# handler runs. All four calls are idempotent — repeated imports during
+# tests are cheap, and SnapStart restores skip the work entirely.
 _settings = get_settings()
+configure_tracing(_settings)
 configure_logging(level=_settings.log_level, json_output=_settings.runtime != "local")
+configure_sentry(_settings)
 
 logger = get_logger(__name__)
 
@@ -116,28 +121,35 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
     if not records:
         return {"batchItemFailures": failures}
 
+    from app.core.tracing import worker_span
+
     async def _dispatch() -> None:
         for record in records:
             message_id = record.get("messageId", "<no-id>")
             source = record.get("eventSourceARN", "<unknown>")
             stage = source.rsplit("-", 1)[-1]
             try:
-                if stage == "ingest":
-                    await _handle_ingest_record(record)
-                elif stage == "classify":
-                    await _handle_classify_record(record)
-                elif stage == "summarize":
-                    await _handle_summarize_record(record)
-                elif stage == "jobs":
-                    await _handle_jobs_record(record)
-                elif stage == "unsubscribe":
-                    await _handle_unsubscribe_record(record)
-                else:
-                    logger.warning(
-                        "sqs_dispatcher.unknown_stage",
-                        stage=stage,
-                        message_id=message_id,
-                    )
+                with worker_span(
+                    f"worker.{stage}",
+                    message_id=message_id,
+                    stage=stage,
+                ):
+                    if stage == "ingest":
+                        await _handle_ingest_record(record)
+                    elif stage == "classify":
+                        await _handle_classify_record(record)
+                    elif stage == "summarize":
+                        await _handle_summarize_record(record)
+                    elif stage == "jobs":
+                        await _handle_jobs_record(record)
+                    elif stage == "unsubscribe":
+                        await _handle_unsubscribe_record(record)
+                    else:
+                        logger.warning(
+                            "sqs_dispatcher.unknown_stage",
+                            stage=stage,
+                            message_id=message_id,
+                        )
             except Exception as exc:
                 logger.exception(
                     "sqs_dispatcher.failure",

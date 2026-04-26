@@ -9,7 +9,7 @@ dashboard; works on desktop and mobile.
 Claude Haiku 4.5 (fallback) · Gmail API · Supabase · React · TypeScript ·
 Vite · PWA · AWS Lambda + SnapStart · Terraform
 
-**Version:** 1.0.0
+**Version:** 1.0.0 — released 2026-04-25 ([release notes](docs/release/v1.0.0.md))
 
 ---
 
@@ -33,7 +33,8 @@ Vite · PWA · AWS Lambda + SnapStart · Terraform
 ├── docs/
 │   ├── adr/            Architecture Decision Records (0001–0008)
 │   ├── architecture/   Data model, pipeline, system diagrams
-│   ├── operations/     Runbook, alarms, restore drills
+│   ├── operations/     Runbook, alarms, restore + rollback drills
+│   ├── release/        Release notes + announcement drafts
 │   ├── security/       SECURITY.md + threat model
 │   └── contributors/   Getting-started for contributors
 ├── tests/              Cross-service e2e + fixtures + prompt-evals
@@ -84,6 +85,7 @@ calls the same targets — there is one source of truth.
 | `make eval`          | Promptfoo prompt evals (sets `EVAL=1`).                                |
 | `make migrate`       | `alembic upgrade head`.                                                |
 | `make secrets-lint`  | `gitleaks detect` full-repo scan.                                      |
+| `make link-check`    | Verify every relative markdown link resolves (Phase 9 release gate).   |
 | `make deploy-dev`    | `terraform apply` the dev environment (requires `IMAGE_URI=<ecr>...`). |
 | `npm run codegen`    | Regenerate `frontend/src/api/schema.d.ts` from the OpenAPI contract.   |
 | `/make-docs`         | Claude-Code wrapper around `make docs`.                                |
@@ -105,14 +107,27 @@ Release 1.0.0 targets AWS Lambda + SnapStart fronted by CloudFront and
 the Lambda Function URL (ADR 0003). Terraform sources live under
 [infra/terraform/](infra/terraform/); see
 [infra/terraform/envs/dev/README.md](infra/terraform/envs/dev/README.md)
-for the bootstrap + deploy flow. Steady-state cost target is ~$8–11/month
+for the bootstrap + deploy flow, and
+[infra/terraform/envs/prod/README.md](infra/terraform/envs/prod/README.md)
+for the production stack. Steady-state cost target is ~$8–11/month
 including two customer-managed KMS CMKs (plan §20.8).
+
+Production deploys go through the
+[`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated
+tag (`v*.*.*`) → blue/green Lambda alias swing → CloudFront
+invalidation → `release_metadata` row written. Rollback is a single
+`aws lambda update-alias` per function;
+[`docs/operations/rollback.md`](docs/operations/rollback.md) is the
+operator playbook + the rehearsal we run before every cut.
 
 ## Documentation
 
 - [docs/adr/](docs/adr/) — the eight initial architecture decisions.
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
-- [docs/operations/](docs/operations/) — runbook (filled in Phase 8).
+- [docs/operations/](docs/operations/) — runbook, alarms, restore +
+  rollback drills, secrets rotation.
+- [docs/release/](docs/release/) — 1.0.0 release notes + announcement
+  draft.
 - [docs/security/](docs/security/) — SECURITY.md + threat model.
 - [.claude/plans/2026-04-19-release-1-0-0.md](.claude/plans/2026-04-19-release-1-0-0.md)
   — the full release plan.

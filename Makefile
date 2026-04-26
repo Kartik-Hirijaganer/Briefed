@@ -153,6 +153,10 @@ ifdef FRONTEND_READY
 	npm --workspace frontend run codegen
 endif
 
+.PHONY: link-check
+link-check: ## Verify every relative link in README + docs/** resolves (Phase 9 release gate)
+	python backend/scripts/link_check.py
+
 # --------------------------------------------------------------------------- #
 # Database                                                                    #
 # --------------------------------------------------------------------------- #
@@ -175,11 +179,12 @@ secrets-lint: ## Scan repo for accidentally-committed secrets
 	gitleaks detect --source . --report-format json --report-path $(ARTIFACTS_DIR)/gitleaks.json
 
 .PHONY: audit
-audit: ## pip-audit + npm audit
+audit: ## pip-audit + bandit + npm audit (Phase 8 hardening)
 	# --skip-editable so our own ``briefed-backend`` editable install isn't
 	# reported as "not on PyPI". Without ``--strict`` pip-audit still fails
 	# on real vulnerabilities but downgrades the skip to a warning.
 	pip-audit --skip-editable
+	bandit -c pyproject.toml -r backend/app
 ifdef FRONTEND_READY
 	npm --workspace frontend audit --audit-level=high
 endif

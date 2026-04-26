@@ -41,8 +41,9 @@ export function useRunProgress(runId: string | null): RunProgress {
     enabled: runId !== null,
     refetchInterval: (latest): number | false => {
       const latestStatus = latest.state.data?.status;
+      if (latestStatus === 'running' || latestStatus === 'queued') return 2500;
       if (latestStatus && terminalStatuses.has(latestStatus)) return false;
-      return 2000;
+      return 2500;
     },
     refetchIntervalInBackground: false,
     staleTime: 0,

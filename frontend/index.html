@@ -8,6 +8,18 @@
     />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#09090b" />
+    <!--
+      Phase 8 (plan §11, §14, §19.14): defense-in-depth CSP for direct
+      S3 / dev-server hits. Production responses additionally carry the
+      same header from `backend/app/core/security_headers.py` and the
+      CloudFront response-headers policy.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests"
+    />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Briefed" />

@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Dialog,
+  Motion,
   Sheet,
   Switch,
   type BadgeTone,
@@ -13,8 +14,13 @@ import {
 
 import { api, unwrap } from '../../api/client';
 import type { Schemas } from '../../api/types';
+import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { enqueueMutation } from '../../offline/mutations';
+
+const SWIPE_REVEAL_PX = 160;
+const SWIPE_TRIGGER_PX = 80;
 
 /**
  * Props for {@link AccountCard}.
@@ -50,8 +56,12 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
   const { account } = props;
   const client = useQueryClient();
   const online = useOnlineStatus();
+  const breakpoint = useBreakpoint();
+  const isMobile = breakpoint === 'sm';
+  const reconnect = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [swipeRevealed, setSwipeRevealed] = useState(false);
 
   const patch = useMutation({
     mutationFn: async (body: Schemas['AccountPatchRequest']) => {
@@ -97,7 +107,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
 
   const effectiveAutoScan = account.auto_scan_enabled ?? true;
 
-  return (
+  const cardBody = (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start gap-3">
         <div
@@ -160,6 +170,56 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
         </div>
       </div>
 
+    </Card>
+  );
+
+  return (
+    <div className="relative overflow-hidden rounded-[var(--radius-md)]">
+      {isMobile ? (
+        <div
+          aria-hidden="true"
+          className="absolute inset-y-0 right-0 flex w-[160px] items-stretch"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              patch.mutate({ auto_scan_enabled: false });
+              setSwipeRevealed(false);
+            }}
+            className="flex flex-1 items-center justify-center bg-warn/10 text-xs font-semibold text-warn"
+          >
+            Pause
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmOpen(true);
+              setSwipeRevealed(false);
+            }}
+            className="flex flex-1 items-center justify-center bg-danger text-xs font-semibold text-accent-contrast"
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : null}
+      {isMobile ? (
+        <Motion
+          drag="x"
+          dragConstraints={{ left: -SWIPE_REVEAL_PX, right: 0 }}
+          dragElastic={0.1}
+          animate={{ x: swipeRevealed ? -SWIPE_REVEAL_PX : 0 }}
+          onDragEnd={(_event, info) => {
+            const next = info.offset.x <= -SWIPE_TRIGGER_PX;
+            setSwipeRevealed(next);
+          }}
+          className="relative bg-bg"
+        >
+          {cardBody}
+        </Motion>
+      ) : (
+        cardBody
+      )}
+
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={account.email}>
         <div className="flex flex-col gap-2">
           <Button
@@ -175,7 +235,13 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
               ? 'Include in global digest'
               : 'Exclude from global digest'}
           </Button>
-          <Button variant="link" href="/api/v1/oauth/gmail/start?link=true&return_to=/settings/accounts">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              reconnect.start();
+              setSheetOpen(false);
+            }}
+          >
             Reconnect account
           </Button>
         </div>
@@ -205,7 +271,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           You can reconnect later — Briefed will pull history back from Gmail.
         </p>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 

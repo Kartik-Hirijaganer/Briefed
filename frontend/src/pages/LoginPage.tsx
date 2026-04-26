@@ -1,12 +1,16 @@
 import { Button, Card } from '@briefed/ui';
 
+import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
+
 /**
  * Unauthenticated landing page. Delegates OAuth start to the backend —
- * frontend never touches Google tokens (plan §11).
+ * frontend never touches Google tokens (plan §11). Mirrors the iOS
+ * standalone-PWA escape hatch (§19.16 §6) via `useAddGmailFlow`.
  *
  * @returns The rendered login card.
  */
 export default function LoginPage(): JSX.Element {
+  const addGmail = useAddGmailFlow({ returnTo: '/' });
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-bg-muted px-6">
       <Card className="max-w-md">
@@ -18,7 +22,7 @@ export default function LoginPage(): JSX.Element {
               and never send, archive, or click unsubscribe on your behalf.
             </p>
           </div>
-          <Button variant="link" href="/api/v1/oauth/gmail/start?return_to=/">
+          <Button variant="primary" onClick={addGmail.start} aria-label="Continue with Google">
             Continue with Google
           </Button>
           <p className="text-xs text-fg-muted">

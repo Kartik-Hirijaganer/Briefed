@@ -1,0 +1,14 @@
+/*
+ * Copy to backend.tf and fill in real bucket / table names created by
+ * the one-time CloudFormation bootstrap. backend.tf is gitignored.
+ */
+
+terraform {
+  backend "s3" {
+    bucket         = "briefed-tf-state-prod-<account-id>"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "briefed-tf-lock-prod"
+    encrypt        = true
+  }
+}

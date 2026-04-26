@@ -114,6 +114,63 @@ async def test_preferences_patch_and_manual_run_history(
 
 
 @pytest.mark.asyncio
+async def test_manual_run_rate_limit_returns_429(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """``POST /api/v1/runs`` enforces ``manual_run_daily_cap`` (plan §19.16)."""
+    from app.core import rate_limit as rate_limit_module
+    from app.core.rate_limit import ManualRunRateLimiter, reset_manual_run_limiter
+
+    reset_manual_run_limiter()
+    # Drop the cap to 1 so the second request trips the limiter immediately.
+    rate_limit_module._LIMITER = ManualRunRateLimiter(capacity=1)
+    user = await _seed_user_with_account(api_session, email="rate@x.example")
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    try:
+        with TestClient(app) as client:
+            first = client.post(
+                "/api/v1/runs",
+                json={"kind": "manual"},
+                cookies={SESSION_COOKIE_NAME: cookie},
+            )
+            assert first.status_code == 202, first.text
+
+            second = client.post(
+                "/api/v1/runs",
+                json={"kind": "manual"},
+                cookies={SESSION_COOKIE_NAME: cookie},
+            )
+            assert second.status_code == 429, second.text
+            assert "Retry-After" in second.headers
+    finally:
+        reset_manual_run_limiter()
+
+
+@pytest.mark.asyncio
+async def test_security_headers_present(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """Every response carries the OWASP-baseline header set (plan §14 Phase 8)."""
+    user = await _seed_user_with_account(api_session, email="sec@x.example")
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/v1/preferences",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert resp.status_code == 200, resp.text
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "default-src 'self'" in csp
+        assert "frame-ancestors 'none'" in csp
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+        assert "max-age=31536000" in resp.headers.get("Strict-Transport-Security", "")
+        assert "geolocation=()" in resp.headers.get("Permissions-Policy", "")
+
+
+@pytest.mark.asyncio
 async def test_digest_today_and_news_return_owned_data(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:

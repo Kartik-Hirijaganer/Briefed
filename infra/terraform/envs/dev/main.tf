@@ -48,6 +48,12 @@ variable "domain_name" {
   default     = ""
 }
 
+variable "alarm_email" {
+  description = "Email to subscribe to the Phase 8 SNS alarm topic. Empty = manual subscription."
+  type        = string
+  default     = ""
+}
+
 locals {
   tags = {
     "briefed:env"     = "dev"
@@ -158,6 +164,27 @@ module "cloudfront" {
   tags                     = local.tags
 }
 
+# Phase 8 — observability + alarms (plan §14, §20.10).
+module "alarms" {
+  source          = "../../modules/alarms"
+  name_prefix     = var.name_prefix
+  alarm_email     = var.alarm_email
+  dlq_arn         = module.sqs.dlq_arn
+  dlq_name        = module.sqs.dlq_name
+  content_cmk_arn = module.kms.content_key_arn
+  lambda_function_names = {
+    api    = module.api.function_name
+    worker = module.worker.function_name
+    fanout = module.fanout.function_name
+  }
+  log_group_names = {
+    api    = "/aws/lambda/${module.api.function_name}"
+    worker = "/aws/lambda/${module.worker.function_name}"
+    fanout = "/aws/lambda/${module.fanout.function_name}"
+  }
+  tags = local.tags
+}
+
 output "function_url" {
   value = module.api.function_url
 }
@@ -168,4 +195,12 @@ output "cloudfront_domain" {
 
 output "pwa_bucket" {
   value = aws_s3_bucket.pwa.bucket
+}
+
+output "alarm_topic_arn" {
+  value = module.alarms.alarm_topic_arn
+}
+
+output "dashboard_name" {
+  value = module.alarms.dashboard_name
 }

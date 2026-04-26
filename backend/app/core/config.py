@@ -118,6 +118,30 @@ class Settings(BaseSettings):
         validation_alias="BRIEFED_CONTENT_KEY_ALIAS",
     )
 
+    # Phase 8 — observability + error reporting.
+    otel_exporter: Literal["none", "console", "otlp"] = Field(
+        default="none",
+        description=(
+            "OpenTelemetry span exporter ('none' for tests/local; 'otlp' wires the ADOT collector)."
+        ),
+        validation_alias="BRIEFED_OTEL_EXPORTER",
+    )
+    sentry_dsn: str | None = Field(
+        default=None,
+        description="Sentry DSN; when unset, error reporting is a no-op (test + local default).",
+        validation_alias="BRIEFED_SENTRY_DSN",
+    )
+    sentry_traces_sample_rate: float = Field(
+        default=0.05,
+        description="Sentry transaction sample rate; 5% in prod, 0 in tests.",
+        validation_alias="BRIEFED_SENTRY_TRACES_SAMPLE_RATE",
+    )
+    manual_run_daily_cap: int = Field(
+        default=10,
+        description="Per-user manual-trigger cap (rolling 24h). Plan §19.16 + §20.2.",
+        validation_alias="BRIEFED_MANUAL_RUN_DAILY_CAP",
+    )
+
 
 def _hydrate_from_ssm(
     settings: Settings,

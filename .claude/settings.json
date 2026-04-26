@@ -19,11 +19,25 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|Bash",
         "hooks": [
-          { "type": "command", "command": ".claude/hooks/typecheck.sh", "timeout": 60 },
-          { "type": "command", "command": ".claude/hooks/test.sh", "timeout": 120 },
-          { "type": "command", "command": ".claude/hooks/build.sh", "timeout": 90 }
+          {
+            "type": "command",
+            "command": "code-review-graph update --skip-flows",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph status",
+            "timeout": 10
+          }
         ]
       }
     ]

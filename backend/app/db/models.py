@@ -1132,6 +1132,55 @@ class DigestRun(Base, TimestampMixin):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class ReleaseMetadata(Base):
+    """One row per deploy (plan §8 ``release_metadata``, §19.7 enrichments).
+
+    Phase 9 ledger of every prod deploy. Written by
+    :mod:`backend.scripts.write_release_metadata` from the ``deploy-prod``
+    workflow after ``aws lambda update-alias`` succeeds. Append-only —
+    rows are never updated; a rollback emits a *new* row with the
+    previous version's SHA + a ``notes`` of ``"rollback"``.
+
+    Attributes:
+        id: Primary key (UUIDv4).
+        version: Annotated semver tag (e.g. ``"1.0.0"``).
+        git_sha: 40-char commit SHA the image was built from.
+        alembic_head: Current Alembic revision id (= ``db_schema_version``).
+        api_schema_version: ``info.version`` from
+            ``packages/contracts/openapi.json`` (plan §19.7).
+        db_schema_version: Mirror of ``alembic_head`` for replay parity.
+        frontend_build_id: PWA build hash (plan §19.7) — the value Vite
+            stamps into the manifest, so a past run is bisectable.
+        prompt_bundle_version: Aggregate hash over
+            ``packages/prompts/**/v*.md`` (plan §19.7).
+        deployed_at: UTC instant the alias swing landed.
+        notes: Free-form release-engineer notes (e.g. ``"first cut"`` or
+            ``"rollback to v1.0.0 after v1.1.0 regression"``).
+    """
+
+    __tablename__ = "release_metadata"
+    __table_args__ = (
+        UniqueConstraint("version", "git_sha", name="uq_release_metadata_version_sha"),
+        Index("ix_release_metadata_deployed_at", "deployed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    git_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    alembic_head: Mapped[str] = mapped_column(String(32), nullable=False)
+    api_schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    db_schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    frontend_build_id: Mapped[str | None] = mapped_column(String(64))
+    prompt_bundle_version: Mapped[str | None] = mapped_column(String(64))
+    deployed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
 __all__ = [
     "Base",
     "Classification",
@@ -1146,6 +1195,7 @@ __all__ = [
     "OAuthToken",
     "PromptCallLog",
     "PromptVersion",
+    "ReleaseMetadata",
     "RubricRule",
     "Summary",
     "SyncCursor",
