@@ -142,9 +142,7 @@ export function ScanNowButton(): JSX.Element {
             {(accountsQuery.data?.accounts ?? []).map((account) => (
               <li key={account.id} className="flex items-center justify-between gap-2">
                 <span className="truncate">{account.email}</span>
-                <span className="shrink-0">
-                  {progress.status?.stats?.ingested ?? 0} ingested
-                </span>
+                <span className="shrink-0">{progress.status?.stats?.ingested ?? 0} ingested</span>
               </li>
             ))}
           </ul>

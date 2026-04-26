@@ -28,6 +28,8 @@ export default [
         ...globals.browser,
         ...globals.es2022,
         JSX: 'readonly',
+        // Vite-injected compile-time constant (see vite.config.ts `define`).
+        __APP_VERSION__: 'readonly',
       },
     },
     plugins: {

@@ -48,10 +48,7 @@ export function OfflineBanners(): JSX.Element | null {
           </p>
         </Alert>
       ) : null}
-      {showIOSInstallPrompt ? (
-        <InstallPromptIOS onDismiss={dismissIOSInstallPrompt} />
-      ) : null}
+      {showIOSInstallPrompt ? <InstallPromptIOS onDismiss={dismissIOSInstallPrompt} /> : null}
     </div>
   );
 }
-

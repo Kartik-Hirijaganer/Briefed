@@ -53,8 +53,10 @@ export default function DashboardPage(): JSX.Element {
 
       {hoursSinceLastRun > 24 * 7 ? (
         <Alert tone="warn" title="Auto-scan may be off">
-          <p>It has been more than 7 days since the last successful scan. Run a manual scan or
-            re-enable auto-scans in settings.</p>
+          <p>
+            It has been more than 7 days since the last successful scan. Run a manual scan or
+            re-enable auto-scans in settings.
+          </p>
         </Alert>
       ) : null}
 
@@ -123,9 +125,7 @@ function StatTile(props: StatTileProps): JSX.Element {
     <Card>
       <div className="flex flex-col gap-1">
         <span className="text-xs uppercase tracking-wide text-fg-muted">{label}</span>
-        <span
-          className={`text-2xl font-semibold ${tone === 'accent' ? 'text-accent' : 'text-fg'}`}
-        >
+        <span className={`text-2xl font-semibold ${tone === 'accent' ? 'text-accent' : 'text-fg'}`}>
           {value}
         </span>
       </div>

@@ -62,13 +62,13 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('../api/client', () => ({
   api: apiMock,
-  unwrap: <T,>(envelope: { data?: T; error?: unknown }): T => {
+  unwrap: <T>(envelope: { data?: T; error?: unknown }): T => {
     if (envelope.data !== undefined) return envelope.data;
     throw new Error('mock api error');
   },
 }));
 
-const ok = <T,>(data: T): { data: T } => ({ data });
+const ok = <T>(data: T): { data: T } => ({ data });
 
 describe('offline mutation replay integration', () => {
   beforeEach(() => {

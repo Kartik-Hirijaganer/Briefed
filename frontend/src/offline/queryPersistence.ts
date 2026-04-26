@@ -29,4 +29,3 @@ export const queryPersister = createAsyncStoragePersister({
   key: QUERY_CACHE_KEY,
   throttleTime: 1000,
 });
-

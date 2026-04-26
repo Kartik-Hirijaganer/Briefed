@@ -23,7 +23,7 @@ SCRIPTS_DIR = REPO_ROOT / "backend" / "scripts"
 
 
 @pytest.fixture()
-def release_module(monkeypatch: pytest.MonkeyPatch) -> "ModuleType":
+def release_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Load the deploy script with REPO_ROOT pointing at the live repo."""
     if str(SCRIPTS_DIR) not in sys.path:
         monkeypatch.syspath_prepend(str(SCRIPTS_DIR))
@@ -31,14 +31,14 @@ def release_module(monkeypatch: pytest.MonkeyPatch) -> "ModuleType":
     return importlib.reload(module)
 
 
-def test_semver_strips_leading_v(release_module: "ModuleType") -> None:
+def test_semver_strips_leading_v(release_module: ModuleType) -> None:
     assert release_module._semver("v1.2.3") == "1.2.3"
     assert release_module._semver("1.2.3") == "1.2.3"
     assert release_module._semver("  v0.0.1  ") == "0.0.1"
 
 
 def test_detect_alembic_head_returns_latest_revision(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -53,7 +53,7 @@ def test_detect_alembic_head_returns_latest_revision(
 
 
 def test_detect_alembic_head_raises_when_empty(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -63,7 +63,7 @@ def test_detect_alembic_head_raises_when_empty(
 
 
 def test_detect_api_schema_version_reads_openapi(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -74,19 +74,19 @@ def test_detect_api_schema_version_reads_openapi(
 
 
 def test_detect_api_schema_version_rejects_empty(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spec = tmp_path / "openapi.json"
     spec.write_text(json.dumps({"info": {}}))
     monkeypatch.setattr(release_module, "OPENAPI_PATH", spec)
-    with pytest.raises(RuntimeError, match="info.version"):
+    with pytest.raises(RuntimeError, match=r"info\.version"):
         release_module.detect_api_schema_version()
 
 
 def test_detect_prompt_bundle_version_is_stable(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -105,7 +105,7 @@ def test_detect_prompt_bundle_version_is_stable(
 
 
 def test_detect_prompt_bundle_version_changes_on_edit(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -124,7 +124,7 @@ def test_detect_prompt_bundle_version_changes_on_edit(
 
 
 def test_detect_frontend_build_id_returns_none_without_dist(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -133,7 +133,7 @@ def test_detect_frontend_build_id_returns_none_without_dist(
 
 
 def test_detect_frontend_build_id_hashes_dist(
-    release_module: "ModuleType",
+    release_module: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

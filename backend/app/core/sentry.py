@@ -47,11 +47,11 @@ def configure_sentry(settings: Settings | None = None) -> None:
         _CONFIGURED = True
         return
 
-    import sentry_sdk  # type: ignore[import-not-found]  # noqa: PLC0415 — lazy: Sentry is optional.
-    from sentry_sdk.integrations.asyncio import (  # type: ignore[import-not-found]  # noqa: PLC0415
+    import sentry_sdk  # type: ignore[import-not-found, unused-ignore]  # noqa: PLC0415 — lazy: Sentry is optional.
+    from sentry_sdk.integrations.asyncio import (  # type: ignore[import-not-found, unused-ignore]  # noqa: PLC0415
         AsyncioIntegration,
     )
-    from sentry_sdk.integrations.logging import (  # type: ignore[import-not-found]  # noqa: PLC0415
+    from sentry_sdk.integrations.logging import (  # type: ignore[import-not-found, unused-ignore]  # noqa: PLC0415
         LoggingIntegration,
     )
 
@@ -68,7 +68,7 @@ def configure_sentry(settings: Settings | None = None) -> None:
             # breadcrumbs.
             LoggingIntegration(level=None, event_level=40),  # 40 == ERROR
         ],
-        before_send=_scrub,
+        before_send=_scrub,  # type: ignore[arg-type, unused-ignore]
     )
     _CONFIGURED = True
 

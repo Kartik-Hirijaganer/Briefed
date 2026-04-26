@@ -23,9 +23,7 @@ export default function SchedulePage(): JSX.Element {
       <ErrorState
         title="Could not load schedule"
         detail={
-          preferencesQuery.error instanceof Error
-            ? preferencesQuery.error.message
-            : undefined
+          preferencesQuery.error instanceof Error ? preferencesQuery.error.message : undefined
         }
       />
     );
@@ -39,10 +37,8 @@ export default function SchedulePage(): JSX.Element {
         <h2 className="text-sm font-semibold text-fg">Daily digest</h2>
         <p className="mt-1 text-sm text-fg-muted">
           Sent at {String(prefs.digest_send_hour_utc).padStart(2, '0')}:00 UTC. Edit via{' '}
-          <code className="rounded bg-bg-muted px-1 text-xs">
-            PATCH /api/v1/preferences
-          </code>{' '}
-          (UI editor ships in 1.1).
+          <code className="rounded bg-bg-muted px-1 text-xs">PATCH /api/v1/preferences</code> (UI
+          editor ships in 1.1).
         </p>
       </Card>
       <Card>

@@ -1,14 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  FreshnessBadge,
-  Skeleton,
-} from '@briefed/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
 import type { Schemas } from '../api/types';
@@ -143,9 +135,7 @@ export default function UnsubscribePage(): JSX.Element {
   );
 }
 
-function unsubscribeUrl(
-  suggestion: Schemas['UnsubscribeSuggestion'],
-): string | null {
+function unsubscribeUrl(suggestion: Schemas['UnsubscribeSuggestion']): string | null {
   return suggestion.list_unsubscribe?.http_urls[0] ?? null;
 }
 

@@ -1,16 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import {
-  Badge,
-  Button,
-  Card,
-  Dialog,
-  Motion,
-  Sheet,
-  Switch,
-  type BadgeTone,
-} from '@briefed/ui';
+import { Badge, Button, Card, Dialog, Motion, Sheet, Switch, type BadgeTone } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
 import type { Schemas } from '../../api/types';
@@ -126,9 +117,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <p className="truncate text-xs text-fg-muted">{account.email}</p>
           <p className="mt-1 text-xs text-fg-muted">
             Connected {new Date(account.created_at).toLocaleDateString()} · last sync{' '}
-            {account.last_sync_at
-              ? new Date(account.last_sync_at).toLocaleString()
-              : 'never'}
+            {account.last_sync_at ? new Date(account.last_sync_at).toLocaleString() : 'never'}
           </p>
           <p className="text-xs text-fg-muted">
             {account.emails_ingested_24h} emails in last 24 h ·{' '}
@@ -169,17 +158,13 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           </Button>
         </div>
       </div>
-
     </Card>
   );
 
   return (
     <div className="relative overflow-hidden rounded-[var(--radius-md)]">
       {isMobile ? (
-        <div
-          aria-hidden="true"
-          className="absolute inset-y-0 right-0 flex w-[160px] items-stretch"
-        >
+        <div aria-hidden="true" className="absolute inset-y-0 right-0 flex w-[160px] items-stretch">
           <button
             type="button"
             onClick={() => {

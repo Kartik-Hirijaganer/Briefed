@@ -107,7 +107,7 @@ def _build_exporter(settings: Settings) -> SpanExporter | None:
     if name == "otlp":
         # Imported lazily so the OTLP gRPC dependency is optional in tests
         # and only landed in the Lambda image where the ADOT collector lives.
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]  # noqa: PLC0415
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found, unused-ignore]  # noqa: PLC0415
             OTLPSpanExporter,
         )
 

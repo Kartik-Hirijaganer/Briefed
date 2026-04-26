@@ -44,4 +44,3 @@ export function useSyncQueueDrain(): {
 
   return { draining, lastReplayError, drainNow };
 }
-

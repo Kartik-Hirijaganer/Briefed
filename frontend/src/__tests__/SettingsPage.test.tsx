@@ -6,10 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProfileSettings } from '../features/settings/ProfileSettings';
 
-import type {
-  UserProfile,
-  UserSchedule,
-} from '../features/settings/profileApi';
+import type { UserProfile, UserSchedule } from '../features/settings/profileApi';
 
 const baseProfile: UserProfile = {
   display_name: 'Alex',

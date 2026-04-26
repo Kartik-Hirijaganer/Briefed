@@ -10,9 +10,7 @@ describe('<SafeMarkdown>', () => {
   });
 
   it('strips raw <script> tags from the source', () => {
-    render(
-      <SafeMarkdown>{`Hello <script>window.__pwned__=true</script> world`}</SafeMarkdown>,
-    );
+    render(<SafeMarkdown>{`Hello <script>window.__pwned__=true</script> world`}</SafeMarkdown>);
     expect(document.querySelector('script')).toBeNull();
     // The literal payload becomes inert text; either dropped or escaped.
     expect((window as unknown as { __pwned__?: boolean }).__pwned__).toBeUndefined();
@@ -24,9 +22,7 @@ describe('<SafeMarkdown>', () => {
   });
 
   it('does not render <iframe> tags', () => {
-    render(
-      <SafeMarkdown>{`<iframe src="https://evil.example"></iframe>`}</SafeMarkdown>,
-    );
+    render(<SafeMarkdown>{`<iframe src="https://evil.example"></iframe>`}</SafeMarkdown>);
     expect(document.querySelector('iframe')).toBeNull();
   });
 

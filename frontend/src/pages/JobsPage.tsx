@@ -1,15 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  FreshnessBadge,
-  Skeleton,
-} from '@briefed/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
 import { useFreshnessState } from '../hooks/useFreshnessState';
@@ -128,7 +120,8 @@ function formatCompensation(
 ): string {
   if (min === null && max === null) return 'Salary n/a';
   const prefix = currency ? `${currency} ` : '';
-  if (min !== null && max !== null) return `${prefix}${min.toLocaleString()}-${max.toLocaleString()}`;
+  if (min !== null && max !== null)
+    return `${prefix}${min.toLocaleString()}-${max.toLocaleString()}`;
   if (min !== null) return `${prefix}${min.toLocaleString()}+`;
   return `${prefix}${max?.toLocaleString()}`;
 }

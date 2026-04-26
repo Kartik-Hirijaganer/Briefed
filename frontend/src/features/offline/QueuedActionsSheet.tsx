@@ -53,9 +53,7 @@ export function QueuedActionsSheet(): JSX.Element | null {
       <Sheet open={open} onClose={() => setOpen(false)} title="Queued actions">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
-            <Badge tone={online ? 'success' : 'warn'}>
-              {online ? 'Online' : 'Offline'}
-            </Badge>
+            <Badge tone={online ? 'success' : 'warn'}>{online ? 'Online' : 'Offline'}</Badge>
             <Button
               variant="secondary"
               size="sm"
@@ -97,4 +95,3 @@ export function QueuedActionsSheet(): JSX.Element | null {
     </>
   );
 }
-
