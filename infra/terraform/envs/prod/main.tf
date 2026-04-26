@@ -165,6 +165,32 @@ module "cloudfront" {
   tags                     = local.tags
 }
 
+# Bucket policy granting the CloudFront distribution's OAC read access
+# to the PWA assets. Without this, OAC requests are denied at S3 and
+# the PWA returns AccessDenied. Must reference the distribution ARN
+# in the SourceArn condition so other CloudFront distributions in the
+# account cannot piggyback on the same bucket.
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_policy" "pwa" {
+  bucket = aws_s3_bucket.pwa.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontServicePrincipalReadOnly"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.pwa.arn}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${module.cloudfront.distribution_id}"
+        }
+      }
+    }]
+  })
+}
+
 module "alarms" {
   source          = "../../modules/alarms"
   name_prefix     = var.name_prefix

@@ -164,6 +164,29 @@ module "cloudfront" {
   tags                     = local.tags
 }
 
+# Bucket policy granting CloudFront's OAC read access to the PWA
+# assets. See envs/prod/main.tf for full rationale.
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_policy" "pwa" {
+  bucket = aws_s3_bucket.pwa.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontServicePrincipalReadOnly"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.pwa.arn}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${module.cloudfront.distribution_id}"
+        }
+      }
+    }]
+  })
+}
+
 # Phase 8 — observability + alarms (plan §14, §20.10).
 module "alarms" {
   source          = "../../modules/alarms"
