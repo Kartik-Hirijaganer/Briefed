@@ -18,8 +18,8 @@ Usage
         --user-email kartik@example.com \
         --user-name "Kartik Hirijaganer"
 
-The harness expects ``BRIEFED_GEMINI_API_KEY`` (or whatever provider is
-plugged in via :class:`app.llm.client.LLMClient`) in the environment.
+The harness expects ``BRIEFED_OPENROUTER_API_KEY`` (the sole direct LLM
+credential post-ADR 0009) in the environment.
 """
 
 from __future__ import annotations

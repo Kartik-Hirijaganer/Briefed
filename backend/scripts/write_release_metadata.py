@@ -50,7 +50,7 @@ logger = logging.getLogger("briefed.release")
 
 def _semver(value: str) -> str:
     """Strip a leading ``v`` from a tag-shaped version string."""
-    return value.removeprefix("v").strip()
+    return value.strip().removeprefix("v")
 
 
 def detect_alembic_head() -> str:

@@ -84,5 +84,7 @@ Record the go/no-go below (delete the not-applicable line):
   match observed `usage.cost` if pricing differs from Phase 2 defaults
   by > 1%.
 - **NO-GO** — open a follow-up issue describing the failure mode and
-  hold the cutover. Phases 1–7 stay merged; the env flag remains
-  `legacy` (default does not flip).
+  hold the cutover. Revert the merged Phase 1–7 commits via `git revert`
+  (the `BRIEFED_LLM_PROVIDER_BACKEND` env-flag rollback path was deleted
+  with the legacy providers at T+30 days; git history is the only
+  rollback path beyond that point).

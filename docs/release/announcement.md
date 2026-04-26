@@ -88,7 +88,7 @@ EventBridge Scheduler  ──▶  fan-out Lambda  ──▶  SQS (per stage)
 ```bash
 git clone https://github.com/Kartik-Hirijaganer/Briefed
 cd Briefed
-cp .env.example .env   # fill in GEMINI_API_KEY + Google OAuth creds
+cp .env.example .env   # fill in BRIEFED_OPENROUTER_API_KEY + Google OAuth creds
 make bootstrap
 make migrate
 make dev

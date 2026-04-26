@@ -75,12 +75,14 @@ class _PartialBatchResponse(TypedDict):
 def _build_redaction_chain() -> Any:
     """Construct the Track B sanitizer chain from settings.
 
+    Settings-only fallback used in tests and on early cold-paths that
+    do not yet have a user_id. Per-message paths should call
+    :func:`_build_redaction_chain_for_user` so the chain reflects the
+    profile fields shipped by Track C (ADR 0010 Phase 7).
+
     Returns:
         A :class:`app.llm.redaction.SanitizerChain`. Identity scrubber
-        only fires when the user-identifying envs are populated; until
-        Track C ships, those come from
-        ``BRIEFED_USER_EMAIL`` / ``BRIEFED_USER_NAME`` /
-        ``BRIEFED_USER_ALIASES``.
+        only fires when the user-identifying envs are populated.
     """
     from app.llm.redaction import build_default_chain
 
@@ -91,6 +93,39 @@ def _build_redaction_chain() -> Any:
         user_name=_settings.user_name,
         aliases=aliases,
         presidio_enabled=_settings.redaction_presidio_enabled,
+    )
+
+
+async def _build_redaction_chain_for_user(session: Any, user_id: Any) -> Any:
+    """Construct the sanitizer chain from the user's profile row.
+
+    Track B Phase 7 / ADR 0010: once Track C ships the profile columns
+    (``display_name`` / ``email_aliases`` / ``redaction_aliases`` /
+    ``presidio_enabled``), the chain reads from the row instead of
+    settings. Falls back to :func:`_build_redaction_chain` when the
+    user can't be loaded (test fixtures, deleted users).
+
+    Args:
+        session: Open ``AsyncSession`` used to load the user row.
+        user_id: Owning user UUID from the SQS message.
+
+    Returns:
+        A :class:`app.llm.redaction.SanitizerChain` configured against
+        the user's profile.
+    """
+    from app.db.models import User
+    from app.llm.redaction import build_default_chain
+
+    user = await session.get(User, user_id)
+    if user is None:
+        return _build_redaction_chain()
+
+    return build_default_chain(
+        user_email=user.email,
+        user_name=user.display_name,
+        aliases=tuple(user.redaction_aliases),
+        email_aliases=tuple(user.email_aliases),
+        presidio_enabled=user.presidio_enabled,
     )
 
 
@@ -282,13 +317,13 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     unsubscribe_queue_url = os.environ.get("BRIEFED_UNSUBSCRIBE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
-        llm = build_llm_client(
-            settings=_settings,
-            http_client=http,
-            sanitizer=_build_redaction_chain(),
-        )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
+            llm = build_llm_client(
+                settings=_settings,
+                http_client=http,
+                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
+            )
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
             deps = ClassifyDeps(
@@ -369,13 +404,13 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     async with httpx.AsyncClient() as http:
-        llm = build_llm_client(
-            settings=_settings,
-            http_client=http,
-            sanitizer=_build_redaction_chain(),
-        )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
+            llm = build_llm_client(
+                settings=_settings,
+                http_client=http,
+                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
+            )
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
             deps = SummarizeDeps(
@@ -419,13 +454,13 @@ async def _handle_jobs_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     async with httpx.AsyncClient() as http:
-        llm = build_llm_client(
-            settings=_settings,
-            http_client=http,
-            sanitizer=_build_redaction_chain(),
-        )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
+            llm = build_llm_client(
+                settings=_settings,
+                http_client=http,
+                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
+            )
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
             deps = JobExtractDeps(
@@ -473,13 +508,13 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     async with httpx.AsyncClient() as http:
-        llm = build_llm_client(
-            settings=_settings,
-            http_client=http,
-            sanitizer=_build_redaction_chain(),
-        )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
+            llm = build_llm_client(
+                settings=_settings,
+                http_client=http,
+                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
+            )
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
             deps = UnsubscribeDeps(
