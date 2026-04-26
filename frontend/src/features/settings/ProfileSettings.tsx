@@ -194,7 +194,7 @@ function ProfileCard(props: ProfileCardProps): JSX.Element {
           Briefed scrubs these values from prompts before they reach the LLM.
         </p>
       </header>
-      <Field label="Display name" htmlFor="profile-display-name">
+      <Field label="Display name">
         <input
           id="profile-display-name"
           type="text"
@@ -206,7 +206,6 @@ function ProfileCard(props: ProfileCardProps): JSX.Element {
       </Field>
       <Field
         label="Email aliases"
-        htmlFor="profile-email-aliases"
         description="Comma-separated. Each entry is removed from prompts."
       >
         <input
@@ -221,7 +220,6 @@ function ProfileCard(props: ProfileCardProps): JSX.Element {
       </Field>
       <Field
         label="Redaction aliases"
-        htmlFor="profile-redaction-aliases"
         description="Comma-separated free-form strings; useful for nicknames or company codenames."
       >
         <input
@@ -304,7 +302,7 @@ function ScheduleCard(props: ScheduleCardProps): JSX.Element {
         ))}
       </fieldset>
       {frequency !== 'disabled' ? (
-        <Field label="Time slots (local)" htmlFor="schedule-time-0">
+        <Field label="Time slots (local)">
           <div className="flex flex-wrap gap-2">
             {times.map((time, index) => (
               <input
@@ -319,7 +317,7 @@ function ScheduleCard(props: ScheduleCardProps): JSX.Element {
           </div>
         </Field>
       ) : null}
-      <Field label="Timezone" htmlFor="schedule-timezone">
+      <Field label="Timezone">
         <select
           id="schedule-timezone"
           value={timezone}
@@ -386,9 +384,8 @@ function PrivacyCard(props: PrivacyCardProps): JSX.Element {
           Run the Microsoft Presidio entity scrubber ahead of regex / alias redaction.
         </p>
       </header>
-      <Field label="Presidio enabled" htmlFor="presidio-toggle">
+      <Field label="Presidio enabled">
         <Switch
-          id="presidio-toggle"
           checked={props.profile.presidio_enabled}
           onCheckedChange={props.onToggle}
           ariaLabel="Run Presidio entity scrubber"
