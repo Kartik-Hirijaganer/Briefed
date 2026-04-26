@@ -158,9 +158,17 @@ jobs:
           # If state already exists the function names are queryable;
           # on a first-ever deploy these will be empty and rollback is
           # a no-op (there is no prior version to revert to).
-          API=$(terraform output -raw api_function_name 2>/dev/null || echo "")
-          WORKER=$(terraform output -raw worker_function_name 2>/dev/null || echo "")
-          FANOUT=$(terraform output -raw fanout_function_name 2>/dev/null || echo "")
+          #
+          # ``terraform output -raw`` emits its "No outputs found" warning
+          # to STDOUT (with box-drawing chars) when state has zero outputs,
+          # which corrupts $GITHUB_OUTPUT parsing. ``-json`` is robust:
+          # returns ``{}`` on empty state, real keys otherwise. We default
+          # missing fields to "" via jq so the rest of the script stays
+          # branch-free.
+          TF_OUT="$(terraform output -json 2>/dev/null || echo '{}')"
+          API=$(printf '%s' "$TF_OUT" | jq -r '.api_function_name.value // ""')
+          WORKER=$(printf '%s' "$TF_OUT" | jq -r '.worker_function_name.value // ""')
+          FANOUT=$(printf '%s' "$TF_OUT" | jq -r '.fanout_function_name.value // ""')
           alias_version() {
             local fn="$1"
             [ -z "$fn" ] && { echo ""; return; }
