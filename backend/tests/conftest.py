@@ -22,7 +22,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.models import Base
 
-
 # Tests assume KMS aliases + AWS creds are unset, matching CI's environment.
 # Locally, ``.env`` populates these and ``~/.aws/credentials`` supplies creds,
 # which routes integration tests through real KMS instead of the unset-alias

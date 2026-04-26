@@ -11,8 +11,7 @@ vi.mock('../offline/mutations', () => ({
   subscribeToPendingMutations: (listener: () => void): (() => void) => {
     const handler = (): void => listener();
     window.addEventListener('briefed-pending-mutations-changed', handler);
-    return () =>
-      window.removeEventListener('briefed-pending-mutations-changed', handler);
+    return () => window.removeEventListener('briefed-pending-mutations-changed', handler);
   },
 }));
 

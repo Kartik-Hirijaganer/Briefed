@@ -43,8 +43,6 @@ describe('<SchedulePage>', () => {
   it('shows the error state when the request fails', async () => {
     apiMock.GET.mockResolvedValue({ error: { detail: 'boom' }, response: { status: 500 } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText(/could not load schedule/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/could not load schedule/i)).toBeInTheDocument());
   });
 });
