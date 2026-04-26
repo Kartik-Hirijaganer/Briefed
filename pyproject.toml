@@ -47,6 +47,13 @@ dependencies = [
     # the chain skip Presidio at runtime; the import stays available.
     "presidio-analyzer>=2.2",
     "presidio-anonymizer>=2.2",
+    # numpy is pulled in transitively via spaCy (which presidio-analyzer
+    # depends on). Pinned to <2.0 because numpy 2.x wheels target
+    # manylinux_2_28 (glibc ≥ 2.28); the Lambda Python 3.11 base image
+    # is Amazon Linux 2 with glibc 2.26, so 2.x falls back to source
+    # build and fails on GCC 7.3 / required GCC 9.3+. The 1.26.x line
+    # ships manylinux2014 wheels that work on AL2.
+    "numpy>=1.26,<2.0",
 ]
 
 [project.optional-dependencies]
