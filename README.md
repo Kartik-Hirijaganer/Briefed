@@ -131,8 +131,6 @@ operator playbook + the rehearsal we run before every cut.
 - [docs/release/](docs/release/) — 1.0.0 release notes + announcement
   draft.
 - [docs/security/](docs/security/) — SECURITY.md + threat model.
-- [.claude/plans/2026-04-19-release-1-0-0.md](.claude/plans/2026-04-19-release-1-0-0.md)
-  — the full release plan.
 
 ## Version bumps
 
