@@ -3,12 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Button, EmptyState, ErrorState, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { AppVersion } from '../../components/AppVersion';
 import { AccountCard } from '../../features/settings/AccountCard';
+import { ProfileSettings } from '../../features/settings/ProfileSettings';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 /**
- * Connected-mailbox list + Add Gmail flow (plan §19.16 §1).
+ * Settings landing page (plan §19.16 §1 + Track C — Phase II.6).
+ *
+ * Lists connected Gmail mailboxes plus the Profile / Schedule /
+ * Appearance / Privacy panels backed by the Track C profile API.
  *
  * @returns The rendered page.
  */
@@ -22,7 +27,7 @@ export default function AccountsPage(): JSX.Element {
   const addGmail = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
 
   return (
-    <section className="flex flex-col gap-4 pb-24 md:pb-0">
+    <section className="flex flex-col gap-6 pb-24 md:pb-0">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Gmail accounts</h2>
@@ -30,16 +35,19 @@ export default function AccountsPage(): JSX.Element {
             Connect as many Gmail inboxes as you want. Each is scanned independently.
           </p>
         </div>
-        {!isMobile ? (
-          <Button
-            variant="primary"
-            size="md"
-            onClick={addGmail.start}
-            aria-label="Add Gmail account"
-          >
-            + Add Gmail
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-3">
+          <AppVersion />
+          {!isMobile ? (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={addGmail.start}
+              aria-label="Add Gmail account"
+            >
+              + Add Gmail
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       {accountsQuery.isPending ? (
@@ -74,6 +82,8 @@ export default function AccountsPage(): JSX.Element {
           }
         />
       )}
+
+      <ProfileSettings />
 
       {isMobile ? (
         <div

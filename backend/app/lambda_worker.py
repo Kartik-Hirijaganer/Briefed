@@ -72,6 +72,28 @@ class _PartialBatchResponse(TypedDict):
     batchItemFailures: list[_BatchItemFailure]
 
 
+def _build_redaction_chain() -> Any:
+    """Construct the Track B sanitizer chain from settings.
+
+    Returns:
+        A :class:`app.llm.redaction.SanitizerChain`. Identity scrubber
+        only fires when the user-identifying envs are populated; until
+        Track C ships, those come from
+        ``BRIEFED_USER_EMAIL`` / ``BRIEFED_USER_NAME`` /
+        ``BRIEFED_USER_ALIASES``.
+    """
+    from app.llm.redaction import build_default_chain
+
+    aliases_csv = (_settings.user_aliases or "").strip()
+    aliases = tuple(alias.strip() for alias in aliases_csv.split(",") if alias.strip())
+    return build_default_chain(
+        user_email=_settings.user_email,
+        user_name=_settings.user_name,
+        aliases=aliases,
+        presidio_enabled=_settings.redaction_presidio_enabled,
+    )
+
+
 def _kms_client() -> KmsClient:
     """Return a boto3 KMS client narrowed to the protocol this module needs."""
     import boto3  # type: ignore[import-untyped]
@@ -242,12 +264,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
 
     from app.core.security import EnvelopeCipher
     from app.db.session import get_sessionmaker
-    from app.llm.client import LLMClient, RateCap
-    from app.llm.providers import (
-        AnthropicDirectProvider,
-        GeminiProvider,
-        LLMProvider,
-    )
+    from app.llm.factory import build_llm_client
     from app.services.classification.dispatch import parse_classify_body
     from app.services.classification.repository import ClassificationsRepo
     from app.services.jobs.dispatch import enqueue_job_extract_for_email
@@ -260,21 +277,15 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
-    gemini_key = _settings.gemini_api_key or ""
-    anthropic_key = _settings.anthropic_api_key or ""
     summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
     jobs_queue_url = os.environ.get("BRIEFED_JOBS_QUEUE_URL", "")
     unsubscribe_queue_url = os.environ.get("BRIEFED_UNSUBSCRIBE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
-        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
-        fallbacks: tuple[LLMProvider, ...] = ()
-        if anthropic_key:
-            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
-        llm = LLMClient(
-            primary=primary,
-            fallbacks=fallbacks,
-            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        llm = build_llm_client(
+            settings=_settings,
+            http_client=http,
+            sanitizer=_build_redaction_chain(),
         )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
@@ -342,12 +353,7 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
 
     from app.core.security import EnvelopeCipher
     from app.db.session import get_sessionmaker
-    from app.llm.client import LLMClient, RateCap
-    from app.llm.providers import (
-        AnthropicDirectProvider,
-        GeminiProvider,
-        LLMProvider,
-    )
+    from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
     from app.services.summarization import SummariesRepo, parse_summarize_body
     from app.workers.handlers.summarize import (
@@ -361,18 +367,12 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
-    gemini_key = _settings.gemini_api_key or ""
-    anthropic_key = _settings.anthropic_api_key or ""
 
     async with httpx.AsyncClient() as http:
-        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
-        fallbacks: tuple[LLMProvider, ...] = ()
-        if anthropic_key:
-            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
-        llm = LLMClient(
-            primary=primary,
-            fallbacks=fallbacks,
-            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        llm = build_llm_client(
+            settings=_settings,
+            http_client=http,
+            sanitizer=_build_redaction_chain(),
         )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
@@ -408,12 +408,7 @@ async def _handle_jobs_record(record: _SqsRecord) -> None:
 
     from app.core.security import EnvelopeCipher
     from app.db.session import get_sessionmaker
-    from app.llm.client import LLMClient, RateCap
-    from app.llm.providers import (
-        AnthropicDirectProvider,
-        GeminiProvider,
-        LLMProvider,
-    )
+    from app.llm.factory import build_llm_client
     from app.services.jobs import JobMatchesRepo, parse_job_extract_body
     from app.services.prompts.registry import PromptRegistry
     from app.workers.handlers.jobs import JobExtractDeps, handle_job_extract
@@ -422,18 +417,12 @@ async def _handle_jobs_record(record: _SqsRecord) -> None:
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
-    gemini_key = _settings.gemini_api_key or ""
-    anthropic_key = _settings.anthropic_api_key or ""
 
     async with httpx.AsyncClient() as http:
-        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
-        fallbacks: tuple[LLMProvider, ...] = ()
-        if anthropic_key:
-            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
-        llm = LLMClient(
-            primary=primary,
-            fallbacks=fallbacks,
-            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        llm = build_llm_client(
+            settings=_settings,
+            http_client=http,
+            sanitizer=_build_redaction_chain(),
         )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
@@ -467,12 +456,7 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
 
     from app.core.security import EnvelopeCipher
     from app.db.session import get_sessionmaker
-    from app.llm.client import LLMClient, RateCap
-    from app.llm.providers import (
-        AnthropicDirectProvider,
-        GeminiProvider,
-        LLMProvider,
-    )
+    from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
     from app.services.unsubscribe import (
         UnsubscribeSuggestionsRepo,
@@ -487,18 +471,12 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
-    gemini_key = _settings.gemini_api_key or ""
-    anthropic_key = _settings.anthropic_api_key or ""
 
     async with httpx.AsyncClient() as http:
-        primary: LLMProvider = GeminiProvider(api_key=gemini_key, http_client=http)
-        fallbacks: tuple[LLMProvider, ...] = ()
-        if anthropic_key:
-            fallbacks = (AnthropicDirectProvider(api_key=anthropic_key, http_client=http),)
-        llm = LLMClient(
-            primary=primary,
-            fallbacks=fallbacks,
-            rate_caps={"anthropic_direct": RateCap(max_calls=100)},
+        llm = build_llm_client(
+            settings=_settings,
+            http_client=http,
+            sanitizer=_build_redaction_chain(),
         )
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:

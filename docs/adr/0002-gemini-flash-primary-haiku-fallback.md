@@ -1,7 +1,7 @@
 # ADR 0002 — Gemini 1.5 Flash primary, Claude Haiku 4.5 gated fallback
 
 - **Date:** 2026-04-19
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0009 (2026-04-25)
 - **Deciders:** Kartik Hirijaganer
 
 ## Context

@@ -35,11 +35,10 @@ Runtime = Literal["local", "lambda-api", "lambda-worker", "lambda-fanout"]
 
 # Maps Settings field-name → SSM parameter short-name. The short-name is
 # appended to ``briefed_ssm_prefix`` to form the full SSM path (e.g.
-# ``/briefed/dev/gemini_api_key``). Field names align with the SSM names
-# declared by :mod:`infra/terraform/modules/ssm/main.tf`.
+# ``/briefed/dev/openrouter_api_key``). Field names align with the SSM
+# names declared by :mod:`infra/terraform/modules/ssm/main.tf`.
 _SSM_FIELD_MAP: dict[str, str] = {
-    "gemini_api_key": "gemini_api_key",
-    "anthropic_api_key": "anthropic_api_key",
+    "openrouter_api_key": "openrouter_api_key",
     "google_oauth_client_id": "google_oauth_client_id",
     "google_oauth_client_secret": "google_oauth_client_secret",
     "session_signing_key": "session_signing_key",
@@ -52,7 +51,7 @@ _SSM_FIELD_MAP: dict[str, str] = {
 # serve any real request. Values absent from the Lambda environment AND
 # from SSM cause a hard fail at init.
 _REQUIRED_SECRETS: tuple[str, ...] = (
-    "gemini_api_key",
+    "openrouter_api_key",
     "session_signing_key",
     "google_oauth_client_id",
     "google_oauth_client_secret",
@@ -100,13 +99,27 @@ class Settings(BaseSettings):
     )
 
     # Secrets (nullable so local / CI startup is possible without them).
-    gemini_api_key: str | None = None
-    anthropic_api_key: str | None = None
+    openrouter_api_key: str | None = Field(
+        default=None,
+        description="OpenRouter API key — required in Lambda runtimes (ADR 0009).",
+    )
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
     session_signing_key: str | None = None
     supabase_url: str | None = None
     supabase_service_key: str | None = None
+
+    # ADR 0009 — daily USD spend cap.
+    daily_llm_usd_cap: float | None = Field(
+        default=None,
+        description=(
+            "Hard cap on total LLM USD spend per UTC day (ADR 0009). "
+            "None disables. When the cap is reached, LLMClient raises "
+            "LLMBudgetExceededError and trips a global breaker until "
+            "the next UTC midnight."
+        ),
+        validation_alias="BRIEFED_DAILY_LLM_USD_CAP",
+    )
 
     # Crypto / KMS alias names (read via env; Terraform injects them).
     token_wrap_key_alias: str | None = Field(
@@ -140,6 +153,34 @@ class Settings(BaseSettings):
         default=10,
         description="Per-user manual-trigger cap (rolling 24h). Plan §19.16 + §20.2.",
         validation_alias="BRIEFED_MANUAL_RUN_DAILY_CAP",
+    )
+
+    # Track B / ADR 0010 — LLM prompt redaction.
+    redaction_presidio_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable the Presidio sanitizer in the redaction chain. "
+            "Flip to False if Phase 6 quality eval shows regression."
+        ),
+        validation_alias="BRIEFED_REDACTION_PRESIDIO_ENABLED",
+    )
+    # Identity-scrubber fallback envs (Phase 7). Track C will swap the
+    # IdentityScrubber construction site to read from the user-profile
+    # row; until then settings/env feed the chain.
+    user_email: str | None = Field(
+        default=None,
+        description="User's primary email; folded into <USER_EMAIL>.",
+        validation_alias="BRIEFED_USER_EMAIL",
+    )
+    user_name: str | None = Field(
+        default=None,
+        description="User's display name; folded into <USER_NAME>.",
+        validation_alias="BRIEFED_USER_NAME",
+    )
+    user_aliases: str | None = Field(
+        default=None,
+        description=("Comma-separated aliases / nicknames merged into <USER_NAME>."),
+        validation_alias="BRIEFED_USER_ALIASES",
     )
 
 

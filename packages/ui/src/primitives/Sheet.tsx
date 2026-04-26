@@ -41,8 +41,11 @@ export function Sheet(props: SheetProps): JSX.Element | null {
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{
+        background: 'var(--overlay-scrim)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
     >
       <Motion
         role="dialog"

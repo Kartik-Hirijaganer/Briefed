@@ -47,7 +47,7 @@ class _FakeSsm:
 def _required_ssm_payload(prefix: str) -> dict[str, str]:
     """Build a mapping of required SSM param names → non-placeholder values."""
     return {
-        f"{prefix}gemini_api_key": "fake-gemini",
+        f"{prefix}openrouter_api_key": "fake-openrouter",
         f"{prefix}session_signing_key": "fake-session",
         f"{prefix}google_oauth_client_id": "fake-client-id",
         f"{prefix}google_oauth_client_secret": "fake-client-secret",
@@ -76,7 +76,7 @@ def test_lambda_runtime_without_prefix_is_local_shape(
     """If ``BRIEFED_SSM_PREFIX`` is unset the Lambda never tries to hydrate.
 
     This guards against a half-configured env silently booting with empty
-    secrets — callers still check ``settings.gemini_api_key is not None``
+    secrets — callers still check ``settings.openrouter_api_key is not None``
     downstream, so local semantics are the safe default.
     """
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
@@ -84,7 +84,7 @@ def test_lambda_runtime_without_prefix_is_local_shape(
 
     settings = load_settings()
     assert settings.ssm_prefix is None
-    assert settings.gemini_api_key is None
+    assert settings.openrouter_api_key is None
 
 
 def test_lambda_runtime_hydrates_from_ssm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +94,7 @@ def test_lambda_runtime_hydrates_from_ssm(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("BRIEFED_SSM_PREFIX", prefix)
     # Clear stray local values so SSM wins the merge.
     for var in (
-        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
         "SESSION_SIGNING_KEY",
         "GOOGLE_OAUTH_CLIENT_ID",
         "GOOGLE_OAUTH_CLIENT_SECRET",
@@ -105,7 +105,7 @@ def test_lambda_runtime_hydrates_from_ssm(monkeypatch: pytest.MonkeyPatch) -> No
     fake = _FakeSsm(_required_ssm_payload(prefix))
     settings = load_settings(ssm_client=fake, env={})
 
-    assert settings.gemini_api_key == "fake-gemini"
+    assert settings.openrouter_api_key == "fake-openrouter"
     assert settings.session_signing_key == "fake-session"
     assert settings.google_oauth_client_id == "fake-client-id"
     assert settings.google_oauth_client_secret == "fake-client-secret"
@@ -115,11 +115,7 @@ def test_lambda_runtime_hydrates_from_ssm(monkeypatch: pytest.MonkeyPatch) -> No
 def test_lambda_runtime_rejects_missing_required_parameters(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Phase 0 exit-criteria: loader raises when any required SSM param is absent.
-
-    Drops every required parameter from the SSM response and asserts that
-    :class:`MissingSecretError` surfaces with every missing short-name.
-    """
+    """Phase 0 exit-criteria: loader raises when any required SSM param is absent."""
     prefix = "/briefed/dev/"
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
     monkeypatch.setenv("BRIEFED_SSM_PREFIX", prefix)
@@ -130,9 +126,8 @@ def test_lambda_runtime_rejects_missing_required_parameters(
         load_settings(ssm_client=fake, env={})
 
     missing = set(excinfo.value.missing)
-    # The five required short-names declared in app.core.config._REQUIRED_SECRETS.
     assert missing == {
-        "gemini_api_key",
+        "openrouter_api_key",
         "session_signing_key",
         "google_oauth_client_id",
         "google_oauth_client_secret",
@@ -143,13 +138,7 @@ def test_lambda_runtime_rejects_missing_required_parameters(
 def test_lambda_runtime_rejects_placeholder_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Terraform-placeholder strings are treated as 'missing' by the loader.
-
-    The SSM module seeds every parameter with a ``PLACEHOLDER — set via
-    aws ssm put-parameter --overwrite`` value so Terraform can own the
-    parameter name without committing a real secret. The loader must
-    reject those values with the same error path as an absent parameter.
-    """
+    """Terraform-placeholder strings are treated as 'missing' by the loader."""
     prefix = "/briefed/dev/"
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
     monkeypatch.setenv("BRIEFED_SSM_PREFIX", prefix)

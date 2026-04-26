@@ -305,3 +305,37 @@ def test_rate_cap_resets_on_new_day() -> None:
     cap = RateCap(max_calls=1, day=date(2000, 1, 1), used=1)
     cap.consume()
     assert cap.used == 1
+
+
+def test_record_failure_returns_true_only_on_first_open() -> None:
+    """`record_failure` returns True exactly once per close → open transition."""
+    breaker = CircuitBreaker(fail_threshold=2, cool_down_seconds=60.0)
+    assert breaker.record_failure() is False  # 1/2
+    assert breaker.record_failure() is True  # 2/2 — opens
+    assert breaker.record_failure() is False  # already open, no transition
+
+
+async def test_schema_mismatch_trips_breaker_open_event() -> None:
+    """A schema mismatch with threshold=1 opens the breaker (record_failure True path)."""
+    primary = _FakeProvider(
+        name="openrouter:gemini-flash",
+        responses=[_result({"ok": "not-a-bool", "reason": "x"})],
+    )
+    fallback = _FakeProvider(
+        name="openrouter:claude-haiku",
+        responses=[_result({"ok": True, "reason": "ok"})],
+    )
+    breakers = {
+        "openrouter:gemini-flash": CircuitBreaker(
+            fail_threshold=1,
+            cool_down_seconds=60.0,
+        ),
+    }
+    client = LLMClient(primary=primary, fallbacks=(fallback,), breakers=breakers)
+    await client.call(
+        spec=_spec(),
+        rendered_prompt="hi",
+        schema=_Payload,
+        prompt_version_id=uuid.uuid4(),
+    )
+    assert breakers["openrouter:gemini-flash"].opened_at is not None

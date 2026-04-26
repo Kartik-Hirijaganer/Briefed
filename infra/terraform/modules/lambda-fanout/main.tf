@@ -36,9 +36,16 @@ variable "kms_key_arns" {
 }
 
 variable "schedule_expression" {
-  description = "EventBridge Scheduler expression, e.g. 'cron(0 6 * * ? *)' for 06:00 UTC daily."
+  description = <<-DESC
+    EventBridge Scheduler expression. Track C — Phase II.5 fires the
+    fan-out every 15 minutes UTC; the per-user schedule predicate in
+    `app.core.scheduling.is_due` decides which users actually run on
+    each tick (slot precision is ±7.5 min, which the 15-min cadence
+    covers exactly). A 30-minute cadence would alias slots that fall
+    near a tick boundary.
+  DESC
   type        = string
-  default     = "cron(0 6 * * ? *)"
+  default     = "rate(15 minutes)"
 }
 
 variable "env_vars" {

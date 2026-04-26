@@ -23,7 +23,7 @@ pytestmark = pytest.mark.chaos
 
 
 class _RotatingSsm:
-    """SSM stub whose ``gemini_api_key`` rotates per call."""
+    """SSM stub whose ``openrouter_api_key`` rotates per call."""
 
     def __init__(self, prefix: str, values: list[dict[str, str]]) -> None:
         self.prefix = prefix
@@ -60,20 +60,20 @@ def test_rotation_picks_up_new_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     """The second hydration sees the rotated value, not the cached first one."""
     _enable_lambda_runtime(monkeypatch)
     pre = {
-        "gemini_api_key": "rot-1",
+        "openrouter_api_key": "rot-1",
         "session_signing_key": "sess-1",
         "google_oauth_client_id": "id-1",
         "google_oauth_client_secret": "sec-1",
         "supabase_db_url": "postgresql+asyncpg://localhost/test",
     }
-    post = dict(pre, gemini_api_key="rot-2")
+    post = dict(pre, openrouter_api_key="rot-2")
     ssm = _RotatingSsm(prefix="/briefed/test/", values=[pre, post])
 
     first = load_settings(ssm_client=ssm)
     second = load_settings(ssm_client=ssm)
 
-    assert first.gemini_api_key == "rot-1"
-    assert second.gemini_api_key == "rot-2"
+    assert first.openrouter_api_key == "rot-1"
+    assert second.openrouter_api_key == "rot-2"
     assert ssm.calls == 2, "rotation drill must invoke ssm twice"
 
 
@@ -87,7 +87,7 @@ def test_missing_required_secret_raises_missing_secret_error(
         "google_oauth_client_id": "id-1",
         "google_oauth_client_secret": "sec-1",
         "supabase_db_url": "postgresql+asyncpg://localhost/test",
-        # gemini_api_key intentionally missing.
+        # openrouter_api_key intentionally missing.
     }
     ssm = _RotatingSsm(prefix="/briefed/test/", values=[bad])
     with pytest.raises(MissingSecretError):

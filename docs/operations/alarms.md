@@ -13,6 +13,8 @@ page. Mirrors the table in plan §14 Phase 8.
 | 5  | `${name_prefix}-worker-p95-duration`    | AWS/Lambda            | `Duration p95 > 500ms`                          | 3 × 300s   | [Worker p95 duration](runbook.md#worker-p95-duration) |
 | 6  | `${name_prefix}-digest-failure`         | Briefed/Digest EMF    | `DigestFailures > 0` per day                    | 1 × 86400s | [Digest failure](runbook.md#digest-failure) |
 | 7  | `${name_prefix}-kms-decrypt-anomaly`    | AWS/KMS               | `Decrypt > anomaly band(10)` (7d baseline)      | 3 × 3600s  | [KMS decrypt anomaly](runbook.md#kms-decrypt-anomaly-token--content-cmks) |
+| 8  | `${name_prefix}-llm-budget-exceeded`    | Briefed/Llm EMF       | `LlmBudgetExceeded > 0` per 5 min               | 1 × 300s   | ADR 0009 daily USD cap tripped |
+| 9  | `${name_prefix}-llm-breaker-opened`     | Briefed/Llm EMF       | `LlmBreakerOpened > 0` per 5 min                | 1 × 300s   | ADR 0009 per-model OpenRouter breaker open |
 
 All alarms publish to the single SNS topic `${name_prefix}-alarms` so
 operators can subscribe one inbox and route via SES rules.

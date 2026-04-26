@@ -63,6 +63,7 @@ When you generate Python code, these rules are non-negotiable — produce code t
 1. TypeScript types on every prop, return value, and state hook. No implicit `any`.
 2. A JSDoc block in Google style describing purpose, `@param`, `@returns`, `@throws` where applicable.
 3. Named exports (no default exports except for route-level pages).
+4. Before any UI change, read [DESIGN.md](DESIGN.md) and use only the tokens defined there. Do not introduce new colors, fonts, or spacing values without updating DESIGN.md in the same change.
 
 **JSDoc format:**
 
@@ -192,6 +193,12 @@ ADR 0007 defines `MailboxProvider` in [backend/app/domain/providers.py](backend/
 
 ### Release policy
 Release 1.0.0 is **recommend-only** (ADR 0006): the agent never clicks unsubscribe / archives / sends on the user's behalf. If you add a destructive action path, it must be gated behind an explicit user confirmation flow and documented in a new ADR.
+
+---
+
+## 10. Design system
+
+[DESIGN.md](DESIGN.md) at the repo root is the canonical design source of truth. Color, typography, spacing, radius, shadow, and motion tokens are defined there and mirrored into [frontend/src/styles/tokens.css](frontend/src/styles/tokens.css). Read DESIGN.md before any UI change. Do not introduce a new color, font, spacing value, radius, shadow, or motion duration without adding it to DESIGN.md in the same change.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

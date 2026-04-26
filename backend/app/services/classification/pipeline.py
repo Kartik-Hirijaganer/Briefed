@@ -365,6 +365,7 @@ async def _persist_call_log(
             status=record.status,
             provider=record.provider,
             run_id=run_id,
+            redaction_summary=record.redaction_counts,
         ),
     )
     await session.flush()

@@ -52,7 +52,7 @@ export function Switch(props: SwitchProps): JSX.Element {
     >
       <span
         aria-hidden="true"
-        className={`inline-block h-7 w-7 rounded-full bg-white shadow transform transition-transform duration-[var(--motion-base)] ${thumbX}`}
+        className={`inline-block h-7 w-7 rounded-full bg-bg-surface shadow transform transition-transform duration-[var(--motion-base)] ${thumbX}`}
       />
     </button>
   );

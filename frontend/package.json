@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "codegen": "openapi-typescript ../packages/contracts/openapi.json -o src/api/schema.d.ts"
+    "codegen": "openapi-typescript ../packages/contracts/openapi.json -o src/api/schema.d.ts",
+    "dead-check": "knip"
   },
   "dependencies": {
     "@briefed/contracts": "1.0.0",
@@ -52,6 +53,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^14.0.0",
     "jsdom": "^25.0.1",
+    "knip": "^5.30.0",
     "openapi-typescript": "^7.4.2",
     "prettier": "^3.3.3",
     "tailwindcss": "^4.0.0-beta.3",

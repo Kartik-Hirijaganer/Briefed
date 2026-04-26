@@ -5,9 +5,9 @@ Summarizes what matters, extracts job matches, and recommends what to
 unsubscribe from — never acts without your say-so (ADR 0006). React PWA
 dashboard; works on desktop and mobile.
 
-**Stack:** Python · FastAPI · Pydantic · Gemini 1.5 Flash (primary) ·
-Claude Haiku 4.5 (fallback) · Gmail API · Supabase · React · TypeScript ·
-Vite · PWA · AWS Lambda + SnapStart · Terraform
+**Stack:** Python · FastAPI · Pydantic · OpenRouter (Gemini Flash +
+Claude Haiku 4.5 routes per ADR 0009) · Gmail API · Supabase · React ·
+TypeScript · Vite · PWA · AWS Lambda + SnapStart · Terraform
 
 **Version:** 1.0.0 — released 2026-04-25 ([release notes](docs/release/v1.0.0.md))
 
@@ -55,7 +55,7 @@ Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**.
 ```bash
 git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
-cp .env.example .env        # fill in GEMINI_API_KEY + OAuth creds; other values optional
+cp .env.example .env        # fill in BRIEFED_OPENROUTER_API_KEY + OAuth creds; other values optional
 make bootstrap              # installs deps, starts docker-compose services
 make migrate                # apply all Alembic migrations (Phase 1–4)
 make dev                    # backend on :8000, frontend on :5173
@@ -122,6 +122,8 @@ operator playbook + the rehearsal we run before every cut.
 
 ## Documentation
 
+- [DESIGN.md](DESIGN.md) — canonical design system. Read before any UI
+  change; tokens, typography, motion, contrast numbers all live here.
 - [docs/adr/](docs/adr/) — the eight initial architecture decisions.
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
 - [docs/operations/](docs/operations/) — runbook, alarms, restore +
@@ -131,6 +133,16 @@ operator playbook + the rehearsal we run before every cut.
 - [docs/security/](docs/security/) — SECURITY.md + threat model.
 - [.claude/plans/2026-04-19-release-1-0-0.md](.claude/plans/2026-04-19-release-1-0-0.md)
   — the full release plan.
+
+## Version bumps
+
+The single source of truth for the app version is
+[packages/contracts/version.json](packages/contracts/version.json).
+Bump it in one place — backend (`backend/app/__init__.py`,
+`backend/app/api/v1/frontend.py`) and frontend (Vite `__APP_VERSION__`,
+`<AppVersion>`) both read from this file. After bumping, run
+`make docs` (or `/make-docs`) to regenerate the OpenAPI spec with the
+matching `info.version` pin.
 
 ## Git workflow
 

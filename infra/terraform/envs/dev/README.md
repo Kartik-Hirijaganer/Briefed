@@ -24,9 +24,9 @@ creates the parameter names with placeholder values; overwrite with real
 keys):
 
 ```bash
-aws ssm put-parameter --name /briefed/dev/anthropic_api_key --type SecureString \
+aws ssm put-parameter --name /briefed/dev/openrouter_api_key --type SecureString \
   --value "<key>" --overwrite
-# … repeat for gemini_api_key, supabase_db_url, etc.
+# … repeat for supabase_db_url, session_signing_key, google_oauth_client_*, etc.
 ```
 
 See `docs/operations/runbook.md` (lands in Phase 8) for rollback steps.

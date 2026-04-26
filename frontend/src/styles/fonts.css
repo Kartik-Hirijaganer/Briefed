@@ -1,0 +1,76 @@
+/*
+ * Self-hosted font declarations (Track C — Phase I.3).
+ *
+ * Inter (variable axis) + Inter Display + JetBrains Mono (variable
+ * axis) are bundled under `frontend/public/fonts/`. We never fetch
+ * fonts.googleapis.com or any third-party CDN — that would log the
+ * user's IP upstream and conflicts with the privacy stance described
+ * in DESIGN.md §10 and ADR 0008 / Track B.
+ *
+ * `font-display: swap` keeps text painted with the system fallback
+ * until the web font is ready, so we never block first paint.
+ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterVariable.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterVariable-Italic.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Inter Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/InterDisplay-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter Display';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/InterDisplay-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter Display';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/InterDisplay-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/InterDisplay-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Variable.ttf') format('truetype-variations');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: italic;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-VariableItalic.ttf') format('truetype-variations');
+}

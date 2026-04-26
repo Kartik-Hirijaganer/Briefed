@@ -41,6 +41,7 @@ from app.llm.providers.base import (
     LLMProviderError,
     PromptSpec,
 )
+from app.llm.redaction.types import RedactionResult, Sanitizer
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Awaitable, Callable
@@ -51,6 +52,87 @@ logger = get_logger(__name__)
 
 class LLMClientError(Exception):
     """Raised when every provider in the fallback chain fails."""
+
+
+class LLMBudgetExceededError(LLMClientError):
+    """Raised when the configured daily USD spend cap is exhausted.
+
+    ADR 0009 / Track A Phase 5. Subsequent calls in the same UTC day
+    short-circuit before hitting any provider; the global breaker
+    resets at the next UTC midnight.
+    """
+
+    def __init__(self, *, spent_usd: Decimal, cap_usd: float) -> None:
+        """Capture the spend / cap snapshot for diagnostics.
+
+        Args:
+            spent_usd: Aggregate spend on the current UTC day, in USD.
+            cap_usd: Configured cap, in USD.
+        """
+        super().__init__(
+            f"daily LLM spend cap exhausted: ${spent_usd} >= ${cap_usd}",
+        )
+        self.spent_usd = spent_usd
+        self.cap_usd = cap_usd
+
+
+@dataclass
+class LLMBudgetGuard:
+    """UTC-day USD spend accumulator + global short-circuit.
+
+    Track A Phase 5. ``LLMClient`` accumulates the per-call
+    ``usage.cost`` (sourced from OpenRouter's response) and trips this
+    guard once the cap is reached; the trip persists for the rest of
+    the calendar day and resets automatically at UTC midnight.
+
+    Attributes:
+        daily_cap_usd: USD cap. ``None`` disables the guard entirely.
+        day: Current UTC date under accrual.
+        spent_usd: Aggregate spend on ``day``.
+    """
+
+    daily_cap_usd: float | None = None
+    day: date = field(default_factory=lambda: utcnow().date())
+    spent_usd: Decimal = field(default_factory=lambda: Decimal("0"))
+
+    def check_before_call(self) -> None:
+        """Raise :class:`LLMBudgetExceededError` if the cap has been hit.
+
+        Resets the accumulator on UTC-day rollover.
+
+        Raises:
+            LLMBudgetExceededError: When ``spent_usd >= daily_cap_usd``.
+        """
+        if self.daily_cap_usd is None:
+            return
+        today = utcnow().date()
+        if today != self.day:
+            self.day = today
+            self.spent_usd = Decimal("0")
+        if self.spent_usd >= Decimal(str(self.daily_cap_usd)):
+            logger.warning(
+                "llm.budget.exceeded",
+                spent_usd=str(self.spent_usd),
+                cap_usd=self.daily_cap_usd,
+            )
+            raise LLMBudgetExceededError(
+                spent_usd=self.spent_usd,
+                cap_usd=self.daily_cap_usd,
+            )
+
+    def record(self, cost_usd: Decimal) -> None:
+        """Record a successful call's cost against the running total.
+
+        Args:
+            cost_usd: Cost of the just-completed call.
+        """
+        if self.daily_cap_usd is None:
+            return
+        today = utcnow().date()
+        if today != self.day:
+            self.day = today
+            self.spent_usd = Decimal("0")
+        self.spent_usd += cost_usd
 
 
 class CircuitOpenError(LLMProviderError):
@@ -111,11 +193,21 @@ class CircuitBreaker:
         self.consecutive_failures = 0
         self.opened_at = None
 
-    def record_failure(self) -> None:
-        """Bump the failure counter; trip the breaker at the threshold."""
+    def record_failure(self) -> bool:
+        """Bump the failure counter; trip the breaker at the threshold.
+
+        Returns:
+            ``True`` when this call transitioned the breaker from
+            closed (or half-open) to fully open. Used by
+            :class:`LLMClient` to emit a one-shot ``llm.breaker.opened``
+            event for CloudWatch.
+        """
+        was_open = self.opened_at is not None
         self.consecutive_failures += 1
         if self.consecutive_failures >= self.fail_threshold:
             self.opened_at = time.monotonic()
+            return not was_open
+        return False
 
 
 @dataclass
@@ -193,6 +285,9 @@ class PromptCallRecord:
         latency_ms: Wall clock latency.
         status: ``ok`` / ``fallback`` / ``error`` / ``skipped``.
         provider: Provider slug.
+        redaction_counts: ``{kind: count}`` summary of the sanitizer
+            chain. ``None`` when no sanitizer ran. **Never** holds the
+            reversal map (ADR 0010).
     """
 
     prompt_version_id: UUID
@@ -207,6 +302,7 @@ class PromptCallRecord:
     latency_ms: int
     status: str
     provider: str
+    redaction_counts: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -219,12 +315,24 @@ class ClientResponse:
         record: :class:`PromptCallRecord` mirror of the persisted row.
         fallback_used: True when the primary failed and the fallback
             ran successfully.
+        redaction: :class:`RedactionResult` produced by the sanitizer
+            chain, or ``None`` when no sanitizer was wired in.
     """
 
     parsed: BaseModel
     call_result: LLMCallResult
     record: PromptCallRecord
     fallback_used: bool
+    redaction: RedactionResult | None = None
+
+
+REIDENTIFY_FLOW_ALLOWLIST: frozenset[str] = frozenset()
+"""Flows permitted to set ``reidentify=True`` on :meth:`LLMClient.call`.
+
+Empty in 1.0.0 — every flow either persists or renders the response, so
+none of them are safe for reidentification. Adding a flow requires an
+ADR 0010 amendment per the ADR's code-review checklist.
+"""
 
 
 class LLMClient:
@@ -243,6 +351,8 @@ class LLMClient:
         config: LLMClientConfig | None = None,
         breakers: dict[str, CircuitBreaker] | None = None,
         rate_caps: dict[str, RateCap] | None = None,
+        sanitizer: Sanitizer | None = None,
+        budget_guard: LLMBudgetGuard | None = None,
     ) -> None:
         """Wire up providers + reliability primitives.
 
@@ -252,18 +362,26 @@ class LLMClient:
             config: Retry tunables. Defaults to :class:`LLMClientConfig`.
             breakers: Optional pre-populated breaker map (tests).
             rate_caps: Optional pre-populated rate-cap map (tests).
+            sanitizer: Default :class:`Sanitizer` (Track B). Applied to
+                every prompt unless an explicit ``sanitizer=`` kwarg is
+                passed to :meth:`call`. Construction in
+                :mod:`app.lambda_worker` reads this from settings.
+            budget_guard: ADR 0009 / Track A Phase 5 — daily USD spend
+                guard. ``None`` disables the guard.
         """
         self.primary = primary
         self.fallbacks = fallbacks
         self._config = config or LLMClientConfig()
         self._breakers: dict[str, CircuitBreaker] = breakers or {}
         self._rate_caps: dict[str, RateCap] = rate_caps or {}
+        self._sanitizer = sanitizer
+        self._budget_guard = budget_guard
 
     def breaker_for(self, provider: str) -> CircuitBreaker:
         """Return the (lazily-created) breaker for ``provider``."""
         return self._breakers.setdefault(provider, CircuitBreaker())
 
-    async def call(
+    async def call(  # noqa: PLR0912 — single hot path; splitting hurts readability
         self,
         *,
         spec: PromptSpec,
@@ -273,6 +391,9 @@ class LLMClient:
         email_id: UUID | None = None,
         run_id: UUID | None = None,
         log_call: Callable[[PromptCallRecord], Awaitable[None]] | None = None,
+        sanitizer: Sanitizer | None = None,
+        reidentify: bool = False,
+        flow: str | None = None,
     ) -> ClientResponse:
         """Execute one LLM call with retries + fallback + cost log.
 
@@ -286,13 +407,51 @@ class LLMClient:
             log_call: Optional async callback that persists
                 :class:`PromptCallRecord` rows. ``None`` during pure
                 unit tests; workers inject a session-backed callback.
+            sanitizer: Optional :class:`Sanitizer` (typically a
+                :class:`SanitizerChain`). When provided the prompt is
+                run through the chain before being sent to the
+                provider; the resulting :class:`RedactionResult` is
+                attached to the response and its ``counts_by_kind`` is
+                copied into ``PromptCallRecord.redaction_counts``.
+            reidentify: When ``True`` the placeholders in the model's
+                response are replaced with the originals from the
+                sanitizer's reversal map. Defaults to ``False`` per
+                ADR 0010 — flipping requires the call site's ``flow`` to
+                appear in :data:`REIDENTIFY_FLOW_ALLOWLIST`.
+            flow: Identifier of the calling flow; checked against the
+                allowlist when ``reidentify=True``.
 
         Returns:
             :class:`ClientResponse` with the parsed payload.
 
         Raises:
-            LLMClientError: When every provider fails.
+            LLMClientError: When every provider fails, or when
+                ``reidentify=True`` is set without an allowlisted
+                ``flow``.
         """
+        if self._budget_guard is not None:
+            self._budget_guard.check_before_call()
+
+        active_sanitizer = sanitizer if sanitizer is not None else self._sanitizer
+
+        if reidentify:
+            if active_sanitizer is None:
+                raise LLMClientError(
+                    "reidentify=True requires a sanitizer",
+                )
+            if flow is None or flow not in REIDENTIFY_FLOW_ALLOWLIST:
+                raise LLMClientError(
+                    f"reidentify=True requires an ADR-allowlisted flow (got {flow!r})",
+                )
+
+        redaction: RedactionResult | None = None
+        prompt_to_send = rendered_prompt
+        if active_sanitizer is not None:
+            redaction = active_sanitizer.sanitize(rendered_prompt)
+            prompt_to_send = redaction.text
+
+        redaction_counts = dict(redaction.counts_by_kind) if redaction is not None else None
+
         chain: tuple[LLMProvider, ...] = (self.primary, *self.fallbacks)
         errors: list[str] = []
         for index, provider in enumerate(chain):
@@ -300,7 +459,7 @@ class LLMClient:
                 call_result = await self._call_provider(
                     provider=provider,
                     spec=spec,
-                    rendered_prompt=rendered_prompt,
+                    rendered_prompt=prompt_to_send,
                 )
             except LLMProviderError as exc:
                 errors.append(f"{provider.name}: {exc}")
@@ -312,11 +471,19 @@ class LLMClient:
                 )
                 continue
 
+            payload = call_result.payload
+            if reidentify and redaction is not None:
+                payload = _reidentify_payload(payload, redaction.reversal_map)
+
             try:
-                parsed = schema.model_validate(call_result.payload)
+                parsed = schema.model_validate(payload)
             except ValidationError as exc:
                 errors.append(f"{provider.name}: schema mismatch {exc}")
-                self.breaker_for(provider.name).record_failure()
+                if self.breaker_for(provider.name).record_failure():
+                    logger.warning(
+                        "llm.breaker.opened",
+                        provider=provider.name,
+                    )
                 logger.warning(
                     "llm.provider.schema_mismatch",
                     provider=provider.name,
@@ -337,14 +504,18 @@ class LLMClient:
                 latency_ms=call_result.latency_ms,
                 status="ok" if index == 0 else "fallback",
                 provider=call_result.provider,
+                redaction_counts=redaction_counts,
             )
             if log_call is not None:
                 await log_call(record)
+            if self._budget_guard is not None:
+                self._budget_guard.record(call_result.cost_usd)
             return ClientResponse(
                 parsed=parsed,
                 call_result=call_result,
                 record=record,
                 fallback_used=index > 0,
+                redaction=redaction,
             )
 
         if log_call is not None:
@@ -363,6 +534,7 @@ class LLMClient:
                     latency_ms=0,
                     status="error",
                     provider=chain[0].name if chain else "",
+                    redaction_counts=redaction_counts,
                 ),
             )
         raise LLMClientError("every provider failed: " + " | ".join(errors))
@@ -409,7 +581,11 @@ class LLMClient:
                 result = await provider.complete_json(spec, rendered_prompt=rendered_prompt)
             except LLMProviderError as exc:
                 last_exc = exc
-                breaker.record_failure()
+                if breaker.record_failure():
+                    logger.warning(
+                        "llm.breaker.opened",
+                        provider=provider.name,
+                    )
                 if not exc.retryable or attempt == self._config.max_retries:
                     raise
                 await asyncio.sleep(self._backoff(attempt))
@@ -434,6 +610,47 @@ class LLMClient:
         base = self._config.base_backoff_seconds * (2**attempt)
         capped = min(base, self._config.max_backoff_seconds)
         return random.uniform(0, capped)
+
+
+def _reidentify_payload(
+    payload: dict[str, Any],
+    reversal_map: dict[str, str],
+) -> dict[str, Any]:
+    """Recursively replace placeholders in ``payload`` strings.
+
+    Walks dict / list / tuple / str leaves; non-string scalars are
+    returned untouched. Used only when ``reidentify=True`` *and* the
+    flow is on :data:`REIDENTIFY_FLOW_ALLOWLIST`.
+
+    Args:
+        payload: Provider response payload.
+        reversal_map: ``placeholder -> original`` from the sanitizer.
+
+    Returns:
+        A new payload with placeholders replaced.
+    """
+    if not reversal_map:
+        return payload
+
+    walked = _reidentify_node(payload, reversal_map)
+    return walked if isinstance(walked, dict) else payload
+
+
+def _reidentify_node(node: object, reversal_map: dict[str, str]) -> object:
+    """Walk one node of a JSON payload, returning a reidentified copy."""
+    if isinstance(node, str):
+        rewritten = node
+        for placeholder, original in reversal_map.items():
+            if placeholder in rewritten:
+                rewritten = rewritten.replace(placeholder, original)
+        return rewritten
+    if isinstance(node, dict):
+        return {k: _reidentify_node(v, reversal_map) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_reidentify_node(item, reversal_map) for item in node]
+    if isinstance(node, tuple):
+        return tuple(_reidentify_node(item, reversal_map) for item in node)
+    return node
 
 
 def render_prompt(spec: PromptSpec, variables: dict[str, Any]) -> str:
@@ -476,9 +693,12 @@ def _iter_placeholders(text: str) -> set[str]:
 
 
 __all__ = [
+    "REIDENTIFY_FLOW_ALLOWLIST",
     "CircuitBreaker",
     "CircuitOpenError",
     "ClientResponse",
+    "LLMBudgetExceededError",
+    "LLMBudgetGuard",
     "LLMClient",
     "LLMClientConfig",
     "LLMClientError",

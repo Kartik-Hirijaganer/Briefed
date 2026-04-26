@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +8,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
 const projectDir = fileURLToPath(new URL('.', import.meta.url));
+
+// Track C — Phase I.8: single source of truth for the app version.
+// Read once at config evaluation; baked into the bundle via `define`.
+const versionJson = JSON.parse(
+  readFileSync(resolve(projectDir, '../packages/contracts/version.json'), 'utf-8'),
+) as { version: string };
 
 /**
  * Vite config for the Briefed PWA.
@@ -19,6 +26,9 @@ const projectDir = fileURLToPath(new URL('.', import.meta.url));
  *   cookies and CSRF work against `http://localhost:5173` same-origin.
  */
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(versionJson.version),
+  },
   plugins: [
     react(),
     tailwindcss(),

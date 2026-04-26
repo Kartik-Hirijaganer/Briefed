@@ -137,6 +137,35 @@ resource "aws_cloudwatch_log_metric_filter" "digest_failure" {
   }
 }
 
+# ADR 0009 / Track A Phase 7 — daily LLM budget tripped.
+resource "aws_cloudwatch_log_metric_filter" "llm_budget_exceeded" {
+  name           = "${var.name_prefix}-llm-budget-exceeded"
+  log_group_name = var.log_group_names["worker"]
+  pattern        = "{ $.event = \"llm.budget.exceeded\" }"
+
+  metric_transformation {
+    name      = "LlmBudgetExceeded"
+    namespace = "Briefed/Llm"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+# ADR 0009 / Track A Phase 7 — per-model breaker open events
+# (renamed from Gemini / Anthropic to OpenRouter:gemini-flash etc.).
+resource "aws_cloudwatch_log_metric_filter" "llm_breaker_opened" {
+  name           = "${var.name_prefix}-llm-breaker-opened"
+  log_group_name = var.log_group_names["worker"]
+  pattern        = "{ $.event = \"llm.breaker.opened\" }"
+
+  metric_transformation {
+    name      = "LlmBreakerOpened"
+    namespace = "Briefed/Llm"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
 # --------------------------------------------------------------------------- #
 # Alarms                                                                      #
 # --------------------------------------------------------------------------- #
@@ -239,6 +268,38 @@ resource "aws_cloudwatch_metric_alarm" "digest_failure" {
   metric_name         = "DigestFailures"
   statistic           = "Sum"
   period              = 86400
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = var.tags
+}
+
+# 8. ADR 0009 — any LLMBudgetExceededError pages oncall.
+resource "aws_cloudwatch_metric_alarm" "llm_budget_exceeded" {
+  alarm_name          = "${var.name_prefix}-llm-budget-exceeded"
+  alarm_description   = "ADR 0009 / Track A Phase 7: daily LLM USD cap tripped."
+  namespace           = "Briefed/Llm"
+  metric_name         = "LlmBudgetExceeded"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = var.tags
+}
+
+# 9. ADR 0009 — per-model OpenRouter breaker open events.
+resource "aws_cloudwatch_metric_alarm" "llm_breaker_opened" {
+  alarm_name          = "${var.name_prefix}-llm-breaker-opened"
+  alarm_description   = "ADR 0009 / Track A Phase 7: a per-model OpenRouter breaker tripped open."
+  namespace           = "Briefed/Llm"
+  metric_name         = "LlmBreakerOpened"
+  statistic           = "Sum"
+  period              = 300
   evaluation_periods  = 1
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"
