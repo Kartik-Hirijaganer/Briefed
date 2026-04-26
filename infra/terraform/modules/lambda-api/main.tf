@@ -122,9 +122,13 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout_seconds
   architectures = ["x86_64"]
 
-  snap_start {
-    apply_on = "PublishedVersions"
-  }
+  # SnapStart intentionally omitted: AWS Lambda SnapStart does not
+  # support container-image package_type ("ContainerImage is not
+  # supported for SnapStart enabled functions"). The codebase still
+  # treats module-level init as snapshot-friendly so we can flip back
+  # on if AWS adds container support later (or if we move to a ZIP
+  # package). Cold start is therefore Mangum + boto3 + httpx warm-up
+  # ~600-900 ms instead of the ~200-300 ms target in ADR 0003.
 
   image_config {
     command = ["app.lambda_api.mangum_handler"]
