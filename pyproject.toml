@@ -1,6 +1,6 @@
 [project]
 name = "briefed-backend"
-version = "1.0.0"
+version = "1.0.0" # x-release-please-version
 description = "Briefed — Personal AI email agent. FastAPI + Claude API + Gmail + Supabase."
 readme = "README.md"
 requires-python = ">=3.11"
