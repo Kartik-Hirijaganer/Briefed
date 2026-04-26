@@ -83,6 +83,9 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SESSION_SIGNING_KEY: ${{ secrets.SESSION_SIGNING_KEY }}
         run: |
           set -euo pipefail
           put_secret() {
@@ -96,8 +99,11 @@ jobs:
               --value "$value" --overwrite >/dev/null
             echo "updated: $name"
           }
-          put_secret /briefed/dev/openrouter_api_key "$OPENROUTER_API_KEY"
-          put_secret /briefed/dev/supabase_db_url    "$DEV_DATABASE_URL"
+          put_secret /briefed/dev/openrouter_api_key          "$OPENROUTER_API_KEY"
+          put_secret /briefed/dev/supabase_db_url             "$DEV_DATABASE_URL"
+          put_secret /briefed/dev/google_oauth_client_id      "$GOOGLE_OAUTH_CLIENT_ID"
+          put_secret /briefed/dev/google_oauth_client_secret  "$GOOGLE_OAUTH_CLIENT_SECRET"
+          put_secret /briefed/dev/session_signing_key         "$SESSION_SIGNING_KEY"
 
       - name: Smoke check /health
         run: |

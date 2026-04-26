@@ -204,6 +204,9 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SESSION_SIGNING_KEY: ${{ secrets.SESSION_SIGNING_KEY }}
         run: |
           set -euo pipefail
           put_secret() {
@@ -217,8 +220,11 @@ jobs:
               --value "$value" --overwrite >/dev/null
             echo "updated: $name"
           }
-          put_secret /briefed/prod/openrouter_api_key "$OPENROUTER_API_KEY"
-          put_secret /briefed/prod/supabase_db_url    "$PROD_DATABASE_URL"
+          put_secret /briefed/prod/openrouter_api_key          "$OPENROUTER_API_KEY"
+          put_secret /briefed/prod/supabase_db_url             "$PROD_DATABASE_URL"
+          put_secret /briefed/prod/google_oauth_client_id      "$GOOGLE_OAUTH_CLIENT_ID"
+          put_secret /briefed/prod/google_oauth_client_secret  "$GOOGLE_OAUTH_CLIENT_SECRET"
+          put_secret /briefed/prod/session_signing_key         "$SESSION_SIGNING_KEY"
 
       - name: Deploy PWA to S3 + invalidate CloudFront
         working-directory: ${{ env.TF_DIR }}
