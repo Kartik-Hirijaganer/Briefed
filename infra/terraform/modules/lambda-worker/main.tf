@@ -139,9 +139,8 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout_seconds
   architectures = ["x86_64"]
 
-  snap_start {
-    apply_on = "PublishedVersions"
-  }
+  # See lambda-api/main.tf for why SnapStart is intentionally omitted
+  # for container-image Lambdas.
 
   image_config {
     command = ["app.lambda_worker.sqs_dispatcher"]
