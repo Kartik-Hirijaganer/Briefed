@@ -4,2794 +4,2794 @@
  */
 
 export interface paths {
-  '/health': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness probe
+         * @description Return service liveness status.
+         *
+         *     Returns:
+         *         Mapping with ``status`` key set to ``"ok"`` when the service is up.
+         */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Liveness probe
-     * @description Return service liveness status.
-     *
-     *     Returns:
-     *         Mapping with ``status`` key set to ``"ok"`` when the service is up.
-     */
-    get: operations['health_health_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/oauth/gmail/start': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/oauth/gmail/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start Google OAuth authorization-code flow
+         * @description Generate PKCE + state, set the cookie, redirect to Google.
+         *
+         *     Args:
+         *         request: FastAPI request (used to compute the callback URL).
+         *         return_to: Optional post-callback UI path (must be an internal
+         *             absolute path, e.g. ``/settings/accounts``).
+         *         session_cookie: Existing signed session, when the caller is
+         *             connecting another mailbox to the same user.
+         *         settings: Cached :class:`Settings`.
+         *
+         *     Returns:
+         *         A 302 redirect to Google's consent screen.
+         */
+        get: operations["gmail_oauth_start_api_v1_oauth_gmail_start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Start Google OAuth authorization-code flow
-     * @description Generate PKCE + state, set the cookie, redirect to Google.
-     *
-     *     Args:
-     *         request: FastAPI request (used to compute the callback URL).
-     *         return_to: Optional post-callback UI path (must be an internal
-     *             absolute path, e.g. ``/settings/accounts``).
-     *         session_cookie: Existing signed session, when the caller is
-     *             connecting another mailbox to the same user.
-     *         settings: Cached :class:`Settings`.
-     *
-     *     Returns:
-     *         A 302 redirect to Google's consent screen.
-     */
-    get: operations['gmail_oauth_start_api_v1_oauth_gmail_start_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/oauth/gmail/callback': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/oauth/gmail/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google OAuth callback — exchange code, persist account
+         * @description Handle the Google consent-screen redirect.
+         *
+         *     Args:
+         *         request: FastAPI request.
+         *         code: Authorization code from Google.
+         *         state: State parameter Google echoed back.
+         *         oauth_state_cookie: Pre-authorize cookie set by :func:`start`.
+         *         settings: Cached :class:`Settings`.
+         *
+         *     Returns:
+         *         A 302 redirect back to the UI (``return_to`` or ``/``).
+         *
+         *     Raises:
+         *         HTTPException: 400 when the state mismatch / cookie missing.
+         */
+        get: operations["gmail_oauth_callback_api_v1_oauth_gmail_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Google OAuth callback — exchange code, persist account
-     * @description Handle the Google consent-screen redirect.
-     *
-     *     Args:
-     *         request: FastAPI request.
-     *         code: Authorization code from Google.
-     *         state: State parameter Google echoed back.
-     *         oauth_state_cookie: Pre-authorize cookie set by :func:`start`.
-     *         settings: Cached :class:`Settings`.
-     *
-     *     Returns:
-     *         A 302 redirect back to the UI (``return_to`` or ``/``).
-     *
-     *     Raises:
-     *         HTTPException: 400 when the state mismatch / cookie missing.
-     */
-    get: operations['gmail_oauth_callback_api_v1_oauth_gmail_callback_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/accounts': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List connected accounts
+         * @description Return every connected account owned by ``user_id``.
+         *
+         *     Args:
+         *         user_id: Authenticated owner's id.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         An :class:`AccountsListResponse` envelope.
+         */
+        get: operations["list_accounts_api_v1_accounts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List connected accounts
-     * @description Return every connected account owned by ``user_id``.
-     *
-     *     Args:
-     *         user_id: Authenticated owner's id.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         An :class:`AccountsListResponse` envelope.
-     */
-    get: operations['list_accounts_api_v1_accounts_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/accounts/{account_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect a mailbox
+         * @description Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).
+         *
+         *     Args:
+         *         account_id: Target account.
+         *         user_id: Authenticated owner's id.
+         *         session: Active async session.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the account does not belong to the caller.
+         */
+        delete: operations["delete_account_api_v1_accounts__account_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update account settings
+         * @description Update per-account UI preferences.
+         *
+         *     Args:
+         *         account_id: Target account.
+         *         payload: Patch body.
+         *         user_id: Authenticated owner's id.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         Updated account view.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the account does not belong to the caller.
+         */
+        patch: operations["patch_account_api_v1_accounts__account_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * Disconnect a mailbox
-     * @description Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).
-     *
-     *     Args:
-     *         account_id: Target account.
-     *         user_id: Authenticated owner's id.
-     *         session: Active async session.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the account does not belong to the caller.
-     */
-    delete: operations['delete_account_api_v1_accounts__account_id__delete'];
-    options?: never;
-    head?: never;
-    /**
-     * Update account settings
-     * @description Update per-account UI preferences.
-     *
-     *     Args:
-     *         account_id: Target account.
-     *         payload: Patch body.
-     *         user_id: Authenticated owner's id.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         Updated account view.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the account does not belong to the caller.
-     */
-    patch: operations['patch_account_api_v1_accounts__account_id__patch'];
-    trace?: never;
-  };
-  '/api/v1/rubric': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/rubric": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List classification rules
+         * @description Return every rubric rule the authenticated user owns.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         :class:`RubricRulesListResponse` with rules ordered by
+         *         ``priority DESC``.
+         */
+        get: operations["list_rules_api_v1_rubric_get"];
+        put?: never;
+        /**
+         * Create a classification rule
+         * @description Insert a new rule for the authenticated user.
+         *
+         *     Args:
+         *         payload: Request body.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The created :class:`RubricRuleOut`.
+         */
+        post: operations["create_rule_api_v1_rubric_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List classification rules
-     * @description Return every rubric rule the authenticated user owns.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         :class:`RubricRulesListResponse` with rules ordered by
-     *         ``priority DESC``.
-     */
-    get: operations['list_rules_api_v1_rubric_get'];
-    put?: never;
-    /**
-     * Create a classification rule
-     * @description Insert a new rule for the authenticated user.
-     *
-     *     Args:
-     *         payload: Request body.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         The created :class:`RubricRuleOut`.
-     */
-    post: operations['create_rule_api_v1_rubric_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/rubric/{rule_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/rubric/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a classification rule
+         * @description Replace ``rule_id``'s predicate + action, bumping ``version``.
+         *
+         *     Args:
+         *         rule_id: Target rule.
+         *         payload: Request body.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The updated :class:`RubricRuleOut`.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the rule does not belong to the caller.
+         */
+        put: operations["update_rule_api_v1_rubric__rule_id__put"];
+        post?: never;
+        /**
+         * Delete a classification rule
+         * @description Hard-delete ``rule_id``.
+         *
+         *     Args:
+         *         rule_id: Target rule.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the rule does not belong to the caller.
+         */
+        delete: operations["delete_rule_api_v1_rubric__rule_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /**
-     * Replace a classification rule
-     * @description Replace ``rule_id``'s predicate + action, bumping ``version``.
-     *
-     *     Args:
-     *         rule_id: Target rule.
-     *         payload: Request body.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         The updated :class:`RubricRuleOut`.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the rule does not belong to the caller.
-     */
-    put: operations['update_rule_api_v1_rubric__rule_id__put'];
-    post?: never;
-    /**
-     * Delete a classification rule
-     * @description Hard-delete ``rule_id``.
-     *
-     *     Args:
-     *         rule_id: Target rule.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the rule does not belong to the caller.
-     */
-    delete: operations['delete_rule_api_v1_rubric__rule_id__delete'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/jobs': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List curated job matches
+         * @description Return job matches the caller owns.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached :class:`Settings`.
+         *         include_filtered: Override the curated default.
+         *         limit: Maximum rows to return.
+         *
+         *     Returns:
+         *         :class:`JobMatchesListResponse` with newest matches first.
+         */
+        get: operations["list_job_matches_api_v1_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List curated job matches
-     * @description Return job matches the caller owns.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *         settings: Cached :class:`Settings`.
-     *         include_filtered: Override the curated default.
-     *         limit: Maximum rows to return.
-     *
-     *     Returns:
-     *         :class:`JobMatchesListResponse` with newest matches first.
-     */
-    get: operations['list_job_matches_api_v1_jobs_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/job-filters': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/job-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List job filters
+         * @description Return every filter the authenticated user owns.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         :class:`JobFiltersListResponse` ordered by ``created_at ASC``.
+         */
+        get: operations["list_filters_api_v1_job_filters_get"];
+        put?: never;
+        /**
+         * Create a job filter
+         * @description Insert a new filter for the authenticated user.
+         *
+         *     Args:
+         *         payload: Validated request body.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The created :class:`JobFilterOut`.
+         *
+         *     Raises:
+         *         HTTPException: 409 when ``name`` already exists for the user.
+         */
+        post: operations["create_filter_api_v1_job_filters_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List job filters
-     * @description Return every filter the authenticated user owns.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         :class:`JobFiltersListResponse` ordered by ``created_at ASC``.
-     */
-    get: operations['list_filters_api_v1_job_filters_get'];
-    put?: never;
-    /**
-     * Create a job filter
-     * @description Insert a new filter for the authenticated user.
-     *
-     *     Args:
-     *         payload: Validated request body.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         The created :class:`JobFilterOut`.
-     *
-     *     Raises:
-     *         HTTPException: 409 when ``name`` already exists for the user.
-     */
-    post: operations['create_filter_api_v1_job_filters_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/job-filters/{filter_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/job-filters/{filter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a job filter
+         * @description Replace ``filter_id``'s predicate + active flag, bumping ``version``.
+         *
+         *     Args:
+         *         filter_id: Target filter.
+         *         payload: Validated request body.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The updated :class:`JobFilterOut`.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the filter does not belong to the caller.
+         *         HTTPException: 409 when the rename collides with another filter.
+         */
+        put: operations["update_filter_api_v1_job_filters__filter_id__put"];
+        post?: never;
+        /**
+         * Delete a job filter
+         * @description Hard-delete ``filter_id``.
+         *
+         *     Args:
+         *         filter_id: Target filter.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the filter does not belong to the caller.
+         */
+        delete: operations["delete_filter_api_v1_job_filters__filter_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /**
-     * Replace a job filter
-     * @description Replace ``filter_id``'s predicate + active flag, bumping ``version``.
-     *
-     *     Args:
-     *         filter_id: Target filter.
-     *         payload: Validated request body.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         The updated :class:`JobFilterOut`.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the filter does not belong to the caller.
-     *         HTTPException: 409 when the rename collides with another filter.
-     */
-    put: operations['update_filter_api_v1_job_filters__filter_id__put'];
-    post?: never;
-    /**
-     * Delete a job filter
-     * @description Hard-delete ``filter_id``.
-     *
-     *     Args:
-     *         filter_id: Target filter.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the filter does not belong to the caller.
-     */
-    delete: operations['delete_filter_api_v1_job_filters__filter_id__delete'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/unsubscribes': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/unsubscribes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List unsubscribe recommendations
+         * @description Return the caller's unsubscribe suggestions.
+         *
+         *     Rows are scoped to the caller via
+         *     ``UnsubscribeSuggestion.account_id -> ConnectedAccount.user_id``.
+         *     Default order is ``confidence DESC`` so the most-actionable rows
+         *     surface first.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached :class:`Settings`.
+         *         include_dismissed: Override the curated default.
+         *         limit: Maximum rows to return.
+         *
+         *     Returns:
+         *         :class:`UnsubscribeSuggestionsListResponse`.
+         */
+        get: operations["list_suggestions_api_v1_unsubscribes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List unsubscribe recommendations
-     * @description Return the caller's unsubscribe suggestions.
-     *
-     *     Rows are scoped to the caller via
-     *     ``UnsubscribeSuggestion.account_id -> ConnectedAccount.user_id``.
-     *     Default order is ``confidence DESC`` so the most-actionable rows
-     *     surface first.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *         settings: Cached :class:`Settings`.
-     *         include_dismissed: Override the curated default.
-     *         limit: Maximum rows to return.
-     *
-     *     Returns:
-     *         :class:`UnsubscribeSuggestionsListResponse`.
-     */
-    get: operations['list_suggestions_api_v1_unsubscribes_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/unsubscribes/{suggestion_id}/dismiss': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/unsubscribes/{suggestion_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss an unsubscribe suggestion
+         * @description Mark ``suggestion_id`` as dismissed.
+         *
+         *     The dismissal survives across aggregate re-runs: the repo's upsert
+         *     path only replaces the numeric + rationale columns.
+         *
+         *     Args:
+         *         suggestion_id: Target suggestion.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the row does not belong to the caller.
+         */
+        post: operations["dismiss_suggestion_api_v1_unsubscribes__suggestion_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Dismiss an unsubscribe suggestion
-     * @description Mark ``suggestion_id`` as dismissed.
-     *
-     *     The dismissal survives across aggregate re-runs: the repo's upsert
-     *     path only replaces the numeric + rationale columns.
-     *
-     *     Args:
-     *         suggestion_id: Target suggestion.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the row does not belong to the caller.
-     */
-    post: operations['dismiss_suggestion_api_v1_unsubscribes__suggestion_id__dismiss_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/unsubscribes/{suggestion_id}/confirm': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/unsubscribes/{suggestion_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the user acted on the unsubscribe suggestion
+         * @description Record that the user followed through on the recommendation.
+         *
+         *     Release 1.0.0 is recommend-only (ADR 0006) — the server never
+         *     reaches out to the provider. This endpoint marks the row
+         *     ``dismissed=True`` so it no longer surfaces.
+         *
+         *     Args:
+         *         suggestion_id: Target suggestion.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the row does not belong to the caller.
+         */
+        post: operations["confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Confirm the user acted on the unsubscribe suggestion
-     * @description Record that the user followed through on the recommendation.
-     *
-     *     Release 1.0.0 is recommend-only (ADR 0006) — the server never
-     *     reaches out to the provider. This endpoint marks the row
-     *     ``dismissed=True`` so it no longer surfaces.
-     *
-     *     Args:
-     *         suggestion_id: Target suggestion.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the row does not belong to the caller.
-     */
-    post: operations['confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/hygiene/stats': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/hygiene/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inbox-hygiene summary counters
+         * @description Return small aggregates over the caller's suggestions.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         :class:`HygieneStatsResponse`.
+         */
+        get: operations["hygiene_stats_api_v1_hygiene_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Inbox-hygiene summary counters
-     * @description Return small aggregates over the caller's suggestions.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *
-     *     Returns:
-     *         :class:`HygieneStatsResponse`.
-     */
-    get: operations['hygiene_stats_api_v1_hygiene_stats_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/emails': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List classified emails
+         * @description Return classified email rows for the PWA.
+         *
+         *     Args:
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached app settings.
+         *         bucket: Optional primary bucket filter.
+         *         account_id: Optional account filter.
+         *         limit: Maximum row count.
+         *
+         *     Returns:
+         *         Newest-first rows plus total count.
+         */
+        get: operations["list_emails_api_v1_emails_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List classified emails
-     * @description Return classified email rows for the PWA.
-     *
-     *     Args:
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *         settings: Cached app settings.
-     *         bucket: Optional primary bucket filter.
-     *         account_id: Optional account filter.
-     *         limit: Maximum row count.
-     *
-     *     Returns:
-     *         Newest-first rows plus total count.
-     */
-    get: operations['list_emails_api_v1_emails_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/emails/{email_id}/bucket': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/emails/{email_id}/bucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a user-selected email bucket
+         * @description Persist a user override from swipe gestures or queued replay.
+         *
+         *     Args:
+         *         email_id: Target email.
+         *         body: Destination bucket.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached app settings.
+         *
+         *     Returns:
+         *         Updated email row.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the email does not belong to the caller.
+         */
+        patch: operations["patch_email_bucket_api_v1_emails__email_id__bucket_patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /**
-     * Update a user-selected email bucket
-     * @description Persist a user override from swipe gestures or queued replay.
-     *
-     *     Args:
-     *         email_id: Target email.
-     *         body: Destination bucket.
-     *         user_id: Authenticated owner.
-     *         session: Active async session.
-     *         settings: Cached app settings.
-     *
-     *     Returns:
-     *         Updated email row.
-     *
-     *     Raises:
-     *         HTTPException: 404 when the email does not belong to the caller.
-     */
-    patch: operations['patch_email_bucket_api_v1_emails__email_id__bucket_patch'];
-    trace?: never;
-  };
-  '/api/v1/preferences': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get user preferences
+         * @description Return the caller's preferences, inserting defaults on first use.
+         */
+        get: operations["get_preferences_api_v1_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update user preferences
+         * @description Patch the caller's global preferences.
+         */
+        patch: operations["patch_preferences_api_v1_preferences_patch"];
+        trace?: never;
     };
-    /**
-     * Get user preferences
-     * @description Return the caller's preferences, inserting defaults on first use.
-     */
-    get: operations['get_preferences_api_v1_preferences_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /**
-     * Update user preferences
-     * @description Patch the caller's global preferences.
-     */
-    patch: operations['patch_preferences_api_v1_preferences_patch'];
-    trace?: never;
-  };
-  '/api/v1/runs': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a manual digest run
+         * @description Create a digest run and enqueue one ingest message per selected account.
+         *
+         *     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
+         *     per user per rolling 24h window; the limiter raises ``429`` with a
+         *     ``Retry-After`` header when exhausted.
+         */
+        post: operations["start_manual_run_api_v1_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Start a manual digest run
-     * @description Create a digest run and enqueue one ingest message per selected account.
-     *
-     *     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
-     *     per user per rolling 24h window; the limiter raises ``429`` with a
-     *     ``Retry-After`` header when exhausted.
-     */
-    post: operations['start_manual_run_api_v1_runs_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/runs/{run_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get digest-run status
+         * @description Return one owned digest-run row for polling.
+         */
+        get: operations["get_run_api_v1_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get digest-run status
-     * @description Return one owned digest-run row for polling.
-     */
-    get: operations['get_run_api_v1_runs__run_id__get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/history': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List digest-run history
+         * @description Return newest-first digest-run rows for the history page.
+         */
+        get: operations["list_history_api_v1_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List digest-run history
-     * @description Return newest-first digest-run rows for the history page.
-     */
-    get: operations['list_history_api_v1_history_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/digest/today': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/digest/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get today's digest summary
+         * @description Return dashboard counters, cost, and a must-read preview.
+         */
+        get: operations["digest_today_api_v1_digest_today_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get today's digest summary
-     * @description Return dashboard counters, cost, and a must-read preview.
-     */
-    get: operations['digest_today_api_v1_digest_today_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/news': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get tech-news digest
+         * @description Return summarized tech-news clusters for the caller.
+         */
+        get: operations["news_digest_api_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get tech-news digest
-     * @description Return summarized tech-news clusters for the caller.
-     */
-    get: operations['news_digest_api_v1_news_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/profile/me': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/profile/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's profile
+         * @description Return the caller's profile row.
+         */
+        get: operations["get_profile_api_v1_profile_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the caller's profile
+         * @description Apply a partial profile update.
+         *
+         *     Args:
+         *         payload: Validated patch body.
+         *         user_id: Authenticated caller, injected by :func:`current_user_id`.
+         *         session: DB session.
+         *
+         *     Returns:
+         *         The fresh profile row after the update.
+         */
+        patch: operations["patch_profile_api_v1_profile_me_patch"];
+        trace?: never;
     };
-    /**
-     * Get the caller's profile
-     * @description Return the caller's profile row.
-     */
-    get: operations['get_profile_api_v1_profile_me_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /**
-     * Update the caller's profile
-     * @description Apply a partial profile update.
-     *
-     *     Args:
-     *         payload: Validated patch body.
-     *         user_id: Authenticated caller, injected by :func:`current_user_id`.
-     *         session: DB session.
-     *
-     *     Returns:
-     *         The fresh profile row after the update.
-     */
-    patch: operations['patch_profile_api_v1_profile_me_patch'];
-    trace?: never;
-  };
-  '/api/v1/profile/me/schedule': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/profile/me/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's schedule
+         * @description Return cadence + times + a ``next_run_at_utc`` preview.
+         */
+        get: operations["get_schedule_api_v1_profile_me_schedule_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the caller's schedule
+         * @description Apply a partial schedule update with cross-field consistency.
+         *
+         *     When the caller sends only one of ``schedule_frequency`` or
+         *     ``schedule_times_local``, the cadence/slot-count invariant is
+         *     re-checked against the existing row. Sending a frequency change
+         *     without matching slots (or vice versa) returns 422.
+         */
+        patch: operations["patch_schedule_api_v1_profile_me_schedule_patch"];
+        trace?: never;
     };
-    /**
-     * Get the caller's schedule
-     * @description Return cadence + times + a ``next_run_at_utc`` preview.
-     */
-    get: operations['get_schedule_api_v1_profile_me_schedule_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /**
-     * Update the caller's schedule
-     * @description Apply a partial schedule update with cross-field consistency.
-     *
-     *     When the caller sends only one of ``schedule_frequency`` or
-     *     ``schedule_times_local``, the cadence/slot-count invariant is
-     *     re-checked against the existing row. Sending a frequency change
-     *     without matching slots (or vice versa) returns 422.
-     */
-    patch: operations['patch_schedule_api_v1_profile_me_schedule_patch'];
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /**
-     * AccountsListResponse
-     * @description Envelope wrapping the ``GET /accounts`` list.
-     *
-     *     Attributes:
-     *         accounts: Every :class:`ConnectedAccountOut` owned by the caller.
-     */
-    AccountsListResponse: {
-      /**
-       * Accounts
-       * @default []
-       */
-      accounts: components['schemas']['ConnectedAccountOut'][];
+    schemas: {
+        /**
+         * AccountsListResponse
+         * @description Envelope wrapping the ``GET /accounts`` list.
+         *
+         *     Attributes:
+         *         accounts: Every :class:`ConnectedAccountOut` owned by the caller.
+         */
+        AccountsListResponse: {
+            /**
+             * Accounts
+             * @default []
+             */
+            accounts: components["schemas"]["ConnectedAccountOut"][];
+        };
+        /**
+         * ConnectedAccountOut
+         * @description Public view of a ``connected_accounts`` row.
+         *
+         *     Attributes:
+         *         id: ``connected_accounts.id``.
+         *         email: Mailbox address.
+         *         display_name: Optional UI label. ``None`` falls back to email.
+         *         provider: Always ``"gmail"`` in 1.0.0.
+         *         status: Lifecycle state (``active``/``disabled``/``revoked``).
+         *         auto_scan_enabled: Per-account scan switch.
+         *         exclude_from_global_digest: Per-account digest opt-out.
+         *         created_at: When the account was connected.
+         *         last_sync_at: Latest successful ingest timestamp, if any.
+         *         emails_ingested_24h: Count for the settings card.
+         *         daily_budget_used_pct: Approximate daily token budget usage.
+         */
+        ConnectedAccountOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Provider
+             * @default gmail
+             */
+            provider: string;
+            /** Status */
+            status: string;
+            /**
+             * Auto Scan Enabled
+             * @default true
+             */
+            auto_scan_enabled: boolean;
+            /**
+             * Exclude From Global Digest
+             * @default false
+             */
+            exclude_from_global_digest: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Sync At */
+            last_sync_at?: string | null;
+            /**
+             * Emails Ingested 24H
+             * @default 0
+             */
+            emails_ingested_24h: number;
+            /**
+             * Daily Budget Used Pct
+             * @default 0
+             */
+            daily_budget_used_pct: number;
+        };
+        /**
+         * ConnectedAccountPatchRequest
+         * @description Request body for ``PATCH /accounts/{account_id}``.
+         *
+         *     Attributes:
+         *         auto_scan_enabled: Toggle scans for this account.
+         *         exclude_from_global_digest: Toggle the global-digest opt-out.
+         *         display_name: Accepted for forward compatibility; ignored in
+         *             1.0.0 because connected-account rows do not store aliases.
+         */
+        ConnectedAccountPatchRequest: {
+            /** Auto Scan Enabled */
+            auto_scan_enabled?: boolean | null;
+            /** Exclude From Global Digest */
+            exclude_from_global_digest?: boolean | null;
+            /** Display Name */
+            display_name?: string | null;
+        };
+        /**
+         * DigestCounts
+         * @description Daily digest triage counts.
+         */
+        DigestCounts: {
+            /**
+             * Must Read
+             * @default 0
+             */
+            must_read: number;
+            /**
+             * Good To Read
+             * @default 0
+             */
+            good_to_read: number;
+            /**
+             * Ignore
+             * @default 0
+             */
+            ignore: number;
+            /**
+             * Waste
+             * @default 0
+             */
+            waste: number;
+        };
+        /**
+         * DigestTodayResponse
+         * @description Dashboard summary for the current daily digest.
+         *
+         *     Attributes:
+         *         generated_at: Timestamp of the latest successful run.
+         *         cost_cents_today: Rounded prompt spend for today.
+         *         counts: Current triage counts.
+         *         must_read_preview: Newest must-read rows.
+         *         last_successful_run_at: Timestamp used for freshness warnings.
+         */
+        DigestTodayResponse: {
+            /** Generated At */
+            generated_at?: string | null;
+            /** Cost Cents Today */
+            cost_cents_today: number;
+            counts: components["schemas"]["DigestCounts"];
+            /**
+             * Must Read Preview
+             * @default []
+             */
+            must_read_preview: components["schemas"]["EmailRowOut"][];
+            /** Last Successful Run At */
+            last_successful_run_at?: string | null;
+        };
+        /**
+         * DomainWasteEntry
+         * @description One row in the hygiene-stats top-senders table.
+         *
+         *     Attributes:
+         *         sender_domain: Normalized domain.
+         *         frequency_30d: Sum of emails across all sender_emails in this
+         *             domain.
+         *         waste_share: Fraction ``waste_30d / frequency_30d`` for the
+         *             domain (0 when the domain has no classified waste rows).
+         */
+        DomainWasteEntry: {
+            /** Sender Domain */
+            sender_domain: string;
+            /** Frequency 30D */
+            frequency_30d: number;
+            /** Waste Share */
+            waste_share: string;
+        };
+        /**
+         * EmailBucketPatchRequest
+         * @description Request body for ``PATCH /emails/{email_id}/bucket``.
+         *
+         *     Attributes:
+         *         bucket: User-selected destination bucket.
+         */
+        EmailBucketPatchRequest: {
+            /**
+             * Bucket
+             * @enum {string}
+             */
+            bucket: "must_read" | "good_to_read" | "ignore" | "waste";
+        };
+        /**
+         * EmailRowOut
+         * @description Single row shown in dashboard and bucket lists.
+         *
+         *     Attributes:
+         *         id: Email primary key.
+         *         account_email: Connected mailbox address.
+         *         thread_id: Gmail thread id for deep-linking.
+         *         subject: Decoded subject.
+         *         sender: Raw sender address.
+         *         received_at: Provider internal date.
+         *         bucket: Primary triage bucket.
+         *         confidence: Classification confidence in ``[0, 1]``.
+         *         decision_source: Rule / LLM / hybrid source label.
+         *         reasons: Human-readable rationale entries.
+         *         summary_excerpt: Optional decrypted summary preview.
+         */
+        EmailRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Account Email
+             * Format: email
+             */
+            account_email: string;
+            /** Thread Id */
+            thread_id: string;
+            /** Subject */
+            subject: string;
+            /** Sender */
+            sender: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /**
+             * Bucket
+             * @enum {string}
+             */
+            bucket: "must_read" | "good_to_read" | "ignore" | "waste";
+            /** Confidence */
+            confidence: number;
+            /**
+             * Decision Source
+             * @enum {string}
+             */
+            decision_source: "rule" | "llm" | "hybrid";
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Summary Excerpt */
+            summary_excerpt?: string | null;
+        };
+        /**
+         * EmailsListResponse
+         * @description Envelope for ``GET /emails``.
+         *
+         *     Attributes:
+         *         emails: Newest-first rows.
+         *         total: Total matching rows before the response ``limit``.
+         */
+        EmailsListResponse: {
+            /**
+             * Emails
+             * @default []
+             */
+            emails: components["schemas"]["EmailRowOut"][];
+            /** Total */
+            total: number;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HygieneStatsResponse
+         * @description Envelope for ``GET /hygiene/stats``.
+         *
+         *     Attributes:
+         *         total_candidates: Count of active (``dismissed=False``)
+         *             suggestion rows.
+         *         dismissed_count: Count of rows the user has dismissed.
+         *         average_frequency: Mean ``frequency_30d`` over active
+         *             suggestions. ``0`` when there are none.
+         *         top_domains: Up to ten highest-volume sender domains in the
+         *             30-day window, by summed frequency.
+         */
+        HygieneStatsResponse: {
+            /** Total Candidates */
+            total_candidates: number;
+            /** Dismissed Count */
+            dismissed_count: number;
+            /** Average Frequency */
+            average_frequency: string;
+            /**
+             * Top Domains
+             * @default []
+             */
+            top_domains: components["schemas"]["DomainWasteEntry"][];
+        };
+        /**
+         * JobFilterIn
+         * @description Request body for ``POST /job-filters`` and ``PUT /job-filters/{id}``.
+         *
+         *     Attributes:
+         *         name: Human-readable label, unique per user (DB enforces).
+         *         predicate: JSONB document consumed by
+         *             :func:`app.services.jobs.predicate.evaluate`.
+         *         active: Soft-delete switch. Defaults to ``True``.
+         */
+        JobFilterIn: {
+            /** Name */
+            name: string;
+            /** Predicate */
+            predicate: {
+                [key: string]: unknown;
+            };
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /**
+         * JobFilterOut
+         * @description Response body for any ``/job-filters`` endpoint.
+         *
+         *     Attributes:
+         *         id: Filter primary key.
+         *         name: Label.
+         *         predicate: JSONB document.
+         *         version: Bumped on every PUT.
+         *         active: Soft-delete switch.
+         *         created_at: First-insert timestamp.
+         *         updated_at: Last-modified timestamp.
+         */
+        JobFilterOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Predicate */
+            predicate: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * JobFiltersListResponse
+         * @description Envelope for ``GET /job-filters``.
+         *
+         *     Attributes:
+         *         filters: Every :class:`JobFilterOut` owned by the caller,
+         *             ordered by ``created_at ASC`` so client-side ordering is
+         *             stable across requests.
+         */
+        JobFiltersListResponse: {
+            /**
+             * Filters
+             * @default []
+             */
+            filters: components["schemas"]["JobFilterOut"][];
+        };
+        /**
+         * JobMatchOut
+         * @description Response row for ``GET /jobs``.
+         *
+         *     Attributes:
+         *         id: Match primary key.
+         *         email_id: Source email FK.
+         *         title: Role title.
+         *         company: Hiring company / firm.
+         *         location: Free-text location, ``None`` when the posting omitted it.
+         *         remote: Tri-state remote flag.
+         *         comp_min: Lower compensation bound.
+         *         comp_max: Upper compensation bound.
+         *         currency: ISO-4217 code.
+         *         seniority: Normalized tier string.
+         *         source_url: Apply / posting URL with tracking params stripped.
+         *         match_score: Calibrated confidence, three-decimal precision.
+         *         filter_version: Active-filter version snapshot at extract time.
+         *         passed_filter: ``True`` when the row cleared every active filter
+         *             and the confidence floor; the curated board surfaces only
+         *             these.
+         *         match_reason: Plaintext rationale (decrypted by the router).
+         *         created_at: When the match row was first written.
+         *         updated_at: When it was last replaced (re-extraction).
+         */
+        JobMatchOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Email Id
+             * Format: uuid
+             */
+            email_id: string;
+            /** Title */
+            title: string;
+            /** Company */
+            company: string;
+            /** Location */
+            location: string | null;
+            /** Remote */
+            remote: boolean | null;
+            /** Comp Min */
+            comp_min: number | null;
+            /** Comp Max */
+            comp_max: number | null;
+            /** Currency */
+            currency: string | null;
+            /** Seniority */
+            seniority: string | null;
+            /** Source Url */
+            source_url: string | null;
+            /** Match Score */
+            match_score: string;
+            /** Filter Version */
+            filter_version: number;
+            /** Passed Filter */
+            passed_filter: boolean;
+            /** Match Reason */
+            match_reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * JobMatchesListResponse
+         * @description Envelope for ``GET /jobs``.
+         *
+         *     Attributes:
+         *         matches: Newest-first list of :class:`JobMatchOut` rows the
+         *             caller is allowed to see.
+         */
+        JobMatchesListResponse: {
+            /**
+             * Matches
+             * @default []
+             */
+            matches: components["schemas"]["JobMatchOut"][];
+        };
+        /**
+         * ManualRunRequest
+         * @description Request body for ``POST /runs``.
+         *
+         *     Attributes:
+         *         kind: Only ``manual`` is supported by the HTTP trigger.
+         *         account_ids: Optional subset of connected accounts to scan.
+         */
+        ManualRunRequest: {
+            /**
+             * Kind
+             * @default manual
+             * @constant
+             */
+            kind: "manual";
+            /** Account Ids */
+            account_ids?: string[] | null;
+        };
+        /**
+         * ManualRunResponse
+         * @description Accepted manual-run response.
+         *
+         *     Attributes:
+         *         run_id: New ``digest_runs.id`` for polling/history.
+         *         accounts_queued: Number of owned accounts included in the run.
+         */
+        ManualRunResponse: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Accounts Queued */
+            accounts_queued: number;
+        };
+        /**
+         * NewsCluster
+         * @description Tech-news cluster shown on ``/news``.
+         *
+         *     Attributes:
+         *         id: Cluster primary key.
+         *         label: Human-readable topic label.
+         *         summary_md: Plaintext markdown summary.
+         *         email_ids: Source email ids in the cluster.
+         */
+        NewsCluster: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Summary Md */
+            summary_md: string;
+            /**
+             * Email Ids
+             * @default []
+             */
+            email_ids: string[];
+        };
+        /**
+         * NewsDigestResponse
+         * @description Envelope for ``GET /news``.
+         */
+        NewsDigestResponse: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Clusters
+             * @default []
+             */
+            clusters: components["schemas"]["NewsCluster"][];
+        };
+        /**
+         * PreferencesPatchRequest
+         * @description Partial update body for ``PATCH /preferences``.
+         *
+         *     Attributes mirror :class:`UserPreferencesOut`; omitted fields keep
+         *     their current value.
+         */
+        PreferencesPatchRequest: {
+            /** Auto Execution Enabled */
+            auto_execution_enabled?: boolean | null;
+            /** Digest Send Hour Utc */
+            digest_send_hour_utc?: number | null;
+            /** Redact Pii */
+            redact_pii?: boolean | null;
+            /** Secure Offline Mode */
+            secure_offline_mode?: boolean | null;
+            /** Retention Policy Json */
+            retention_policy_json?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * RubricRuleIn
+         * @description Request body for POST / PUT.
+         *
+         *     Attributes:
+         *         priority: Higher wins. Defaults to ``100``.
+         *         match: Predicate dict; keys limited to
+         *             :data:`_ALLOWED_MATCH_KEYS`.
+         *         action: Verdict dict; must contain ``label`` ∈
+         *             :data:`_ALLOWED_LABELS` and ``confidence`` ∈ ``[0, 1]``.
+         *         active: Soft-delete switch. Defaults to ``True``.
+         */
+        RubricRuleIn: {
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Match */
+            match: {
+                [key: string]: unknown;
+            };
+            /** Action */
+            action: {
+                [key: string]: unknown;
+            };
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /**
+         * RubricRuleOut
+         * @description Response body for list / create / update.
+         *
+         *     Attributes:
+         *         id: Rule primary key.
+         *         priority: Priority plumbed through from the DB row.
+         *         match: Predicate dict.
+         *         action: Verdict dict.
+         *         version: Monotonically increasing version.
+         *         active: Soft-delete switch.
+         *         created_at: When the rule was first inserted.
+         *         updated_at: Last-modified timestamp.
+         */
+        RubricRuleOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: number;
+            /** Match */
+            match: {
+                [key: string]: unknown;
+            };
+            /** Action */
+            action: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * RubricRulesListResponse
+         * @description Envelope for ``GET /rubric``.
+         *
+         *     Attributes:
+         *         rules: Every :class:`RubricRuleOut` owned by the caller,
+         *             ordered by ``priority DESC``.
+         */
+        RubricRulesListResponse: {
+            /**
+             * Rules
+             * @default []
+             */
+            rules: components["schemas"]["RubricRuleOut"][];
+        };
+        /**
+         * RunStats
+         * @description Compact run counters shown by history and progress polling.
+         */
+        RunStats: {
+            /**
+             * Ingested
+             * @default 0
+             */
+            ingested: number;
+            /**
+             * Classified
+             * @default 0
+             */
+            classified: number;
+            /**
+             * Summarized
+             * @default 0
+             */
+            summarized: number;
+            /**
+             * New Must Read
+             * @default 0
+             */
+            new_must_read: number;
+        };
+        /**
+         * RunStatusResponse
+         * @description Digest-run row returned by ``GET /runs/{id}`` and history.
+         *
+         *     Attributes:
+         *         id: Run primary key.
+         *         status: Queue/progress state.
+         *         trigger_type: Scheduled or user-triggered.
+         *         started_at: Run start timestamp.
+         *         completed_at: Completion timestamp, if finished.
+         *         stats: Compact stage counters.
+         *         cost_cents: Rounded LLM spend, if known.
+         *         error: User-safe failure summary, if failed.
+         */
+        RunStatusResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "complete" | "failed";
+            /**
+             * Trigger Type
+             * @enum {string}
+             */
+            trigger_type: "scheduled" | "manual";
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Completed At */
+            completed_at?: string | null;
+            stats?: components["schemas"]["RunStats"];
+            /** Cost Cents */
+            cost_cents?: number | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * RunsListResponse
+         * @description Envelope for ``GET /history``.
+         *
+         *     Attributes:
+         *         runs: Newest-first list of digest runs.
+         */
+        RunsListResponse: {
+            /**
+             * Runs
+             * @default []
+             */
+            runs: components["schemas"]["RunStatusResponse"][];
+        };
+        /**
+         * UnsubscribeActionOut
+         * @description Normalized ``List-Unsubscribe`` target surfaced to the UI.
+         *
+         *     Attributes:
+         *         http_urls: Every HTTP/HTTPS URL advertised by the sender.
+         *         mailto: First ``mailto:`` URI, if present.
+         *         one_click: RFC 8058 one-click POST is supported.
+         */
+        UnsubscribeActionOut: {
+            /**
+             * Http Urls
+             * @default []
+             */
+            http_urls: string[];
+            /** Mailto */
+            mailto?: string | null;
+            /**
+             * One Click
+             * @default false
+             */
+            one_click: boolean;
+        };
+        /**
+         * UnsubscribeSuggestionOut
+         * @description Response row for ``GET /unsubscribes``.
+         *
+         *     Attributes:
+         *         id: Suggestion primary key.
+         *         sender_domain: Normalized sender domain.
+         *         sender_email: Full normalized address.
+         *         frequency_30d: Emails received in the trailing 30 days.
+         *         engagement_score: Positive-label ratio, 3-decimal precision.
+         *         waste_rate: Waste/ignore ratio, 3-decimal precision.
+         *         confidence: Calibrated ``[0, 1]`` — the UI hides rows below
+         *             ``0.5`` by default.
+         *         decision_source: ``rule`` or ``model``.
+         *         category: Sender archetype when the model decided; ``None`` for
+         *             rule-only rows (the UI can still render a heuristic badge).
+         *         rationale: Plaintext rationale (decrypted by the router).
+         *         list_unsubscribe: Normalized action payload. ``None`` when no
+         *             email from this sender in the window carried a
+         *             ``List-Unsubscribe`` header.
+         *         dismissed: User-side dismissal flag.
+         *         dismissed_at: When the user dismissed (``None`` while active).
+         *         last_email_at: Most recent email time from this sender.
+         *         created_at: First-insert timestamp of the suggestion row.
+         *         updated_at: Last aggregate-update timestamp.
+         */
+        UnsubscribeSuggestionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sender Domain */
+            sender_domain: string;
+            /** Sender Email */
+            sender_email: string;
+            /** Frequency 30D */
+            frequency_30d: number;
+            /** Engagement Score */
+            engagement_score: string;
+            /** Waste Rate */
+            waste_rate: string;
+            /** Confidence */
+            confidence: string;
+            /**
+             * Decision Source
+             * @enum {string}
+             */
+            decision_source: "rule" | "model";
+            /** Category */
+            category: string | null;
+            /** Rationale */
+            rationale: string;
+            list_unsubscribe: components["schemas"]["UnsubscribeActionOut"] | null;
+            /** Dismissed */
+            dismissed: boolean;
+            /** Dismissed At */
+            dismissed_at: string | null;
+            /** Last Email At */
+            last_email_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * UnsubscribeSuggestionsListResponse
+         * @description Envelope for ``GET /unsubscribes``.
+         *
+         *     Attributes:
+         *         suggestions: Highest-confidence-first list of suggestion rows
+         *             the caller is allowed to see.
+         */
+        UnsubscribeSuggestionsListResponse: {
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["UnsubscribeSuggestionOut"][];
+        };
+        /**
+         * UserPreferencesOut
+         * @description Current user's global PWA preferences.
+         *
+         *     Attributes:
+         *         auto_execution_enabled: Global scheduled-scan switch.
+         *         digest_send_hour_utc: Hour of day for the daily digest.
+         *         redact_pii: Whether prompt input redaction is enabled.
+         *         secure_offline_mode: Whether the PWA should encrypt local offline
+         *             data with a passcode.
+         *         retention_policy_json: Operator-readable retention knobs.
+         */
+        UserPreferencesOut: {
+            /** Auto Execution Enabled */
+            auto_execution_enabled: boolean;
+            /** Digest Send Hour Utc */
+            digest_send_hour_utc: number;
+            /** Redact Pii */
+            redact_pii: boolean;
+            /** Secure Offline Mode */
+            secure_offline_mode: boolean;
+            /** Retention Policy Json */
+            retention_policy_json: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * UserProfileOut
+         * @description Current user's profile (Track C — Phase II.3).
+         *
+         *     Attributes:
+         *         display_name: Optional display name (consumed by IdentityScrubber).
+         *         email_aliases: Extra email addresses to scrub from prompts.
+         *         redaction_aliases: Free-form strings to scrub from prompts.
+         *         presidio_enabled: Whether Presidio runs ahead of regex scrubbing.
+         *         theme_preference: Server-side mirror of the user's UI theme.
+         *         schedule_frequency: Cadence — ``once_daily`` / ``twice_daily`` /
+         *             ``disabled``.
+         *         schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.
+         *         schedule_timezone: IANA timezone name.
+         */
+        UserProfileOut: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Email Aliases */
+            email_aliases?: string[];
+            /** Redaction Aliases */
+            redaction_aliases?: string[];
+            /**
+             * Presidio Enabled
+             * @default true
+             */
+            presidio_enabled: boolean;
+            /**
+             * Theme Preference
+             * @default system
+             * @enum {string}
+             */
+            theme_preference: "system" | "light" | "dark";
+            /**
+             * Schedule Frequency
+             * @default once_daily
+             * @enum {string}
+             */
+            schedule_frequency: "once_daily" | "twice_daily" | "disabled";
+            /**
+             * Schedule Times Local
+             * @default [
+             *       "08:00"
+             *     ]
+             */
+            schedule_times_local: string[];
+            /**
+             * Schedule Timezone
+             * @default UTC
+             */
+            schedule_timezone: string;
+        };
+        /**
+         * UserProfilePatchRequest
+         * @description Partial update body for ``PATCH /profile/me``.
+         *
+         *     Omitted fields keep their current values. Email aliases are
+         *     validated as RFC-5322 (IDN-aware via :class:`pydantic.EmailStr`).
+         */
+        UserProfilePatchRequest: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Email Aliases */
+            email_aliases?: string[] | null;
+            /** Redaction Aliases */
+            redaction_aliases?: string[] | null;
+            /** Presidio Enabled */
+            presidio_enabled?: boolean | null;
+            /** Theme Preference */
+            theme_preference?: ("system" | "light" | "dark") | null;
+        };
+        /**
+         * UserScheduleOut
+         * @description Schedule view of the user's profile.
+         *
+         *     ``next_run_at_utc`` is computed via :func:`app.core.scheduling.next_slot_utc`
+         *     so the UI's "next run" preview agrees with the fanout filter.
+         */
+        UserScheduleOut: {
+            /**
+             * Schedule Frequency
+             * @enum {string}
+             */
+            schedule_frequency: "once_daily" | "twice_daily" | "disabled";
+            /** Schedule Times Local */
+            schedule_times_local: string[];
+            /** Schedule Timezone */
+            schedule_timezone: string;
+            /** Next Run At Utc */
+            next_run_at_utc?: string | null;
+        };
+        /**
+         * UserSchedulePatchRequest
+         * @description Partial update body for ``PATCH /profile/me/schedule``.
+         *
+         *     Validation rules:
+         *     * Each :attr:`schedule_times_local` entry must match ``HH:MM``.
+         *     * :attr:`schedule_timezone` must be in :func:`zoneinfo.available_timezones`.
+         *     * The frequency / slot-count invariant is checked when *both* are
+         *       provided in the same request, or against the existing row when
+         *       only one side is sent.
+         */
+        UserSchedulePatchRequest: {
+            /** Schedule Frequency */
+            schedule_frequency?: ("once_daily" | "twice_daily" | "disabled") | null;
+            /** Schedule Times Local */
+            schedule_times_local?: string[] | null;
+            /** Schedule Timezone */
+            schedule_timezone?: string | null;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
     };
-    /**
-     * ConnectedAccountOut
-     * @description Public view of a ``connected_accounts`` row.
-     *
-     *     Attributes:
-     *         id: ``connected_accounts.id``.
-     *         email: Mailbox address.
-     *         display_name: Optional UI label. ``None`` falls back to email.
-     *         provider: Always ``"gmail"`` in 1.0.0.
-     *         status: Lifecycle state (``active``/``disabled``/``revoked``).
-     *         auto_scan_enabled: Per-account scan switch.
-     *         exclude_from_global_digest: Per-account digest opt-out.
-     *         created_at: When the account was connected.
-     *         last_sync_at: Latest successful ingest timestamp, if any.
-     *         emails_ingested_24h: Count for the settings card.
-     *         daily_budget_used_pct: Approximate daily token budget usage.
-     */
-    ConnectedAccountOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Email
-       * Format: email
-       */
-      email: string;
-      /** Display Name */
-      display_name?: string | null;
-      /**
-       * Provider
-       * @default gmail
-       */
-      provider: string;
-      /** Status */
-      status: string;
-      /**
-       * Auto Scan Enabled
-       * @default true
-       */
-      auto_scan_enabled: boolean;
-      /**
-       * Exclude From Global Digest
-       * @default false
-       */
-      exclude_from_global_digest: boolean;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Last Sync At */
-      last_sync_at?: string | null;
-      /**
-       * Emails Ingested 24H
-       * @default 0
-       */
-      emails_ingested_24h: number;
-      /**
-       * Daily Budget Used Pct
-       * @default 0
-       */
-      daily_budget_used_pct: number;
-    };
-    /**
-     * ConnectedAccountPatchRequest
-     * @description Request body for ``PATCH /accounts/{account_id}``.
-     *
-     *     Attributes:
-     *         auto_scan_enabled: Toggle scans for this account.
-     *         exclude_from_global_digest: Toggle the global-digest opt-out.
-     *         display_name: Accepted for forward compatibility; ignored in
-     *             1.0.0 because connected-account rows do not store aliases.
-     */
-    ConnectedAccountPatchRequest: {
-      /** Auto Scan Enabled */
-      auto_scan_enabled?: boolean | null;
-      /** Exclude From Global Digest */
-      exclude_from_global_digest?: boolean | null;
-      /** Display Name */
-      display_name?: string | null;
-    };
-    /**
-     * DigestCounts
-     * @description Daily digest triage counts.
-     */
-    DigestCounts: {
-      /**
-       * Must Read
-       * @default 0
-       */
-      must_read: number;
-      /**
-       * Good To Read
-       * @default 0
-       */
-      good_to_read: number;
-      /**
-       * Ignore
-       * @default 0
-       */
-      ignore: number;
-      /**
-       * Waste
-       * @default 0
-       */
-      waste: number;
-    };
-    /**
-     * DigestTodayResponse
-     * @description Dashboard summary for the current daily digest.
-     *
-     *     Attributes:
-     *         generated_at: Timestamp of the latest successful run.
-     *         cost_cents_today: Rounded prompt spend for today.
-     *         counts: Current triage counts.
-     *         must_read_preview: Newest must-read rows.
-     *         last_successful_run_at: Timestamp used for freshness warnings.
-     */
-    DigestTodayResponse: {
-      /** Generated At */
-      generated_at?: string | null;
-      /** Cost Cents Today */
-      cost_cents_today: number;
-      counts: components['schemas']['DigestCounts'];
-      /**
-       * Must Read Preview
-       * @default []
-       */
-      must_read_preview: components['schemas']['EmailRowOut'][];
-      /** Last Successful Run At */
-      last_successful_run_at?: string | null;
-    };
-    /**
-     * DomainWasteEntry
-     * @description One row in the hygiene-stats top-senders table.
-     *
-     *     Attributes:
-     *         sender_domain: Normalized domain.
-     *         frequency_30d: Sum of emails across all sender_emails in this
-     *             domain.
-     *         waste_share: Fraction ``waste_30d / frequency_30d`` for the
-     *             domain (0 when the domain has no classified waste rows).
-     */
-    DomainWasteEntry: {
-      /** Sender Domain */
-      sender_domain: string;
-      /** Frequency 30D */
-      frequency_30d: number;
-      /** Waste Share */
-      waste_share: string;
-    };
-    /**
-     * EmailBucketPatchRequest
-     * @description Request body for ``PATCH /emails/{email_id}/bucket``.
-     *
-     *     Attributes:
-     *         bucket: User-selected destination bucket.
-     */
-    EmailBucketPatchRequest: {
-      /**
-       * Bucket
-       * @enum {string}
-       */
-      bucket: 'must_read' | 'good_to_read' | 'ignore' | 'waste';
-    };
-    /**
-     * EmailRowOut
-     * @description Single row shown in dashboard and bucket lists.
-     *
-     *     Attributes:
-     *         id: Email primary key.
-     *         account_email: Connected mailbox address.
-     *         thread_id: Gmail thread id for deep-linking.
-     *         subject: Decoded subject.
-     *         sender: Raw sender address.
-     *         received_at: Provider internal date.
-     *         bucket: Primary triage bucket.
-     *         confidence: Classification confidence in ``[0, 1]``.
-     *         decision_source: Rule / LLM / hybrid source label.
-     *         reasons: Human-readable rationale entries.
-     *         summary_excerpt: Optional decrypted summary preview.
-     */
-    EmailRowOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Account Email
-       * Format: email
-       */
-      account_email: string;
-      /** Thread Id */
-      thread_id: string;
-      /** Subject */
-      subject: string;
-      /** Sender */
-      sender: string;
-      /**
-       * Received At
-       * Format: date-time
-       */
-      received_at: string;
-      /**
-       * Bucket
-       * @enum {string}
-       */
-      bucket: 'must_read' | 'good_to_read' | 'ignore' | 'waste';
-      /** Confidence */
-      confidence: number;
-      /**
-       * Decision Source
-       * @enum {string}
-       */
-      decision_source: 'rule' | 'llm' | 'hybrid';
-      /**
-       * Reasons
-       * @default []
-       */
-      reasons: string[];
-      /** Summary Excerpt */
-      summary_excerpt?: string | null;
-    };
-    /**
-     * EmailsListResponse
-     * @description Envelope for ``GET /emails``.
-     *
-     *     Attributes:
-     *         emails: Newest-first rows.
-     *         total: Total matching rows before the response ``limit``.
-     */
-    EmailsListResponse: {
-      /**
-       * Emails
-       * @default []
-       */
-      emails: components['schemas']['EmailRowOut'][];
-      /** Total */
-      total: number;
-    };
-    /** HTTPValidationError */
-    HTTPValidationError: {
-      /** Detail */
-      detail?: components['schemas']['ValidationError'][];
-    };
-    /**
-     * HygieneStatsResponse
-     * @description Envelope for ``GET /hygiene/stats``.
-     *
-     *     Attributes:
-     *         total_candidates: Count of active (``dismissed=False``)
-     *             suggestion rows.
-     *         dismissed_count: Count of rows the user has dismissed.
-     *         average_frequency: Mean ``frequency_30d`` over active
-     *             suggestions. ``0`` when there are none.
-     *         top_domains: Up to ten highest-volume sender domains in the
-     *             30-day window, by summed frequency.
-     */
-    HygieneStatsResponse: {
-      /** Total Candidates */
-      total_candidates: number;
-      /** Dismissed Count */
-      dismissed_count: number;
-      /** Average Frequency */
-      average_frequency: string;
-      /**
-       * Top Domains
-       * @default []
-       */
-      top_domains: components['schemas']['DomainWasteEntry'][];
-    };
-    /**
-     * JobFilterIn
-     * @description Request body for ``POST /job-filters`` and ``PUT /job-filters/{id}``.
-     *
-     *     Attributes:
-     *         name: Human-readable label, unique per user (DB enforces).
-     *         predicate: JSONB document consumed by
-     *             :func:`app.services.jobs.predicate.evaluate`.
-     *         active: Soft-delete switch. Defaults to ``True``.
-     */
-    JobFilterIn: {
-      /** Name */
-      name: string;
-      /** Predicate */
-      predicate: {
-        [key: string]: unknown;
-      };
-      /**
-       * Active
-       * @default true
-       */
-      active: boolean;
-    };
-    /**
-     * JobFilterOut
-     * @description Response body for any ``/job-filters`` endpoint.
-     *
-     *     Attributes:
-     *         id: Filter primary key.
-     *         name: Label.
-     *         predicate: JSONB document.
-     *         version: Bumped on every PUT.
-     *         active: Soft-delete switch.
-     *         created_at: First-insert timestamp.
-     *         updated_at: Last-modified timestamp.
-     */
-    JobFilterOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Name */
-      name: string;
-      /** Predicate */
-      predicate: {
-        [key: string]: unknown;
-      };
-      /** Version */
-      version: number;
-      /** Active */
-      active: boolean;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-    };
-    /**
-     * JobFiltersListResponse
-     * @description Envelope for ``GET /job-filters``.
-     *
-     *     Attributes:
-     *         filters: Every :class:`JobFilterOut` owned by the caller,
-     *             ordered by ``created_at ASC`` so client-side ordering is
-     *             stable across requests.
-     */
-    JobFiltersListResponse: {
-      /**
-       * Filters
-       * @default []
-       */
-      filters: components['schemas']['JobFilterOut'][];
-    };
-    /**
-     * JobMatchOut
-     * @description Response row for ``GET /jobs``.
-     *
-     *     Attributes:
-     *         id: Match primary key.
-     *         email_id: Source email FK.
-     *         title: Role title.
-     *         company: Hiring company / firm.
-     *         location: Free-text location, ``None`` when the posting omitted it.
-     *         remote: Tri-state remote flag.
-     *         comp_min: Lower compensation bound.
-     *         comp_max: Upper compensation bound.
-     *         currency: ISO-4217 code.
-     *         seniority: Normalized tier string.
-     *         source_url: Apply / posting URL with tracking params stripped.
-     *         match_score: Calibrated confidence, three-decimal precision.
-     *         filter_version: Active-filter version snapshot at extract time.
-     *         passed_filter: ``True`` when the row cleared every active filter
-     *             and the confidence floor; the curated board surfaces only
-     *             these.
-     *         match_reason: Plaintext rationale (decrypted by the router).
-     *         created_at: When the match row was first written.
-     *         updated_at: When it was last replaced (re-extraction).
-     */
-    JobMatchOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Email Id
-       * Format: uuid
-       */
-      email_id: string;
-      /** Title */
-      title: string;
-      /** Company */
-      company: string;
-      /** Location */
-      location: string | null;
-      /** Remote */
-      remote: boolean | null;
-      /** Comp Min */
-      comp_min: number | null;
-      /** Comp Max */
-      comp_max: number | null;
-      /** Currency */
-      currency: string | null;
-      /** Seniority */
-      seniority: string | null;
-      /** Source Url */
-      source_url: string | null;
-      /** Match Score */
-      match_score: string;
-      /** Filter Version */
-      filter_version: number;
-      /** Passed Filter */
-      passed_filter: boolean;
-      /** Match Reason */
-      match_reason: string;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-    };
-    /**
-     * JobMatchesListResponse
-     * @description Envelope for ``GET /jobs``.
-     *
-     *     Attributes:
-     *         matches: Newest-first list of :class:`JobMatchOut` rows the
-     *             caller is allowed to see.
-     */
-    JobMatchesListResponse: {
-      /**
-       * Matches
-       * @default []
-       */
-      matches: components['schemas']['JobMatchOut'][];
-    };
-    /**
-     * ManualRunRequest
-     * @description Request body for ``POST /runs``.
-     *
-     *     Attributes:
-     *         kind: Only ``manual`` is supported by the HTTP trigger.
-     *         account_ids: Optional subset of connected accounts to scan.
-     */
-    ManualRunRequest: {
-      /**
-       * Kind
-       * @default manual
-       * @constant
-       */
-      kind: 'manual';
-      /** Account Ids */
-      account_ids?: string[] | null;
-    };
-    /**
-     * ManualRunResponse
-     * @description Accepted manual-run response.
-     *
-     *     Attributes:
-     *         run_id: New ``digest_runs.id`` for polling/history.
-     *         accounts_queued: Number of owned accounts included in the run.
-     */
-    ManualRunResponse: {
-      /**
-       * Run Id
-       * Format: uuid
-       */
-      run_id: string;
-      /** Accounts Queued */
-      accounts_queued: number;
-    };
-    /**
-     * NewsCluster
-     * @description Tech-news cluster shown on ``/news``.
-     *
-     *     Attributes:
-     *         id: Cluster primary key.
-     *         label: Human-readable topic label.
-     *         summary_md: Plaintext markdown summary.
-     *         email_ids: Source email ids in the cluster.
-     */
-    NewsCluster: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Label */
-      label: string;
-      /** Summary Md */
-      summary_md: string;
-      /**
-       * Email Ids
-       * @default []
-       */
-      email_ids: string[];
-    };
-    /**
-     * NewsDigestResponse
-     * @description Envelope for ``GET /news``.
-     */
-    NewsDigestResponse: {
-      /**
-       * Generated At
-       * Format: date-time
-       */
-      generated_at: string;
-      /**
-       * Clusters
-       * @default []
-       */
-      clusters: components['schemas']['NewsCluster'][];
-    };
-    /**
-     * PreferencesPatchRequest
-     * @description Partial update body for ``PATCH /preferences``.
-     *
-     *     Attributes mirror :class:`UserPreferencesOut`; omitted fields keep
-     *     their current value.
-     */
-    PreferencesPatchRequest: {
-      /** Auto Execution Enabled */
-      auto_execution_enabled?: boolean | null;
-      /** Digest Send Hour Utc */
-      digest_send_hour_utc?: number | null;
-      /** Redact Pii */
-      redact_pii?: boolean | null;
-      /** Secure Offline Mode */
-      secure_offline_mode?: boolean | null;
-      /** Retention Policy Json */
-      retention_policy_json?: {
-        [key: string]: unknown;
-      } | null;
-    };
-    /**
-     * RubricRuleIn
-     * @description Request body for POST / PUT.
-     *
-     *     Attributes:
-     *         priority: Higher wins. Defaults to ``100``.
-     *         match: Predicate dict; keys limited to
-     *             :data:`_ALLOWED_MATCH_KEYS`.
-     *         action: Verdict dict; must contain ``label`` ∈
-     *             :data:`_ALLOWED_LABELS` and ``confidence`` ∈ ``[0, 1]``.
-     *         active: Soft-delete switch. Defaults to ``True``.
-     */
-    RubricRuleIn: {
-      /**
-       * Priority
-       * @default 100
-       */
-      priority: number;
-      /** Match */
-      match: {
-        [key: string]: unknown;
-      };
-      /** Action */
-      action: {
-        [key: string]: unknown;
-      };
-      /**
-       * Active
-       * @default true
-       */
-      active: boolean;
-    };
-    /**
-     * RubricRuleOut
-     * @description Response body for list / create / update.
-     *
-     *     Attributes:
-     *         id: Rule primary key.
-     *         priority: Priority plumbed through from the DB row.
-     *         match: Predicate dict.
-     *         action: Verdict dict.
-     *         version: Monotonically increasing version.
-     *         active: Soft-delete switch.
-     *         created_at: When the rule was first inserted.
-     *         updated_at: Last-modified timestamp.
-     */
-    RubricRuleOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Priority */
-      priority: number;
-      /** Match */
-      match: {
-        [key: string]: unknown;
-      };
-      /** Action */
-      action: {
-        [key: string]: unknown;
-      };
-      /** Version */
-      version: number;
-      /** Active */
-      active: boolean;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-    };
-    /**
-     * RubricRulesListResponse
-     * @description Envelope for ``GET /rubric``.
-     *
-     *     Attributes:
-     *         rules: Every :class:`RubricRuleOut` owned by the caller,
-     *             ordered by ``priority DESC``.
-     */
-    RubricRulesListResponse: {
-      /**
-       * Rules
-       * @default []
-       */
-      rules: components['schemas']['RubricRuleOut'][];
-    };
-    /**
-     * RunStats
-     * @description Compact run counters shown by history and progress polling.
-     */
-    RunStats: {
-      /**
-       * Ingested
-       * @default 0
-       */
-      ingested: number;
-      /**
-       * Classified
-       * @default 0
-       */
-      classified: number;
-      /**
-       * Summarized
-       * @default 0
-       */
-      summarized: number;
-      /**
-       * New Must Read
-       * @default 0
-       */
-      new_must_read: number;
-    };
-    /**
-     * RunStatusResponse
-     * @description Digest-run row returned by ``GET /runs/{id}`` and history.
-     *
-     *     Attributes:
-     *         id: Run primary key.
-     *         status: Queue/progress state.
-     *         trigger_type: Scheduled or user-triggered.
-     *         started_at: Run start timestamp.
-     *         completed_at: Completion timestamp, if finished.
-     *         stats: Compact stage counters.
-     *         cost_cents: Rounded LLM spend, if known.
-     *         error: User-safe failure summary, if failed.
-     */
-    RunStatusResponse: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'queued' | 'running' | 'complete' | 'failed';
-      /**
-       * Trigger Type
-       * @enum {string}
-       */
-      trigger_type: 'scheduled' | 'manual';
-      /**
-       * Started At
-       * Format: date-time
-       */
-      started_at: string;
-      /** Completed At */
-      completed_at?: string | null;
-      stats?: components['schemas']['RunStats'];
-      /** Cost Cents */
-      cost_cents?: number | null;
-      /** Error */
-      error?: string | null;
-    };
-    /**
-     * RunsListResponse
-     * @description Envelope for ``GET /history``.
-     *
-     *     Attributes:
-     *         runs: Newest-first list of digest runs.
-     */
-    RunsListResponse: {
-      /**
-       * Runs
-       * @default []
-       */
-      runs: components['schemas']['RunStatusResponse'][];
-    };
-    /**
-     * UnsubscribeActionOut
-     * @description Normalized ``List-Unsubscribe`` target surfaced to the UI.
-     *
-     *     Attributes:
-     *         http_urls: Every HTTP/HTTPS URL advertised by the sender.
-     *         mailto: First ``mailto:`` URI, if present.
-     *         one_click: RFC 8058 one-click POST is supported.
-     */
-    UnsubscribeActionOut: {
-      /**
-       * Http Urls
-       * @default []
-       */
-      http_urls: string[];
-      /** Mailto */
-      mailto?: string | null;
-      /**
-       * One Click
-       * @default false
-       */
-      one_click: boolean;
-    };
-    /**
-     * UnsubscribeSuggestionOut
-     * @description Response row for ``GET /unsubscribes``.
-     *
-     *     Attributes:
-     *         id: Suggestion primary key.
-     *         sender_domain: Normalized sender domain.
-     *         sender_email: Full normalized address.
-     *         frequency_30d: Emails received in the trailing 30 days.
-     *         engagement_score: Positive-label ratio, 3-decimal precision.
-     *         waste_rate: Waste/ignore ratio, 3-decimal precision.
-     *         confidence: Calibrated ``[0, 1]`` — the UI hides rows below
-     *             ``0.5`` by default.
-     *         decision_source: ``rule`` or ``model``.
-     *         category: Sender archetype when the model decided; ``None`` for
-     *             rule-only rows (the UI can still render a heuristic badge).
-     *         rationale: Plaintext rationale (decrypted by the router).
-     *         list_unsubscribe: Normalized action payload. ``None`` when no
-     *             email from this sender in the window carried a
-     *             ``List-Unsubscribe`` header.
-     *         dismissed: User-side dismissal flag.
-     *         dismissed_at: When the user dismissed (``None`` while active).
-     *         last_email_at: Most recent email time from this sender.
-     *         created_at: First-insert timestamp of the suggestion row.
-     *         updated_at: Last aggregate-update timestamp.
-     */
-    UnsubscribeSuggestionOut: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Sender Domain */
-      sender_domain: string;
-      /** Sender Email */
-      sender_email: string;
-      /** Frequency 30D */
-      frequency_30d: number;
-      /** Engagement Score */
-      engagement_score: string;
-      /** Waste Rate */
-      waste_rate: string;
-      /** Confidence */
-      confidence: string;
-      /**
-       * Decision Source
-       * @enum {string}
-       */
-      decision_source: 'rule' | 'model';
-      /** Category */
-      category: string | null;
-      /** Rationale */
-      rationale: string;
-      list_unsubscribe: components['schemas']['UnsubscribeActionOut'] | null;
-      /** Dismissed */
-      dismissed: boolean;
-      /** Dismissed At */
-      dismissed_at: string | null;
-      /** Last Email At */
-      last_email_at: string | null;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-    };
-    /**
-     * UnsubscribeSuggestionsListResponse
-     * @description Envelope for ``GET /unsubscribes``.
-     *
-     *     Attributes:
-     *         suggestions: Highest-confidence-first list of suggestion rows
-     *             the caller is allowed to see.
-     */
-    UnsubscribeSuggestionsListResponse: {
-      /**
-       * Suggestions
-       * @default []
-       */
-      suggestions: components['schemas']['UnsubscribeSuggestionOut'][];
-    };
-    /**
-     * UserPreferencesOut
-     * @description Current user's global PWA preferences.
-     *
-     *     Attributes:
-     *         auto_execution_enabled: Global scheduled-scan switch.
-     *         digest_send_hour_utc: Hour of day for the daily digest.
-     *         redact_pii: Whether prompt input redaction is enabled.
-     *         secure_offline_mode: Whether the PWA should encrypt local offline
-     *             data with a passcode.
-     *         retention_policy_json: Operator-readable retention knobs.
-     */
-    UserPreferencesOut: {
-      /** Auto Execution Enabled */
-      auto_execution_enabled: boolean;
-      /** Digest Send Hour Utc */
-      digest_send_hour_utc: number;
-      /** Redact Pii */
-      redact_pii: boolean;
-      /** Secure Offline Mode */
-      secure_offline_mode: boolean;
-      /** Retention Policy Json */
-      retention_policy_json: {
-        [key: string]: unknown;
-      };
-    };
-    /**
-     * UserProfileOut
-     * @description Current user's profile (Track C — Phase II.3).
-     *
-     *     Attributes:
-     *         display_name: Optional display name (consumed by IdentityScrubber).
-     *         email_aliases: Extra email addresses to scrub from prompts.
-     *         redaction_aliases: Free-form strings to scrub from prompts.
-     *         presidio_enabled: Whether Presidio runs ahead of regex scrubbing.
-     *         theme_preference: Server-side mirror of the user's UI theme.
-     *         schedule_frequency: Cadence — ``once_daily`` / ``twice_daily`` /
-     *             ``disabled``.
-     *         schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.
-     *         schedule_timezone: IANA timezone name.
-     */
-    UserProfileOut: {
-      /** Display Name */
-      display_name?: string | null;
-      /** Email Aliases */
-      email_aliases?: string[];
-      /** Redaction Aliases */
-      redaction_aliases?: string[];
-      /**
-       * Presidio Enabled
-       * @default true
-       */
-      presidio_enabled: boolean;
-      /**
-       * Theme Preference
-       * @default system
-       * @enum {string}
-       */
-      theme_preference: 'system' | 'light' | 'dark';
-      /**
-       * Schedule Frequency
-       * @default once_daily
-       * @enum {string}
-       */
-      schedule_frequency: 'once_daily' | 'twice_daily' | 'disabled';
-      /**
-       * Schedule Times Local
-       * @default [
-       *       "08:00"
-       *     ]
-       */
-      schedule_times_local: string[];
-      /**
-       * Schedule Timezone
-       * @default UTC
-       */
-      schedule_timezone: string;
-    };
-    /**
-     * UserProfilePatchRequest
-     * @description Partial update body for ``PATCH /profile/me``.
-     *
-     *     Omitted fields keep their current values. Email aliases are
-     *     validated as RFC-5322 (IDN-aware via :class:`pydantic.EmailStr`).
-     */
-    UserProfilePatchRequest: {
-      /** Display Name */
-      display_name?: string | null;
-      /** Email Aliases */
-      email_aliases?: string[] | null;
-      /** Redaction Aliases */
-      redaction_aliases?: string[] | null;
-      /** Presidio Enabled */
-      presidio_enabled?: boolean | null;
-      /** Theme Preference */
-      theme_preference?: ('system' | 'light' | 'dark') | null;
-    };
-    /**
-     * UserScheduleOut
-     * @description Schedule view of the user's profile.
-     *
-     *     ``next_run_at_utc`` is computed via :func:`app.core.scheduling.next_slot_utc`
-     *     so the UI's "next run" preview agrees with the fanout filter.
-     */
-    UserScheduleOut: {
-      /**
-       * Schedule Frequency
-       * @enum {string}
-       */
-      schedule_frequency: 'once_daily' | 'twice_daily' | 'disabled';
-      /** Schedule Times Local */
-      schedule_times_local: string[];
-      /** Schedule Timezone */
-      schedule_timezone: string;
-      /** Next Run At Utc */
-      next_run_at_utc?: string | null;
-    };
-    /**
-     * UserSchedulePatchRequest
-     * @description Partial update body for ``PATCH /profile/me/schedule``.
-     *
-     *     Validation rules:
-     *     * Each :attr:`schedule_times_local` entry must match ``HH:MM``.
-     *     * :attr:`schedule_timezone` must be in :func:`zoneinfo.available_timezones`.
-     *     * The frequency / slot-count invariant is checked when *both* are
-     *       provided in the same request, or against the existing row when
-     *       only one side is sent.
-     */
-    UserSchedulePatchRequest: {
-      /** Schedule Frequency */
-      schedule_frequency?: ('once_daily' | 'twice_daily' | 'disabled') | null;
-      /** Schedule Times Local */
-      schedule_times_local?: string[] | null;
-      /** Schedule Timezone */
-      schedule_timezone?: string | null;
-    };
-    /** ValidationError */
-    ValidationError: {
-      /** Location */
-      loc: (string | number)[];
-      /** Message */
-      msg: string;
-      /** Error Type */
-      type: string;
-      /** Input */
-      input?: unknown;
-      /** Context */
-      ctx?: Record<string, never>;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  health_health_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            [key: string]: string;
-          };
-        };
-      };
-    };
-  };
-  gmail_oauth_start_api_v1_oauth_gmail_start_get: {
-    parameters: {
-      query?: {
-        return_to?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  gmail_oauth_callback_api_v1_oauth_gmail_callback_get: {
-    parameters: {
-      query: {
-        code: string;
-        state: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_oauth_state?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_accounts_api_v1_accounts_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['AccountsListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  delete_account_api_v1_accounts__account_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        account_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  patch_account_api_v1_accounts__account_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        account_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ConnectedAccountPatchRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ConnectedAccountOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_rules_api_v1_rubric_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RubricRulesListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  create_rule_api_v1_rubric_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RubricRuleIn'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RubricRuleOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  update_rule_api_v1_rubric__rule_id__put: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        rule_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RubricRuleIn'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RubricRuleOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  delete_rule_api_v1_rubric__rule_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        rule_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_job_matches_api_v1_jobs_get: {
-    parameters: {
-      query?: {
-        /** @description When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor. */
-        include_filtered?: boolean;
-        limit?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['JobMatchesListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_filters_api_v1_job_filters_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['JobFiltersListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  create_filter_api_v1_job_filters_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['JobFilterIn'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['JobFilterOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  update_filter_api_v1_job_filters__filter_id__put: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        filter_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['JobFilterIn'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['JobFilterOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  delete_filter_api_v1_job_filters__filter_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        filter_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_suggestions_api_v1_unsubscribes_get: {
-    parameters: {
-      query?: {
-        /** @description Include rows the user has dismissed (for an undo UI). */
-        include_dismissed?: boolean;
-        limit?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UnsubscribeSuggestionsListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  dismiss_suggestion_api_v1_unsubscribes__suggestion_id__dismiss_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        suggestion_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        suggestion_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  hygiene_stats_api_v1_hygiene_stats_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HygieneStatsResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_emails_api_v1_emails_get: {
-    parameters: {
-      query?: {
-        bucket?: ('must_read' | 'good_to_read' | 'ignore' | 'waste') | null;
-        account_id?: string | null;
-        limit?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['EmailsListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  patch_email_bucket_api_v1_emails__email_id__bucket_patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        email_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['EmailBucketPatchRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['EmailRowOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  get_preferences_api_v1_preferences_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserPreferencesOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  patch_preferences_api_v1_preferences_patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['PreferencesPatchRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserPreferencesOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  start_manual_run_api_v1_runs_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ManualRunRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      202: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ManualRunResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  get_run_api_v1_runs__run_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        run_id: string;
-      };
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RunStatusResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  list_history_api_v1_history_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RunsListResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  digest_today_api_v1_digest_today_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DigestTodayResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  news_digest_api_v1_news_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['NewsDigestResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  get_profile_api_v1_profile_me_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserProfileOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  patch_profile_api_v1_profile_me_patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UserProfilePatchRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserProfileOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  get_schedule_api_v1_profile_me_schedule_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserScheduleOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  patch_schedule_api_v1_profile_me_schedule_patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        briefed_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UserSchedulePatchRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserScheduleOut'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    gmail_oauth_start_api_v1_oauth_gmail_start_get: {
+        parameters: {
+            query?: {
+                return_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gmail_oauth_callback_api_v1_oauth_gmail_callback_get: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_oauth_state?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_accounts_api_v1_accounts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_account_api_v1_accounts__account_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_account_api_v1_accounts__account_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectedAccountPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectedAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rules_api_v1_rubric_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RubricRulesListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rule_api_v1_rubric_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RubricRuleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RubricRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rule_api_v1_rubric__rule_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RubricRuleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RubricRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_rule_api_v1_rubric__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_job_matches_api_v1_jobs_get: {
+        parameters: {
+            query?: {
+                /** @description When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor. */
+                include_filtered?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobMatchesListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_filters_api_v1_job_filters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobFiltersListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_filter_api_v1_job_filters_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobFilterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobFilterOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_filter_api_v1_job_filters__filter_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filter_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobFilterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobFilterOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_filter_api_v1_job_filters__filter_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filter_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_suggestions_api_v1_unsubscribes_get: {
+        parameters: {
+            query?: {
+                /** @description Include rows the user has dismissed (for an undo UI). */
+                include_dismissed?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsubscribeSuggestionsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_suggestion_api_v1_unsubscribes__suggestion_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hygiene_stats_api_v1_hygiene_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HygieneStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_emails_api_v1_emails_get: {
+        parameters: {
+            query?: {
+                bucket?: ("must_read" | "good_to_read" | "ignore" | "waste") | null;
+                account_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_email_bucket_api_v1_emails__email_id__bucket_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                email_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailBucketPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailRowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preferences_api_v1_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_preferences_api_v1_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferencesPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_manual_run_api_v1_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_v1_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_history_api_v1_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    digest_today_api_v1_digest_today_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DigestTodayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    news_digest_api_v1_news_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDigestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profile_api_v1_profile_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_profile_api_v1_profile_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserProfilePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_schedule_api_v1_profile_me_schedule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserScheduleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_schedule_api_v1_profile_me_schedule_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserSchedulePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserScheduleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
 }
