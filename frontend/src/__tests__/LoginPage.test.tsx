@@ -22,7 +22,9 @@ describe('<LoginPage>', () => {
         <LoginPage />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { level: 1, name: /welcome to briefed/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: /welcome to briefed/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/read-only Gmail access/i)).toBeInTheDocument();
   });
 

@@ -34,9 +34,7 @@ const account = {
   last_sync_at: '2026-04-25T10:00:00Z',
 };
 
-const renderCard = (
-  overrides: Partial<typeof account> = {},
-): { client: QueryClient } => {
+const renderCard = (overrides: Partial<typeof account> = {}): { client: QueryClient } => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>

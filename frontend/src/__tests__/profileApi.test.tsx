@@ -10,11 +10,12 @@ import {
 type FetchMock = ReturnType<typeof vi.fn>;
 
 const mockFetch = (status = 200, body: unknown = {}): FetchMock => {
-  const fn = vi.fn(async () =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    }),
+  const fn = vi.fn(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      }),
   );
   globalThis.fetch = fn as unknown as typeof fetch;
   return fn;

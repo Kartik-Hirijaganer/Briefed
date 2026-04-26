@@ -66,16 +66,12 @@ describe('<AccountsPage>', () => {
   it('renders the empty state when no accounts are connected', async () => {
     apiMock.GET.mockResolvedValue({ data: { accounts: [] } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText(/no gmail accounts yet/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/no gmail accounts yet/i)).toBeInTheDocument());
   });
 
   it('renders the error state on a failed fetch', async () => {
     apiMock.GET.mockResolvedValue({ error: { detail: 'outage' }, response: { status: 500 } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText(/could not load accounts/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/could not load accounts/i)).toBeInTheDocument());
   });
 });

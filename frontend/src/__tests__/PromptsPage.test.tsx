@@ -59,7 +59,10 @@ describe('<PromptsPage>', () => {
   });
 
   it('renders the error state on a failed fetch', async () => {
-    apiMock.GET.mockResolvedValue({ error: { detail: 'rubric outage' }, response: { status: 500 } });
+    apiMock.GET.mockResolvedValue({
+      error: { detail: 'rubric outage' },
+      response: { status: 500 },
+    });
     renderPage();
     await waitFor(() => expect(screen.getByText(/could not load rubric/i)).toBeInTheDocument());
   });

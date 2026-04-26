@@ -64,10 +64,9 @@ describe('<UnsubscribePage>', () => {
     await waitFor(() => expect(screen.getByText('noisy@news.example')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /keep/i }));
     await waitFor(() => expect(apiMock.POST).toHaveBeenCalled());
-    expect(apiMock.POST).toHaveBeenCalledWith(
-      '/api/v1/unsubscribes/{suggestion_id}/dismiss',
-      { params: { path: { suggestion_id: 's1' } } },
-    );
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/unsubscribes/{suggestion_id}/dismiss', {
+      params: { path: { suggestion_id: 's1' } },
+    });
   });
 
   it('POSTs the confirm endpoint when "Mark unsubscribed" is clicked', async () => {
@@ -78,18 +77,15 @@ describe('<UnsubscribePage>', () => {
     await waitFor(() => expect(screen.getByText('noisy@news.example')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /mark unsubscribed/i }));
     await waitFor(() => expect(apiMock.POST).toHaveBeenCalled());
-    expect(apiMock.POST).toHaveBeenCalledWith(
-      '/api/v1/unsubscribes/{suggestion_id}/confirm',
-      { params: { path: { suggestion_id: 's1' } } },
-    );
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/unsubscribes/{suggestion_id}/confirm', {
+      params: { path: { suggestion_id: 's1' } },
+    });
   });
 
   it('renders the empty state when no suggestions', async () => {
     apiMock.GET.mockResolvedValue({ data: { suggestions: [] } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText(/no suggestions right now/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/no suggestions right now/i)).toBeInTheDocument());
   });
 
   it('renders the error state on a failed fetch', async () => {

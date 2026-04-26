@@ -84,7 +84,9 @@ describe('<ScanNowButton>', () => {
   it('triggers a scan when the SCAN_NOW_EVENT fires', async () => {
     apiMock.POST.mockResolvedValue({ data: { run_id: 'r2' } });
     renderButton();
-    await waitFor(() => expect(screen.getByRole('button', { name: /start a manual scan/i })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start a manual scan/i })).toBeInTheDocument(),
+    );
     await act(async () => {
       window.dispatchEvent(new Event('briefed-scan-now'));
     });

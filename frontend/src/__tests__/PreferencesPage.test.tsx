@@ -57,9 +57,7 @@ describe('<PreferencesPage>', () => {
     apiMock.PATCH.mockResolvedValue({ data: { ...basePrefs, redact_pii: true } });
     const user = userEvent.setup();
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByLabelText(/redact pii/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByLabelText(/redact pii/i)).toBeInTheDocument());
     await user.click(screen.getByLabelText(/redact pii/i));
     await waitFor(() => expect(apiMock.PATCH).toHaveBeenCalled());
     expect(apiMock.PATCH).toHaveBeenCalledWith('/api/v1/preferences', {
