@@ -12,13 +12,15 @@ short, dated, numbered, immutable once accepted.
 - **Numbering.** Monotonic; do not reuse numbers.
 - **Naming.** `NNNN-short-slug.md`.
 
-| ADR  | Title                                                 | Status   |
-|------|-------------------------------------------------------|----------|
-| 0001 | Scheduled sync over Gmail push                        | Accepted |
-| 0002 | Gemini Flash primary, Claude Haiku fallback           | Accepted |
-| 0003 | AWS Lambda + SnapStart over Fargate                   | Accepted |
-| 0004 | Supabase for 1.0.0, portable to RDS                   | Accepted |
-| 0005 | PWA over native iOS                                   | Accepted |
-| 0006 | Recommend-only in release 1.0.0                       | Accepted |
-| 0007 | `MailboxProvider` interface                           | Accepted |
-| 0008 | KMS CMK for token-wrap key                            | Accepted |
+| ADR  | Title                                                 | Status                  |
+|------|-------------------------------------------------------|-------------------------|
+| 0001 | Scheduled sync over Gmail push                        | Accepted                |
+| 0002 | Gemini Flash primary, Claude Haiku fallback           | Superseded by ADR 0009  |
+| 0003 | AWS Lambda + SnapStart over Fargate                   | Accepted                |
+| 0004 | Supabase for 1.0.0, portable to RDS                   | Accepted                |
+| 0005 | PWA over native iOS                                   | Accepted                |
+| 0006 | Recommend-only in release 1.0.0                       | Accepted                |
+| 0007 | `MailboxProvider` interface                           | Accepted                |
+| 0008 | KMS CMK for token-wrap key                            | Accepted                |
+| 0009 | OpenRouter as the LLM routing layer                   | Accepted                |
+| 0010 | LLM prompt redaction                                  | Accepted                |

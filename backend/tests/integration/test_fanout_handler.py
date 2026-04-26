@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +26,14 @@ class _FakeSqs:
 
 
 async def _seed(session: AsyncSession, *, count: int = 3) -> list[ConnectedAccount]:
-    user = User(email="o@x.com", tz="UTC", status="active")
+    user = User(
+        email="o@x.com",
+        tz="UTC",
+        status="active",
+        schedule_frequency="once_daily",
+        schedule_times_local=["08:00"],
+        schedule_timezone="UTC",
+    )
     session.add(user)
     await session.flush()
     accounts: list[ConnectedAccount] = []
@@ -51,7 +61,14 @@ async def test_fanout_enqueues_only_auto_scan_accounts(
         sqs=sqs,
         ingest_queue_url="https://sqs.local/ingest",
     )
-    enqueued = await run_fanout(deps=deps)
+    # Track C — Phase II.4: a user only fans out when ``is_due``. Pin
+    # the clock inside the 08:00 ±7:30 slot window so the user is
+    # eligible; the auto_scan filter still skips one of three accounts.
+    with patch(
+        "app.workers.handlers.fanout.utcnow",
+        return_value=datetime(2026, 4, 25, 8, 5, tzinfo=ZoneInfo("UTC")),
+    ):
+        enqueued = await run_fanout(deps=deps)
     assert enqueued == 2
     assert len(sqs.sent) == 2
 

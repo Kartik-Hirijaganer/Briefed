@@ -8,7 +8,11 @@ middleware is the belt-and-braces tier when CloudFront is bypassed.
 CSP rules (kept tight per Phase 8 exit criteria):
 
 * ``default-src 'self'`` — block any cross-origin resource by default.
-* ``script-src 'self'`` — no inline scripts; Vite emits hashed bundles.
+* ``script-src 'self' 'sha256-...'`` — Vite emits hashed bundles. The
+  one inline script is the FOUC theme resolver in
+  ``frontend/index.html`` (Track C — Phase I.5); its body is pinned
+  via SHA-256 hash so altering it without bumping the hash blocks
+  the script.
 * ``style-src 'self' 'unsafe-inline'`` — Tailwind injects inline style
   blocks for the variable layer; we cannot drop ``'unsafe-inline'``
   without a runtime hash list. Acceptable because we forbid runtime
@@ -41,10 +45,19 @@ if TYPE_CHECKING:  # pragma: no cover
 # middleware cannot drift. Dev / Storybook builds widen ``connect-src``
 # via the ``BRIEFED_CSP_RELAX`` toggle wired into Settings later if
 # needed; production stays this strict.
+_FOUC_SCRIPT_HASH = "'sha256-fR2NYStsW2BshKwCzIT9vedLP8WxYCyrqpkonquA9ss='"
+"""SHA-256 of the inline FOUC theme resolver in ``frontend/index.html``.
+
+Pinned via CSP hash so the inline script runs without ``'unsafe-inline'``.
+Edits to the script body must recompute this hash + the matching meta
+CSP token; both are kept in lockstep.
+"""
+
+
 _CSP = "; ".join(
     [
         "default-src 'self'",
-        "script-src 'self'",
+        f"script-src 'self' {_FOUC_SCRIPT_HASH}",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",

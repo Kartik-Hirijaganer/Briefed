@@ -1,4 +1,5 @@
-import '@briefed/ui/tokens.css';
+import './styles/tokens.css';
+import './styles/fonts.css';
 import './index.css';
 
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';

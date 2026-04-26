@@ -6,9 +6,9 @@
  * `aws ssm put-parameter --overwrite` after bootstrap. Terraform only
  * owns the name + type so we can import values into Lambda roles.
  *
- * Parameters per plan §19.15:
- *   anthropic_api_key, gemini_api_key, supabase_url,
- *   supabase_service_key, google_oauth_client_secret,
+ * Parameters per ADR 0009:
+ *   openrouter_api_key, supabase_url, supabase_service_key,
+ *   supabase_db_url, google_oauth_client_id, google_oauth_client_secret,
  *   session_signing_key, vapid_private_key.
  */
 
@@ -34,8 +34,7 @@ variable "tags" {
 
 locals {
   parameter_names = [
-    "anthropic_api_key",
-    "gemini_api_key",
+    "openrouter_api_key",
     "supabase_url",
     "supabase_service_key",
     "supabase_db_url",

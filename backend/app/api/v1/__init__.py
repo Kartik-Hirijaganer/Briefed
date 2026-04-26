@@ -20,6 +20,7 @@ from app.api.v1.frontend import router as frontend_router
 from app.api.v1.job_filters import router as job_filters_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.oauth import router as oauth_router
+from app.api.v1.profile import router as profile_router
 from app.api.v1.rubric import router as rubric_router
 from app.api.v1.unsubscribes import hygiene_router, unsubscribes_router
 
@@ -35,5 +36,6 @@ api_router.include_router(unsubscribes_router)
 api_router.include_router(hygiene_router)
 api_router.include_router(emails_router)
 api_router.include_router(frontend_router)
+api_router.include_router(profile_router)
 
 __all__ = ["api_router"]

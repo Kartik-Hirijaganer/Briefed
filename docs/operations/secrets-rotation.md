@@ -7,9 +7,11 @@ rotation.
 
 ## Cadence
 
-- **SSM SecureString parameters** (`gemini_api_key`, `anthropic_api_key`,
+- **SSM SecureString parameters** (`openrouter_api_key`,
   `session_signing_key`, `google_oauth_client_*`, `supabase_*`):
-  rotate every 90 days or immediately on suspected leak.
+  rotate every 90 days or immediately on suspected leak. Per ADR 0009,
+  `openrouter_api_key` is the only LLM credential the application
+  reads.
 - **KMS CMK rotation** (`alias/${env}-token-wrap`,
   `alias/${env}-content-encrypt`): annual, AWS-managed automatic
   rotation enabled (`enable_key_rotation = true`). No application change

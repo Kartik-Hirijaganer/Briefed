@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 
+import { AppVersion } from '../components/AppVersion';
 import { OfflineBanners } from '../features/offline/OfflineBanners';
 import { QueuedActionsSheet } from '../features/offline/QueuedActionsSheet';
 
@@ -22,6 +23,9 @@ export function AppShell(): JSX.Element {
           <OfflineBanners />
           <Outlet />
         </div>
+        <footer className="mx-auto w-full max-w-5xl px-4 pb-6 text-right md:px-8">
+          <AppVersion />
+        </footer>
       </main>
       <QueuedActionsSheet />
       <BottomTabBar />

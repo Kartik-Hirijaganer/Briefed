@@ -1,31 +1,23 @@
-"""Provider adapters for the ``LLMProvider`` protocol (plan §19.4).
+"""Provider adapters for the ``LLMProvider`` protocol (ADR 0009).
 
-Phase 2 ships:
-
-* :class:`app.llm.providers.base.LLMProvider` — the structural protocol.
-* :class:`app.llm.providers.gemini.GeminiProvider` — primary per §20.1.
-* :class:`app.llm.providers.anthropic.AnthropicDirectProvider` — gated
-  fallback (Claude Haiku 4.5, hard cap 100 calls/day).
-
-Both concrete providers use async HTTP and avoid importing the SDKs at
-module import time so Lambda SnapStart does not snapshot heavy
-dependencies needed only on the hot path.
+OpenRouter is the sole direct LLM provider. The legacy Gemini /
+Anthropic adapters were deleted at T+30 days post-cutover per the
+plan; their git history is the rollback path if a future regression
+needs them.
 """
 
-from app.llm.providers.anthropic import AnthropicDirectProvider
 from app.llm.providers.base import (
     LLMCallResult,
     LLMProvider,
     LLMProviderError,
     PromptSpec,
 )
-from app.llm.providers.gemini import GeminiProvider
+from app.llm.providers.openrouter import OpenRouterProvider
 
 __all__ = [
-    "AnthropicDirectProvider",
-    "GeminiProvider",
     "LLMCallResult",
     "LLMProvider",
     "LLMProviderError",
+    "OpenRouterProvider",
     "PromptSpec",
 ]

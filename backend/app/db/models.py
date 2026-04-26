@@ -89,16 +89,41 @@ class TimestampMixin:
     )
 
 
+_SCHEDULE_FREQUENCY_CHOICES = ("once_daily", "twice_daily", "disabled")
+"""Allowed values for ``users.schedule_frequency`` (Track C — Phase II.1)."""
+
+_THEME_PREFERENCE_CHOICES = ("system", "light", "dark")
+"""Allowed values for ``users.theme_preference`` (Track C — Phase II.1)."""
+
+
 class User(Base, TimestampMixin):
-    """Account owner (plan §8 ``users`` table).
+    """Account owner (plan §8 ``users`` table + Track C extensions).
 
     Attributes:
         id: Primary key (UUIDv4).
         email: Owner email — unique, case-insensitive.
-        display_name: Optional display name.
+        display_name: Optional display name; consumed by the Track B
+            IdentityScrubber when present.
         tz: IANA timezone string (defaults to UTC).
         status: Lifecycle state (one of ``_USER_STATUS_CHOICES``).
         last_login_at: UTC timestamp of the most recent login.
+        email_aliases: Extra email addresses to scrub from prompts.
+        redaction_aliases: Free-form strings to scrub from prompts.
+        schedule_frequency: ``once_daily`` / ``twice_daily`` /
+            ``disabled``. Consumed by the slot predicate.
+        schedule_times_local: ``HH:MM`` local-time slots. ``len()``
+            must match :attr:`schedule_frequency` (DB CHECK on PG).
+        schedule_timezone: IANA timezone the local times resolve in.
+        presidio_enabled: Whether the redaction chain runs Presidio
+            ahead of regex / alias scrubbing.
+        theme_preference: Server-side mirror of the user's UI theme
+            override (``system`` / ``light`` / ``dark``).
+        last_run_finished_at: Schedule cursor — clears the per-user
+            "ran in the last hour" lockout.
+        current_run_id: Idempotency lock; set when fanout enqueues
+            and cleared on completion or 30-min stale-lock release.
+        current_run_started_at: Lock timestamp used to detect stale
+            locks left behind by crashed workers.
     """
 
     __tablename__ = "users"
@@ -106,6 +131,14 @@ class User(Base, TimestampMixin):
         CheckConstraint(
             "status IN ('active','disabled','deleted')",
             name="ck_users_status",
+        ),
+        CheckConstraint(
+            "schedule_frequency IN ('once_daily','twice_daily','disabled')",
+            name="ck_users_schedule_frequency",
+        ),
+        CheckConstraint(
+            "theme_preference IN ('system','light','dark')",
+            name="ck_users_theme_preference",
         ),
     )
 
@@ -115,6 +148,40 @@ class User(Base, TimestampMixin):
     tz: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_aliases: Mapped[list[str]] = mapped_column(
+        StringArray(),
+        nullable=False,
+        default=list,
+    )
+    redaction_aliases: Mapped[list[str]] = mapped_column(
+        StringArray(),
+        nullable=False,
+        default=list,
+    )
+    schedule_frequency: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="once_daily",
+    )
+    schedule_times_local: Mapped[list[str]] = mapped_column(
+        StringArray(),
+        nullable=False,
+        default=lambda: ["08:00"],
+    )
+    schedule_timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="UTC",
+    )
+    presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    theme_preference: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="system",
+    )
+    last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_run_id: Mapped[str | None] = mapped_column(Text)
+    current_run_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     accounts: Mapped[list[ConnectedAccount]] = relationship(
         back_populates="owner",
@@ -551,6 +618,9 @@ class PromptCallLog(Base, TimestampMixin):
         status: ``ok`` / ``fallback`` / ``error`` / ``skipped``.
         provider: ``gemini`` / ``anthropic_direct`` / ``bedrock`` / ...
         run_id: Optional digest-run that triggered the call.
+        redaction_summary: ``{kind: count}`` from the Track B sanitizer
+            chain. ``NULL`` when no sanitizer was applied. The sanitizer
+            ``reversal_map`` is **never** stored here (ADR 0010).
     """
 
     __tablename__ = "prompt_call_log"
@@ -584,6 +654,7 @@ class PromptCallLog(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="ok")
     provider: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     run_id: Mapped[uuid.UUID | None] = mapped_column()
+    redaction_summary: Mapped[Any | None] = mapped_column(json_column())
 
 
 _SUMMARY_KIND_CHOICES = ("email", "tech_news_cluster")

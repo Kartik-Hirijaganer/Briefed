@@ -53,7 +53,8 @@ export function Dialog(props: DialogProps): JSX.Element | null {
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'var(--overlay-scrim)' }}
     >
       <Motion
         role="dialog"

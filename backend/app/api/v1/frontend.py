@@ -7,8 +7,10 @@ thin: selectors live here, pipeline writes stay with their existing repos.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID
 
@@ -28,6 +30,7 @@ from app.db.models import (
     Summary,
     TechNewsCluster,
     TechNewsClusterMember,
+    User,
     UserPreference,
 )
 from app.schemas.emails import EmailBucket, EmailRowOut
@@ -62,6 +65,40 @@ _BUCKETS: tuple[EmailBucket, ...] = ("must_read", "good_to_read", "ignore", "was
 
 _PREVIEW_LIMIT = 5
 """Dashboard preview size."""
+
+_VERSION_FILE = (
+    Path(__file__).resolve().parents[3].parent / "packages" / "contracts" / "version.json"
+)
+"""Canonical app-version file (Track C — Phase I.8).
+
+Single source of truth shared with the frontend via Vite's
+``__APP_VERSION__`` define and with the backend OpenAPI pin via
+``app.__version__``. Read at module import so cold-start cost is
+amortized into the SnapStart snapshot.
+"""
+
+
+def _load_app_version() -> str:
+    """Return the canonical app version from ``version.json``.
+
+    Falls back to ``"0.0.0"`` when the file is missing or malformed —
+    an accidental delete should not wedge import.
+
+    Returns:
+        Semver string from ``packages/contracts/version.json``.
+    """
+    try:
+        with _VERSION_FILE.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+        version = payload.get("version")
+    except (OSError, json.JSONDecodeError):
+        return "0.0.0"
+    return version if isinstance(version, str) and version else "0.0.0"
+
+
+APP_VERSION: str = _load_app_version()
+"""Frozen at import time — the same value the FastAPI ``info.version``
+field uses (see ``app.__init__``)."""
 
 
 @router.get(
@@ -138,8 +175,35 @@ async def start_manual_run(
     )
     session.add(run)
     await session.flush()
+    # Track C — Phase II.7: manual runs bypass the schedule filter but
+    # still acquire the per-user idempotency lock so a worker that
+    # crashes mid-run cannot fan out twice on the next EventBridge tick.
+    await _acquire_user_lock(session=session, user_id=user_id, run_id=run.id, now=now)
     _enqueue_ingest_messages(run_id=run.id, user_id=user_id, accounts=accounts)
     return ManualRunResponse(run_id=run.id, accounts_queued=len(accounts))
+
+
+async def _acquire_user_lock(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    run_id: UUID,
+    now: datetime,
+) -> None:
+    """Stamp the per-user run lock for ``run_id``.
+
+    Args:
+        session: Open DB session.
+        user_id: Authenticated caller.
+        run_id: Active digest-run id.
+        now: UTC timestamp for the lock.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        return
+    user.current_run_id = str(run_id)
+    user.current_run_started_at = now
+    await session.flush()
 
 
 @router.get(

@@ -82,6 +82,13 @@ endif
 typecheck: ## Strict type check (Python)
 	mypy
 
+.PHONY: dead-check
+dead-check: ## Find unused code (Python: vulture, Frontend: knip)
+	vulture backend/app --min-confidence 80
+ifdef FRONTEND_READY
+	npm --workspace frontend run dead-check
+endif
+
 # --------------------------------------------------------------------------- #
 # Tests                                                                       #
 # --------------------------------------------------------------------------- #

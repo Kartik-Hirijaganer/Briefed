@@ -161,7 +161,7 @@ def merge_with_env(
         ssm_values: Short-name → value mapping returned by
             :func:`fetch_parameters`.
         field_to_ssm: Mapping from config-field name to the SSM short-name
-            it resolves from (e.g. ``{"gemini_api_key": "gemini_api_key"}``).
+            it resolves from (e.g. ``{"openrouter_api_key": "openrouter_api_key"}``).
 
     Returns:
         A new ``dict[str, str]`` keyed by config-field name.

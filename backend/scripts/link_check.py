@@ -53,10 +53,18 @@ def _resolve(base: Path, href: str) -> Path:
 
 
 def _slugify(heading: str) -> str:
-    """Approximate GitHub's heading-to-anchor algorithm."""
+    """Approximate GitHub's heading-to-anchor algorithm.
+
+    GitHub's slug strips non-word punctuation but preserves the
+    *spacing* around it: ``(token + content CMKs)`` collapses to
+    ``token--content-cmks`` because ``+`` is removed from between two
+    spaces, and each remaining space converts to a single hyphen
+    (no run-collapsing). Match that behavior so anchors survive the
+    link-check.
+    """
     text = heading.strip().lower()
     text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"\s+", "-", text).strip("-")
+    text = text.replace(" ", "-").strip("-")
     return text
 
 
