@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as ApiClient from '../api/client';
+import type { Schemas } from '../api/types';
 import { AccountCard } from '../features/settings/AccountCard';
 
 const apiMock = vi.hoisted(() => ({ PATCH: vi.fn(), DELETE: vi.fn() }));
@@ -21,11 +22,12 @@ vi.mock('../hooks/useBreakpoint', () => ({ useBreakpoint: () => breakpointMock.v
 vi.mock('../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
 vi.mock('../offline/mutations', () => ({ enqueueMutation: vi.fn() }));
 
-const account = {
+const account: Schemas['ConnectedAccount'] = {
   id: 'a1',
   email: 'me@example.com',
   display_name: 'Personal',
-  status: 'active' as const,
+  provider: 'gmail',
+  status: 'active',
   auto_scan_enabled: true,
   exclude_from_global_digest: false,
   emails_ingested_24h: 12,
@@ -113,7 +115,12 @@ describe('<AccountCard>', () => {
   });
 
   it('renders inherit-global hint when auto_scan_enabled is null', () => {
-    renderCard({ auto_scan_enabled: null });
+    // The OpenAPI schema declares ``auto_scan_enabled: boolean`` with a
+    // default, but the component renders an "inherit global" hint when
+    // the row is null at runtime (e.g. before the user has flipped the
+    // switch). Cast through ``unknown`` so the test exercises that
+    // runtime path without changing the contract.
+    renderCard({ auto_scan_enabled: null as unknown as boolean });
     expect(screen.getByText(/inherit global/i)).toBeInTheDocument();
   });
 });

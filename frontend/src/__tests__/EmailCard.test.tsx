@@ -3,16 +3,17 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { EmailCard } from '../features/email/EmailCard';
+import type { Schemas } from '../api/types';
 
-const baseEmail = {
+const baseEmail: Schemas['EmailRow'] = {
   id: 'e1',
   account_email: 'me@example.com',
   thread_id: 't1',
   subject: 'Quarterly review tomorrow',
   sender: 'manager@example.com',
-  bucket: 'must_read' as const,
+  bucket: 'must_read',
   reasons: ['rubric'],
-  decision_source: 'rubric',
+  decision_source: 'rule',
   confidence: 0.92,
   summary_excerpt: 'Please confirm by 5pm.',
   received_at: '2026-04-25T10:00:00Z',
