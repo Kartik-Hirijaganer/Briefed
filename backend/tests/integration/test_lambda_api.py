@@ -15,6 +15,7 @@ per-invocation async loop setup.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -22,6 +23,22 @@ import pytest
 
 from app import __version__
 from app.lambda_api import mangum_handler
+
+
+@pytest.fixture
+def _ensure_event_loop() -> None:
+    """Ensure the main thread owns an event loop before invoking Mangum.
+
+    Mangum 0.21 calls ``asyncio.get_event_loop()`` inside its handler;
+    after pytest-asyncio 1.x closes the per-test loop, no current loop
+    remains and ``get_event_loop()`` raises ``RuntimeError``. AWS Lambda's
+    runtime always provides a loop, so this fixture mirrors that
+    guarantee for the test environment.
+    """
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
 
 @pytest.fixture(scope="module")
@@ -65,6 +82,7 @@ def function_url_health_event() -> dict[str, Any]:
 
 def test_lambda_api_health_returns_200(
     function_url_health_event: dict[str, Any],
+    _ensure_event_loop: None,
 ) -> None:
     """Mangum-wrapped FastAPI app returns 200 ``{status: ok}`` for ``/health``.
 

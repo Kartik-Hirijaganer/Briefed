@@ -1380,7 +1380,7 @@
           "frontend"
         ],
         "summary": "Start a manual digest run",
-        "description": "Create a digest run and enqueue one ingest message per selected account.",
+        "description": "Create a digest run and enqueue one ingest message per selected account.\n\nPlan \u00a719.16 + \u00a720.2 cap manual triggers at ``settings.manual_run_daily_cap``\nper user per rolling 24h window; the limiter raises ``429`` with a\n``Retry-After`` header when exhausted.",
         "operationId": "start_manual_run_api_v1_runs_post",
         "parameters": [
           {
@@ -1651,6 +1651,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NewsDigestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile/me": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get the caller's profile",
+        "description": "Return the caller's profile row.",
+        "operationId": "get_profile_api_v1_profile_me_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Update the caller's profile",
+        "description": "Apply a partial profile update.\n\nArgs:\n    payload: Validated patch body.\n    user_id: Authenticated caller, injected by :func:`current_user_id`.\n    session: DB session.\n\nReturns:\n    The fresh profile row after the update.",
+        "operationId": "patch_profile_api_v1_profile_me_patch",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfilePatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile/me/schedule": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get the caller's schedule",
+        "description": "Return cadence + times + a ``next_run_at_utc`` preview.",
+        "operationId": "get_schedule_api_v1_profile_me_schedule_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserScheduleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Update the caller's schedule",
+        "description": "Apply a partial schedule update with cross-field consistency.\n\nWhen the caller sends only one of ``schedule_frequency`` or\n``schedule_times_local``, the cadence/slot-count invariant is\nre-checked against the existing row. Sending a frequency change\nwithout matching slots (or vice versa) returns 422.",
+        "operationId": "patch_schedule_api_v1_profile_me_schedule_patch",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSchedulePatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserScheduleOut"
                 }
               }
             }
@@ -2963,6 +3179,247 @@
         ],
         "title": "UserPreferencesOut",
         "description": "Current user's global PWA preferences.\n\nAttributes:\n    auto_execution_enabled: Global scheduled-scan switch.\n    digest_send_hour_utc: Hour of day for the daily digest.\n    redact_pii: Whether prompt input redaction is enabled.\n    secure_offline_mode: Whether the PWA should encrypt local offline\n        data with a passcode.\n    retention_policy_json: Operator-readable retention knobs."
+      },
+      "UserProfileOut": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email_aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Email Aliases"
+          },
+          "redaction_aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Redaction Aliases"
+          },
+          "presidio_enabled": {
+            "type": "boolean",
+            "title": "Presidio Enabled",
+            "default": true
+          },
+          "theme_preference": {
+            "type": "string",
+            "enum": [
+              "system",
+              "light",
+              "dark"
+            ],
+            "title": "Theme Preference",
+            "default": "system"
+          },
+          "schedule_frequency": {
+            "type": "string",
+            "enum": [
+              "once_daily",
+              "twice_daily",
+              "disabled"
+            ],
+            "title": "Schedule Frequency",
+            "default": "once_daily"
+          },
+          "schedule_times_local": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Schedule Times Local",
+            "default": [
+              "08:00"
+            ]
+          },
+          "schedule_timezone": {
+            "type": "string",
+            "title": "Schedule Timezone",
+            "default": "UTC"
+          }
+        },
+        "type": "object",
+        "title": "UserProfileOut",
+        "description": "Current user's profile (Track C \u2014 Phase II.3).\n\nAttributes:\n    display_name: Optional display name (consumed by IdentityScrubber).\n    email_aliases: Extra email addresses to scrub from prompts.\n    redaction_aliases: Free-form strings to scrub from prompts.\n    presidio_enabled: Whether Presidio runs ahead of regex scrubbing.\n    theme_preference: Server-side mirror of the user's UI theme.\n    schedule_frequency: Cadence \u2014 ``once_daily`` / ``twice_daily`` /\n        ``disabled``.\n    schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.\n    schedule_timezone: IANA timezone name."
+      },
+      "UserProfilePatchRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email_aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "email"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Aliases"
+          },
+          "redaction_aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redaction Aliases"
+          },
+          "presidio_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presidio Enabled"
+          },
+          "theme_preference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "light",
+                  "dark"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Preference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UserProfilePatchRequest",
+        "description": "Partial update body for ``PATCH /profile/me``.\n\nOmitted fields keep their current values. Email aliases are\nvalidated as RFC-5322 (IDN-aware via :class:`pydantic.EmailStr`)."
+      },
+      "UserScheduleOut": {
+        "properties": {
+          "schedule_frequency": {
+            "type": "string",
+            "enum": [
+              "once_daily",
+              "twice_daily",
+              "disabled"
+            ],
+            "title": "Schedule Frequency"
+          },
+          "schedule_times_local": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Schedule Times Local"
+          },
+          "schedule_timezone": {
+            "type": "string",
+            "title": "Schedule Timezone"
+          },
+          "next_run_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At Utc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_frequency",
+          "schedule_times_local",
+          "schedule_timezone"
+        ],
+        "title": "UserScheduleOut",
+        "description": "Schedule view of the user's profile.\n\n``next_run_at_utc`` is computed via :func:`app.core.scheduling.next_slot_utc`\nso the UI's \"next run\" preview agrees with the fanout filter."
+      },
+      "UserSchedulePatchRequest": {
+        "properties": {
+          "schedule_frequency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "once_daily",
+                  "twice_daily",
+                  "disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Frequency"
+          },
+          "schedule_times_local": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Times Local"
+          },
+          "schedule_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Timezone"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UserSchedulePatchRequest",
+        "description": "Partial update body for ``PATCH /profile/me/schedule``.\n\nValidation rules:\n* Each :attr:`schedule_times_local` entry must match ``HH:MM``.\n* :attr:`schedule_timezone` must be in :func:`zoneinfo.available_timezones`.\n* The frequency / slot-count invariant is checked when *both* are\n  provided in the same request, or against the existing row when\n  only one side is sent."
       },
       "ValidationError": {
         "properties": {
