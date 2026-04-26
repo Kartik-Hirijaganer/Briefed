@@ -112,10 +112,28 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 }
 
 resource "aws_cloudfront_distribution" "this" {
-  enabled         = true
-  is_ipv6_enabled = true
-  comment         = var.name
-  aliases         = var.aliases
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = var.name
+  aliases             = var.aliases
+  default_root_object = "index.html"
+
+  # SPA fallback — when the PWA is hit at a deep route on a hard
+  # refresh (e.g. /settings/accounts), S3 returns 403/404 because
+  # only the assets directly under the bucket exist. Rewrite both
+  # to /index.html so React Router can take over client-side.
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
 
   origin {
     origin_id                = local.s3_origin_id
