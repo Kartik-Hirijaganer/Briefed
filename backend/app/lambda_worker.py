@@ -235,6 +235,8 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     from app.services.classification.dispatch import enqueue_unclassified_for_account
     from app.services.gmail.client import GmailClient
     from app.services.gmail.provider import GmailProvider
+    from app.services.jobs.dispatch import enqueue_unextracted_for_account
+    from app.services.summarization import enqueue_unsummarized_for_run
     from app.workers.handlers.fanout import parse_ingest_body
     from app.workers.handlers.ingest import IngestDeps, handle_ingest
 
@@ -247,6 +249,8 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     classify_queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL", "")
+    summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
+    jobs_queue_url = os.environ.get("BRIEFED_JOBS_QUEUE_URL", "")
     raw_bucket = os.environ.get("BRIEFED_RAW_EMAIL_BUCKET", "")
     if message.store_raw_mime and not raw_bucket:
         raise RuntimeError("BRIEFED_RAW_EMAIL_BUCKET unset while raw MIME storage is enabled")
@@ -269,14 +273,37 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                 http_client=http,
             )
             stats = await handle_ingest(message, deps=deps)
+            sqs_client: SqsSender | None = None
             if stats.new and classify_queue_url:
-                sqs = _sqs_client()
+                sqs_client = _sqs_client()
                 await enqueue_unclassified_for_account(
                     session=session,
                     user_id=message.user_id,
                     account_id=message.account_id,
                     queue_url=classify_queue_url,
-                    sqs=sqs,
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                )
+            if summarize_queue_url:
+                if sqs_client is None:
+                    sqs_client = _sqs_client()
+                await enqueue_unsummarized_for_run(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=summarize_queue_url,
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                )
+            if jobs_queue_url:
+                if sqs_client is None:
+                    sqs_client = _sqs_client()
+                await enqueue_unextracted_for_account(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=jobs_queue_url,
+                    sqs=sqs_client,
                     run_id=message.run_id,
                 )
             await session.commit()
@@ -304,7 +331,10 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     from app.services.classification.repository import ClassificationsRepo
     from app.services.jobs.dispatch import enqueue_job_extract_for_email
     from app.services.prompts.registry import PromptRegistry
-    from app.services.summarization import enqueue_summary_for_email
+    from app.services.summarization import (
+        enqueue_summary_for_email,
+        enqueue_tech_news_cluster_for_account,
+    )
     from app.services.unsubscribe.dispatch import enqueue_hygiene_run_for_account
     from app.workers.handlers.classify import ClassifyDeps, handle_classify
 
@@ -344,6 +374,15 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     queue_url=summarize_queue_url,
                     sqs=sqs_client,
                     run_id=message.run_id,
+                )
+                await enqueue_tech_news_cluster_for_account(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=summarize_queue_url,
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                    trigger_email_id=message.email_id,
                 )
             if jobs_queue_url:
                 await enqueue_job_extract_for_email(

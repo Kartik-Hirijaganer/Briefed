@@ -39,13 +39,14 @@ export function EmailCard(props: EmailCardProps): JSX.Element {
       {onBucketChange ? (
         <div
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-between bg-surface px-4 text-xs font-medium"
+          className="absolute inset-0 z-0 flex items-center justify-between bg-surface px-4 text-xs font-medium"
         >
           <span className="text-accent">Must read</span>
           <span className="text-fg-muted">Ignore</span>
         </div>
       ) : null}
       <Motion
+        className="relative z-10"
         drag={onBucketChange ? 'x' : false}
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.18}
