@@ -103,12 +103,33 @@ jobs:
           }
           EOF
 
+      - name: Resolve dev database URL
+        id: db-url
+        env:
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          value="$DEV_DATABASE_URL"
+          if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+            value="$(aws ssm get-parameter \
+              --name /briefed/dev/supabase_db_url \
+              --with-decryption \
+              --query 'Parameter.Value' \
+              --output text)"
+          fi
+          if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+            echo "::error::Dev database URL is unset or still a placeholder."
+            exit 1
+          fi
+          echo "::add-mask::$value"
+          echo "database_url=$value" >> "$GITHUB_OUTPUT"
+
       - name: Run Alembic migrations against dev
         # Keep dev aligned with prod: additive migrations run before
         # Terraform publishes the new Lambda version/alias, so new code
         # never serves against an older schema.
         env:
-          BRIEFED_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          BRIEFED_DATABASE_URL: ${{ steps.db-url.outputs.database_url }}
           BRIEFED_RUNTIME: local
         run: |
           alembic -c backend/alembic.ini upgrade head
@@ -136,8 +157,8 @@ jobs:
           set -euo pipefail
           put_secret() {
             local name="$1" value="$2"
-            if [ -z "$value" ]; then
-              echo "skip: $name (no GitHub secret set)"
+            if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+              echo "skip: $name (no GitHub secret set or placeholder value)"
               return
             fi
             aws ssm put-parameter \
