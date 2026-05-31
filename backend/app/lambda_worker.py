@@ -236,6 +236,7 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     from app.services.gmail.client import GmailClient
     from app.services.gmail.provider import GmailProvider
     from app.services.jobs.dispatch import enqueue_unextracted_for_account
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.summarization import enqueue_unsummarized_for_run
     from app.workers.handlers.fanout import parse_ingest_body
     from app.workers.handlers.ingest import IngestDeps, handle_ingest
@@ -272,6 +273,7 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                 oauth_client_secret=_settings.google_oauth_client_secret,
                 http_client=http,
             )
+            await mark_run_running(session, message.run_id)
             stats = await handle_ingest(message, deps=deps)
             sqs_client: SqsSender | None = None
             if stats.new and classify_queue_url:
@@ -306,6 +308,11 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+            )
             await session.commit()
 
 
@@ -331,6 +338,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     from app.services.classification.repository import ClassificationsRepo
     from app.services.jobs.dispatch import enqueue_job_extract_for_email
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.summarization import (
         enqueue_summary_for_email,
         enqueue_tech_news_cluster_for_account,
@@ -363,6 +371,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                 repo=ClassificationsRepo(cipher=cipher),
                 content_cipher=cipher,
             )
+            await mark_run_running(session, message.run_id)
             await handle_classify(message, deps=deps)
             sqs_client = _sqs_client()
             if summarize_queue_url:
@@ -409,6 +418,11 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+            )
             await session.commit()
 
 
@@ -429,6 +443,7 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
     from app.db.session import get_sessionmaker
     from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.summarization import SummariesRepo, parse_summarize_body
     from app.workers.handlers.summarize import (
         SummarizeDeps,
@@ -459,10 +474,16 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
                 repo=SummariesRepo(cipher=cipher),
                 content_cipher=cipher,
             )
+            await mark_run_running(session, message.run_id)
             if isinstance(message, SummarizeEmailMessage):
                 await handle_summarize_email(message, deps=deps)
             else:
                 await handle_tech_news_cluster(message, deps=deps)
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+            )
             await session.commit()
 
 
@@ -485,6 +506,7 @@ async def _handle_jobs_record(record: _SqsRecord) -> None:
     from app.llm.factory import build_llm_client
     from app.services.jobs import JobMatchesRepo, parse_job_extract_body
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.workers.handlers.jobs import JobExtractDeps, handle_job_extract
 
     message = parse_job_extract_body(record.get("body", "{}"))
@@ -509,7 +531,13 @@ async def _handle_jobs_record(record: _SqsRecord) -> None:
                 repo=JobMatchesRepo(cipher=cipher),
                 content_cipher=cipher,
             )
+            await mark_run_running(session, message.run_id)
             await handle_job_extract(message, deps=deps)
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+            )
             await session.commit()
 
 
@@ -532,6 +560,7 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
     from app.db.session import get_sessionmaker
     from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.unsubscribe import (
         UnsubscribeSuggestionsRepo,
         parse_unsubscribe_body,
@@ -562,7 +591,13 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
                 registry=registry,
                 repo=UnsubscribeSuggestionsRepo(cipher=cipher),
             )
+            await mark_run_running(session, message.run_id)
             await handle_unsubscribe(message, deps=deps)
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+            )
             await session.commit()
 
 
