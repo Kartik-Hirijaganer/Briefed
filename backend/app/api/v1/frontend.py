@@ -170,6 +170,7 @@ async def start_manual_run(
             "classified": 0,
             "summarized": 0,
             "new_must_read": 0,
+            "account_ids": [str(account.id) for account in accounts],
         },
         cost_cents=0,
     )

@@ -96,6 +96,12 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
         calls.append(("jobs", kwargs["queue_url"]))
         return 1
 
+    async def _mark_run_running(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def _maybe_finalize_run(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
     monkeypatch.setenv("BRIEFED_TOKEN_WRAP_KEY_ALIAS", "alias/token")
     monkeypatch.setenv("BRIEFED_CONTENT_KEY_ALIAS", "alias/content")
     monkeypatch.setenv("BRIEFED_CLASSIFY_QUEUE_URL", "https://sqs.example/classify")
@@ -130,6 +136,8 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
         "app.services.jobs.dispatch.enqueue_unextracted_for_account",
         _enqueue_jobs,
     )
+    monkeypatch.setattr("app.services.runs.mark_run_running", _mark_run_running)
+    monkeypatch.setattr("app.services.runs.maybe_finalize_run", _maybe_finalize_run)
 
     message = IngestMessage(user_id=user_id, account_id=account_id, run_id=run_id)
     await _handle_ingest_record({"body": message.model_dump_json()})
