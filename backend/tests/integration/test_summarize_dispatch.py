@@ -28,6 +28,7 @@ from app.db.models import (
 )
 from app.services.summarization import (
     enqueue_summary_for_email,
+    enqueue_tech_news_cluster_for_account,
     enqueue_unsummarized_for_run,
     parse_summarize_body,
 )
@@ -144,6 +145,63 @@ async def test_enqueue_skips_already_summarized(test_session) -> None:
     kinds = [json.loads(m["Body"])["kind"] for m in sqs.messages]
     assert kinds.count("summarize_email") == 3
     assert kinds.count("tech_news_cluster") == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_cluster_for_newsletters_with_existing_email_summaries(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    for email in emails[2:4]:
+        test_session.add(
+            Summary(
+                kind="email",
+                email_id=email.id,
+                cluster_id=None,
+                prompt_version_id=None,
+                model="gemini-1.5-flash",
+                tokens_in=0,
+                tokens_out=0,
+                body_md_ct=b"\x00",
+                entities_ct=None,
+                cache_hit=False,
+                confidence=Decimal("0.0"),
+                batch_id=None,
+            ),
+        )
+    await test_session.flush()
+    sqs = _FakeSqs()
+
+    per_email, cluster = await enqueue_unsummarized_for_run(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert per_email == 1
+    assert cluster == 1
+    kinds = [json.loads(m["Body"])["kind"] for m in sqs.messages]
+    assert kinds == ["summarize_email", "tech_news_cluster"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_tech_news_cluster_requires_newsletter_trigger(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    enqueued = await enqueue_tech_news_cluster_for_account(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+        trigger_email_id=emails[1].id,
+    )
+
+    assert enqueued == 0
+    assert sqs.messages == []
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,7 @@ from app.services.summarization.cluster_router import (
 )
 from app.services.summarization.dispatch import (
     enqueue_summary_for_email,
+    enqueue_tech_news_cluster_for_account,
     enqueue_unsummarized_for_run,
     parse_summarize_body,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "build_call_result",
     "cluster_and_summarize",
     "enqueue_summary_for_email",
+    "enqueue_tech_news_cluster_for_account",
     "enqueue_unsummarized_for_run",
     "load_default_router",
     "parse_summarize_body",

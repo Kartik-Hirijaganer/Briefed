@@ -30,6 +30,8 @@ describe('<EmailCard>', () => {
   it('renders the screen-reader move-to actions when onBucketChange is provided', () => {
     const onBucketChange = vi.fn();
     render(<EmailCard email={baseEmail} onBucketChange={onBucketChange} />);
+    expect(screen.getByText('Quarterly review tomorrow')).toBeInTheDocument();
+    expect(screen.getByText(/manager@example.com/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /move to must read/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /move to ignore/i })).toBeInTheDocument();
   });
