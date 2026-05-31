@@ -38,6 +38,7 @@ export default defineConfig({
       workbox: {
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//, /^\/openapi\.json$/],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
         runtimeCaching: [
           {

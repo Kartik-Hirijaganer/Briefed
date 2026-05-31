@@ -8,6 +8,12 @@
  * surface.
  */
 
+import {
+  AWS_PAYLOAD_HASH_HEADER,
+  computePayloadSha256Hex,
+  shouldAttachPayloadHash,
+} from '../../api/payloadHash';
+
 /**
  *
  */
@@ -95,6 +101,13 @@ async function jsonFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   if (method !== 'GET' && method !== 'HEAD') {
     const csrf = readCsrfCookie();
     if (csrf) headers.set(CSRF_HEADER, csrf);
+  }
+  if (shouldAttachPayloadHash(method)) {
+    const bodyText = typeof init.body === 'string' ? init.body : '';
+    headers.set(
+      AWS_PAYLOAD_HASH_HEADER,
+      await computePayloadSha256Hex(new TextEncoder().encode(bodyText)),
+    );
   }
   const response = await fetch(url, { ...init, credentials: 'same-origin', headers });
   if (!response.ok) {

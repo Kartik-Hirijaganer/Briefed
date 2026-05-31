@@ -2,6 +2,11 @@ import createClient, { type Middleware } from 'openapi-fetch';
 
 import type { paths } from './schema';
 
+import {
+  AWS_PAYLOAD_HASH_HEADER,
+  computePayloadSha256Hex,
+  shouldAttachPayloadHash,
+} from './payloadHash';
 import { queryClient } from './queryClient';
 
 /**
@@ -32,6 +37,14 @@ export class ApiError extends Error {
 
 const CSRF_HEADER = 'X-CSRF-Token';
 const CSRF_COOKIE = 'briefed_csrf';
+const LOGIN_PATH = '/login';
+
+const buildLoginRedirectPath = (): string => {
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (!currentPath || currentPath === '/') return LOGIN_PATH;
+  const params = new URLSearchParams({ next: currentPath });
+  return `${LOGIN_PATH}?${params.toString()}`;
+};
 
 const readCookie = (name: string): string | undefined => {
   const entries = document.cookie.split('; ');
@@ -53,11 +66,20 @@ const csrfMiddleware: Middleware = {
   async onResponse({ response }) {
     if (response.status === 401) {
       queryClient.clear();
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.assign('/login');
+      if (!window.location.pathname.startsWith(LOGIN_PATH)) {
+        window.location.assign(buildLoginRedirectPath());
       }
     }
     return response;
+  },
+};
+
+const payloadHashMiddleware: Middleware = {
+  async onRequest({ request }) {
+    if (!shouldAttachPayloadHash(request.method)) return request;
+    const bodyBytes = await request.clone().arrayBuffer();
+    request.headers.set(AWS_PAYLOAD_HASH_HEADER, await computePayloadSha256Hex(bodyBytes));
+    return request;
   },
 };
 
@@ -80,6 +102,7 @@ export const api = createClient<paths>({
 });
 
 api.use(csrfMiddleware);
+api.use(payloadHashMiddleware);
 
 /**
  * Narrow `{ data, error }` envelope returned by openapi-fetch into the

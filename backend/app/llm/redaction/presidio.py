@@ -16,9 +16,11 @@ single opt-in live test (``PRESIDIO_LIVE=1``) covers a real model load.
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 from threading import Lock
 from typing import Any, Protocol
 
+from app.core.logging import get_logger
 from app.llm.redaction.types import RedactionResult
 
 # The recognizers Presidio runs by default cover names, locations,
@@ -66,6 +68,15 @@ _ENGINE_LOCK = Lock()
 # Single-element list so the lazy loader can populate the cache without
 # the ``global`` statement (PLW0603). ``[None]`` means "not loaded yet".
 _ENGINE_CACHE: list[tuple[_AnalyzerProtocol, _AnonymizerProtocol] | None] = [None]
+_ENGINE_UNAVAILABLE_REASON: list[str | None] = [None]
+_ENGINE_UNAVAILABLE_WARNED: list[bool] = [False]
+_DEFAULT_SPACY_MODEL = "en_core_web_lg"
+
+logger = get_logger(__name__)
+
+
+class PresidioUnavailableError(RuntimeError):
+    """Raised when Presidio cannot be initialized in the current runtime."""
 
 
 def _load_engines() -> tuple[_AnalyzerProtocol, _AnonymizerProtocol]:
@@ -76,10 +87,26 @@ def _load_engines() -> tuple[_AnalyzerProtocol, _AnonymizerProtocol]:
 
     Returns:
         ``(analyzer, anonymizer)`` ready to call ``analyze`` / ``anonymize``.
+
+    Raises:
+        PresidioUnavailableError: If the required spaCy model is not
+            bundled or the engine cannot be constructed.
     """
     with _ENGINE_LOCK:
+        unavailable_reason = _ENGINE_UNAVAILABLE_REASON[0]
+        if unavailable_reason is not None:
+            raise PresidioUnavailableError(unavailable_reason)
+
         cached = _ENGINE_CACHE[0]
         if cached is None:
+            if importlib.util.find_spec(_DEFAULT_SPACY_MODEL) is None:
+                reason = (
+                    f"Presidio spaCy model {_DEFAULT_SPACY_MODEL} is not installed; "
+                    "skipping Presidio redaction"
+                )
+                _ENGINE_UNAVAILABLE_REASON[0] = reason
+                raise PresidioUnavailableError(reason)
+
             from presidio_analyzer import (
                 AnalyzerEngine,  # type: ignore[import-not-found, unused-ignore]
             )
@@ -87,7 +114,12 @@ def _load_engines() -> tuple[_AnalyzerProtocol, _AnonymizerProtocol]:
                 AnonymizerEngine,  # type: ignore[import-not-found, unused-ignore]
             )
 
-            cached = (AnalyzerEngine(), AnonymizerEngine())  # type: ignore[no-untyped-call, unused-ignore]
+            try:
+                cached = (AnalyzerEngine(), AnonymizerEngine())  # type: ignore[no-untyped-call, unused-ignore]
+            except (Exception, SystemExit) as exc:
+                reason = f"Presidio engine load failed: {exc}"
+                _ENGINE_UNAVAILABLE_REASON[0] = reason
+                raise PresidioUnavailableError(reason) from exc
             _ENGINE_CACHE[0] = cached
         return cached
 
@@ -148,7 +180,14 @@ class PresidioSanitizer:
         if not text:
             return RedactionResult(text=text)
 
-        analyzer, anonymizer = self._engines()
+        try:
+            analyzer, anonymizer = self._engines()
+        except PresidioUnavailableError as exc:
+            if not _ENGINE_UNAVAILABLE_WARNED[0]:
+                logger.warning("redaction.presidio_unavailable", error=str(exc))
+                _ENGINE_UNAVAILABLE_WARNED[0] = True
+            return RedactionResult(text=text)
+
         analyzer_results = analyzer.analyze(
             text=text,
             language=self._language,
@@ -201,4 +240,4 @@ class PresidioSanitizer:
         )
 
 
-__all__ = ["PresidioSanitizer"]
+__all__ = ["PresidioSanitizer", "PresidioUnavailableError"]

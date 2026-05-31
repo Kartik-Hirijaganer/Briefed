@@ -59,12 +59,20 @@ describe('profileApi', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ display_name: 'Updated' });
     const headers = init?.headers as Headers;
     expect(headers.get('X-CSRF-Token')).toBe('csrf-token');
+    expect(headers.get('x-amz-content-sha256')).toBe(
+      '6e1c3f5311c2d4c49eff08c5727a6333ee9077146ad70f0bb8f46f4762551895',
+    );
   });
 
   it('PATCHes the schedule and returns the body', async () => {
     mockFetch(200, { schedule_frequency: 'twice_daily' });
     const result = await patchSchedule({ schedule_frequency: 'twice_daily' });
     expect(result).toEqual({ schedule_frequency: 'twice_daily' });
+    const [, init] = (globalThis.fetch as FetchMock).mock.calls[0]!;
+    const headers = init?.headers as Headers;
+    expect(headers.get('x-amz-content-sha256')).toBe(
+      '91634c9e96706f1a3bc7bbffbe6fc7d4d0f329b1068cb2eb9d3ce4e253764bcc',
+    );
   });
 
   it('throws on a non-2xx response', async () => {

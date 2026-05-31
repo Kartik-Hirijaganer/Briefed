@@ -83,3 +83,13 @@ def test_default_prompt_root_exists() -> None:
     # The real packages/prompts/triage/v1.md shipped with this repo.
     registry = PromptRegistry.load(default_prompt_root())
     assert registry.get("triage", version=1).spec.model.startswith("gemini")
+
+
+def test_default_prompt_root_uses_lambda_task_root(monkeypatch, tmp_path) -> None:
+    lambda_prompt_root = tmp_path / "packages" / "prompts"
+    _write(lambda_prompt_root, "triage", 1)
+    monkeypatch.setenv("LAMBDA_TASK_ROOT", str(tmp_path))
+
+    assert default_prompt_root() == lambda_prompt_root
+    registry = PromptRegistry.load()
+    assert registry.get("triage", version=1).spec.name == "triage"

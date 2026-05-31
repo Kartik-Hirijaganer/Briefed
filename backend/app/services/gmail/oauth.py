@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.clock import utcnow
 from app.core.errors import AuthError, ProviderError
@@ -86,6 +86,23 @@ class OAuthTokenBundle(BaseModel):
     scope: str = Field(default="")
     id_token: str | None = Field(default=None)
     token_type: str = Field(default="Bearer")
+
+
+class OAuthErrorPayload(BaseModel):
+    """OAuth error response returned by Google token endpoints.
+
+    Attributes:
+        error: Stable OAuth error code, such as ``invalid_grant``.
+        error_description: Optional human-readable provider explanation.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    error: str = Field(description="Stable OAuth error code returned by Google.")
+    error_description: str | None = Field(
+        default=None,
+        description="Optional provider explanation for the OAuth error.",
+    )
 
 
 def generate_pkce_pair() -> tuple[str, str]:
@@ -175,11 +192,17 @@ async def exchange_code(
         "redirect_uri": redirect_uri,
     }
     response = await _post_form(TOKEN_URL, payload, http_client)
-    if response.status_code == 400:
-        raise AuthError(f"Google rejected token exchange: {response.text}")
-    if response.status_code >= 500:
-        raise ProviderError(f"Google token endpoint unavailable: {response.status_code}")
-    return OAuthTokenBundle.model_validate(response.json())
+    body = _decode_json_response(response)
+    _raise_for_oauth_error(
+        response=response,
+        body=body,
+        auth_context="Google rejected token exchange",
+        provider_context="Google token endpoint unavailable",
+    )
+    try:
+        return OAuthTokenBundle.model_validate(body)
+    except ValidationError as exc:
+        raise ProviderError("Google token endpoint returned malformed token payload") from exc
 
 
 async def refresh_access_token(
@@ -213,11 +236,17 @@ async def refresh_access_token(
         "client_secret": client_secret,
     }
     response = await _post_form(TOKEN_URL, payload, http_client)
-    if response.status_code == 400:
-        raise AuthError(f"refresh token rejected: {response.text}")
-    if response.status_code >= 500:
-        raise ProviderError(f"token endpoint unavailable: {response.status_code}")
-    return OAuthTokenBundle.model_validate(response.json())
+    body = _decode_json_response(response)
+    _raise_for_oauth_error(
+        response=response,
+        body=body,
+        auth_context="refresh token rejected",
+        provider_context="token endpoint unavailable",
+    )
+    try:
+        return OAuthTokenBundle.model_validate(body)
+    except ValidationError as exc:
+        raise ProviderError("token endpoint returned malformed token payload") from exc
 
 
 async def revoke_token(
@@ -254,6 +283,52 @@ async def _post_form(
         async with httpx.AsyncClient(timeout=10.0) as client:
             return await client.post(url, data=data)
     return await http_client.post(url, data=data)
+
+
+def _decode_json_response(response: httpx.Response) -> object:
+    """Decode an HTTP JSON response body.
+
+    Args:
+        response: Raw provider response.
+
+    Returns:
+        Parsed JSON payload, or ``None`` when the body is empty or malformed.
+    """
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _raise_for_oauth_error(
+    *,
+    response: httpx.Response,
+    body: object,
+    auth_context: str,
+    provider_context: str,
+) -> None:
+    """Raise typed errors for OAuth provider failure responses.
+
+    Args:
+        response: Raw provider response.
+        body: Parsed JSON response body.
+        auth_context: Prefix for user/action-related OAuth failures.
+        provider_context: Prefix for upstream availability failures.
+
+    Raises:
+        AuthError: If Google returns an OAuth 4xx error.
+        ProviderError: If Google returns a 5xx error.
+    """
+    if response.status_code >= 500:
+        raise ProviderError(f"{provider_context}: {response.status_code}")
+    if isinstance(body, dict) and "error" in body:
+        error_payload = OAuthErrorPayload.model_validate(body)
+        detail = error_payload.error
+        if error_payload.error_description:
+            detail = f"{detail}: {error_payload.error_description}"
+        raise AuthError(f"{auth_context}: {detail}")
+    if response.status_code >= 400:
+        raise AuthError(f"{auth_context}: HTTP {response.status_code}")
 
 
 def expires_at_from_bundle(bundle: OAuthTokenBundle) -> datetime:

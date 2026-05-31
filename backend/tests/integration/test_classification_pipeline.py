@@ -210,6 +210,7 @@ async def test_llm_path_records_prompt_call_log(test_session) -> None:
     await test_session.flush()
     _account, email = await _seed_email(test_session, user)
     registered, prompt_version_id = await _registered_prompt(test_session)
+    test_session.expire(email, ["body"])
 
     engine = RuleEngine(user_rules=(), seed_waste=())
     primary = _FakeProvider(
@@ -238,6 +239,7 @@ async def test_llm_path_records_prompt_call_log(test_session) -> None:
             llm=llm,
             repo=repo,
             prompt_version_id=prompt_version_id,
+            content_cipher=cipher,
         ),
         session=test_session,
         rule_engine=engine,

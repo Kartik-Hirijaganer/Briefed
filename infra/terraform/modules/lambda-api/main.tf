@@ -50,6 +50,22 @@ variable "timeout_seconds" {
   default = 30
 }
 
+variable "reserved_concurrent_executions" {
+  description = "Concurrency reserved for interactive API traffic so scans cannot starve the PWA."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.reserved_concurrent_executions >= 0
+    error_message = "reserved_concurrent_executions must be zero or greater."
+  }
+}
+
+variable "function_url_auth_mode" {
+  type    = string
+  default = "NONE"
+}
+
 variable "env_vars" {
   type    = map(string)
   default = {}
@@ -113,14 +129,15 @@ resource "aws_iam_role_policy" "inline" {
 }
 
 resource "aws_lambda_function" "this" {
-  function_name = var.name
-  role          = aws_iam_role.this.arn
-  package_type  = "Image"
-  image_uri     = var.image_uri
-  publish       = true
-  memory_size   = var.memory_mb
-  timeout       = var.timeout_seconds
-  architectures = ["x86_64"]
+  function_name                  = var.name
+  role                           = aws_iam_role.this.arn
+  package_type                   = "Image"
+  image_uri                      = var.image_uri
+  publish                        = true
+  memory_size                    = var.memory_mb
+  timeout                        = var.timeout_seconds
+  architectures                  = ["x86_64"]
+  reserved_concurrent_executions = var.reserved_concurrent_executions
 
   # SnapStart intentionally omitted: AWS Lambda SnapStart does not
   # support container-image package_type ("ContainerImage is not
@@ -151,17 +168,7 @@ resource "aws_lambda_alias" "live" {
 resource "aws_lambda_function_url" "this" {
   function_name      = aws_lambda_function.this.function_name
   qualifier          = aws_lambda_alias.live.name
-  authorization_type = "NONE"
-
-  cors {
-    allow_origins = ["*"]
-    # OPTIONS (7 chars) violates AWS's 6-char-per-method constraint on
-    # cors.allowMethods. Browser preflight requests work without it
-    # being in this list — the API handles OPTIONS implicitly.
-    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
-    allow_headers = ["content-type", "authorization"]
-    max_age       = 86400
-  }
+  authorization_type = var.function_url_auth_mode
 }
 
 output "function_name" {
@@ -170,6 +177,11 @@ output "function_name" {
 
 output "function_url" {
   value = aws_lambda_function_url.this.function_url
+}
+
+output "alias_name" {
+  value       = aws_lambda_alias.live.name
+  description = "Alias the Function URL is published on; used for the CloudFront invoke permission qualifier."
 }
 
 output "role_arn" {

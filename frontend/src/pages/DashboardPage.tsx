@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { Alert, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
 
@@ -75,9 +76,18 @@ export default function DashboardPage(): JSX.Element {
       ) : digestQuery.data ? (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile label="Must read" value={digestQuery.data.counts.must_read} tone="accent" />
-            <StatTile label="Good to read" value={digestQuery.data.counts.good_to_read} />
-            <StatTile label="Ignore" value={digestQuery.data.counts.ignore} />
+            <StatTile
+              label="Must read"
+              value={digestQuery.data.counts.must_read}
+              tone="accent"
+              to="/must-read"
+            />
+            <StatTile
+              label="Good to read"
+              value={digestQuery.data.counts.good_to_read}
+              to="/good-to-read"
+            />
+            <StatTile label="Ignore" value={digestQuery.data.counts.ignore} to="/ignore" />
             <StatTile
               label="Today's cost"
               value={`$${(digestQuery.data.cost_cents_today / 100).toFixed(2)}`}
@@ -111,6 +121,7 @@ interface StatTileProps {
   readonly label: string;
   readonly value: number | string;
   readonly tone?: 'accent' | 'neutral';
+  readonly to?: string;
 }
 
 /**
@@ -120,8 +131,8 @@ interface StatTileProps {
  * @returns The rendered tile.
  */
 function StatTile(props: StatTileProps): JSX.Element {
-  const { label, value, tone } = props;
-  return (
+  const { label, value, tone, to } = props;
+  const content = (
     <Card>
       <div className="flex flex-col gap-1">
         <span className="text-xs uppercase tracking-wide text-fg-muted">{label}</span>
@@ -130,5 +141,15 @@ function StatTile(props: StatTileProps): JSX.Element {
         </span>
       </div>
     </Card>
+  );
+  if (!to) return content;
+  return (
+    <Link
+      to={to}
+      aria-label={`Open ${label} emails`}
+      className="block rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+    >
+      {content}
+    </Link>
   );
 }

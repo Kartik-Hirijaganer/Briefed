@@ -24,3 +24,4 @@ short, dated, numbered, immutable once accepted.
 | 0008 | KMS CMK for token-wrap key                            | Accepted                |
 | 0009 | OpenRouter as the LLM routing layer                   | Accepted                |
 | 0010 | LLM prompt redaction                                  | Accepted                |
+| 0011 | CloudFront OAC over API Gateway for API edge hardening | Accepted                |
