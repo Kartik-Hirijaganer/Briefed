@@ -51,13 +51,13 @@ variable "timeout_seconds" {
 }
 
 variable "reserved_concurrent_executions" {
-  description = "Concurrency reserved for interactive API traffic so scans cannot starve the PWA."
+  description = "Reserved API concurrency. Use -1 for unreserved mode in low-quota dev accounts."
   type        = number
-  default     = 5
+  default     = -1
 
   validation {
-    condition     = var.reserved_concurrent_executions >= 0
-    error_message = "reserved_concurrent_executions must be zero or greater."
+    condition     = var.reserved_concurrent_executions >= -1
+    error_message = "reserved_concurrent_executions must be -1 or greater."
   }
 }
 
