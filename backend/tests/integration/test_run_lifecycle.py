@@ -147,6 +147,62 @@ async def test_maybe_finalize_run_fails_on_prompt_error(
     assert user.last_run_finished_at is None
 
 
+async def test_maybe_finalize_run_completes_on_job_extract_error(
+    test_session: AsyncSession,
+) -> None:
+    """A failed optional job extraction does not fail the digest run."""
+    user, account, run = await _seed_run(test_session)
+    email = _email(account=account, subject="Recruiter intro")
+    prompt = PromptVersion(
+        name="job_extract",
+        version=1,
+        content="job",
+        content_hash=hashlib.sha256(b"job").digest(),
+        model="gemini-1.5-flash",
+        params={},
+    )
+    test_session.add_all([email, prompt])
+    await test_session.flush()
+    test_session.add(
+        Classification(
+            email_id=email.id,
+            label="ignore",
+            score=Decimal("0.850"),
+            rubric_version=1,
+            decision_source="model",
+            model="gemini-1.5-flash",
+            tokens_in=10,
+            tokens_out=5,
+            is_newsletter=False,
+            is_job_candidate=True,
+        ),
+    )
+    test_session.add(
+        PromptCallLog(
+            prompt_version_id=prompt.id,
+            email_id=email.id,
+            model="gemini-1.5-flash",
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=Decimal("0.000000"),
+            latency_ms=0,
+            status="error",
+            provider="openrouter:gemini-flash",
+            run_id=run.id,
+        ),
+    )
+    await test_session.flush()
+
+    terminal = await maybe_finalize_run(session=test_session, user_id=user.id, run_id=run.id)
+
+    assert terminal is True
+    assert run.status == "complete"
+    assert run.error is None
+    assert run.stats["classified"] == 1
+    assert user.current_run_id is None
+    assert user.last_run_finished_at is not None
+
+
 async def test_maybe_finalize_run_completes_after_summary_lands(
     test_session: AsyncSession,
 ) -> None:

@@ -24,6 +24,7 @@ from app.db.models import (
     Email,
     JobMatch,
     PromptCallLog,
+    PromptVersion,
     Summary,
     TechNewsCluster,
     User,
@@ -36,6 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _SUMMARIZABLE_LABELS: tuple[str, ...] = ("must_read", "good_to_read", "newsletter")
 _JOB_LABEL = "job_candidate"
 _FAILED_RUN_ERROR = "One or more LLM provider calls failed during the scan."
+_NON_FATAL_PROMPT_NAMES: tuple[str, ...] = ("job_extract", "unsubscribe_borderline")
 
 
 class RunProgressSnapshot(BaseModel):
@@ -50,7 +52,7 @@ class RunProgressSnapshot(BaseModel):
         pending_summaries: Account-scope classified emails that still need summaries.
         pending_jobs: Account-scope job-candidate emails that still need extraction.
         pending_clusters: Whether the run still needs a tech-news cluster summary.
-        prompt_errors: Failed provider-call rows written for this run.
+        prompt_errors: Fatal failed provider-call rows written for this run.
         cost_cents: Rounded prompt cost in cents for this run.
     """
 
@@ -229,7 +231,11 @@ async def _progress_snapshot(
             account_ids=account_ids,
         ),
         pending_summaries=await _pending_summaries(session=session, account_ids=account_ids),
-        pending_jobs=await _pending_jobs(session=session, account_ids=account_ids),
+        pending_jobs=await _pending_jobs(
+            session=session,
+            run_id=run.id,
+            account_ids=account_ids,
+        ),
         pending_clusters=await _pending_clusters(
             session=session,
             user_id=user_id,
@@ -368,9 +374,21 @@ async def _pending_summaries(
 async def _pending_jobs(
     *,
     session: AsyncSession,
+    run_id: UUID,
     account_ids: tuple[UUID, ...],
 ) -> int:
     """Count account-scope job candidates that lack extraction rows."""
+    job_extract_error_exists = (
+        select(PromptCallLog.id)
+        .join(PromptVersion, PromptVersion.id == PromptCallLog.prompt_version_id)
+        .where(
+            PromptCallLog.run_id == run_id,
+            PromptCallLog.email_id == Email.id,
+            PromptCallLog.status == "error",
+            PromptVersion.name == "job_extract",
+        )
+        .exists()
+    )
     return await _count(
         session,
         select(func.count(Email.id))
@@ -383,6 +401,7 @@ async def _pending_jobs(
                 Classification.label == _JOB_LABEL,
             ),
             JobMatch.email_id.is_(None),
+            ~job_extract_error_exists,
         ),
     )
 
@@ -425,12 +444,18 @@ async def _pending_clusters(
 
 
 async def _prompt_errors(*, session: AsyncSession, run_id: UUID) -> int:
-    """Count failed prompt-call rows for ``run_id``."""
+    """Count fatal failed prompt-call rows for ``run_id``."""
     return await _count(
         session,
-        select(func.count(PromptCallLog.id)).where(
+        select(func.count(PromptCallLog.id))
+        .outerjoin(PromptVersion, PromptVersion.id == PromptCallLog.prompt_version_id)
+        .where(
             PromptCallLog.run_id == run_id,
             PromptCallLog.status == "error",
+            or_(
+                PromptVersion.name.is_(None),
+                PromptVersion.name.not_in(_NON_FATAL_PROMPT_NAMES),
+            ),
         ),
     )
 
