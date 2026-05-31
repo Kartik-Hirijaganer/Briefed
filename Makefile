@@ -15,8 +15,23 @@ COV_BE_XML    := $(ARTIFACTS_DIR)/coverage-be.xml
 COV_FE_LCOV   := frontend/coverage/lcov.info
 
 COVERAGE_FLOOR ?= 80
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python3; fi)
+PIP ?= $(PYTHON) -m pip
+ALEMBIC ?= $(PYTHON) -m alembic
+BANDIT ?= $(PYTHON) -m bandit
+MYPY ?= $(PYTHON) -m mypy
+PIP_AUDIT ?= $(PYTHON) -m pip_audit
+PYTEST ?= $(PYTHON) -m pytest
+RUFF ?= $(PYTHON) -m ruff
+UVICORN ?= $(PYTHON) -m uvicorn
+VULTURE ?= $(PYTHON) -m vulture
 
 export PYTHONPATH := backend:$(PYTHONPATH)
+
+ifneq (,$(wildcard .env))
+include .env
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
+endif
 
 # Frontend scaffolding landed in Phase 6 (sources + tsconfig + primitives).
 # CI still keys frontend-side targets off the lockfile so a clean clone
@@ -35,7 +50,7 @@ help:
 
 .PHONY: bootstrap
 bootstrap: ## Install Python + Node deps and start docker-compose services
-	pip install -e ".[dev]"
+	$(PIP) install -e ".[dev]"
 ifneq (,$(wildcard package.json))
 	npm install
 endif
@@ -45,11 +60,11 @@ endif
 dev: ## Run backend + frontend with hot-reload (requires docker-compose services)
 	docker compose up -d postgres
 ifdef FRONTEND_READY
-	( uvicorn app.main:app --app-dir backend --reload & \
+	( $(UVICORN) app.main:app --app-dir backend --reload & \
 	  npm --workspace frontend run dev & \
 	  wait )
 else
-	uvicorn app.main:app --app-dir backend --reload
+	$(UVICORN) app.main:app --app-dir backend --reload
 endif
 
 .PHONY: clean
@@ -63,28 +78,28 @@ clean: ## Remove build + test + coverage artifacts
 
 .PHONY: lint
 lint: ## Run all linters (Python + Frontend)
-	ruff check .
-	ruff format --check .
-	mypy
+	$(RUFF) check .
+	$(RUFF) format --check .
+	$(MYPY)
 ifdef FRONTEND_READY
 	npm --workspace frontend run lint
 endif
 
 .PHONY: format
 format: ## Apply formatters
-	ruff format .
-	ruff check --fix .
+	$(RUFF) format .
+	$(RUFF) check --fix .
 ifdef FRONTEND_READY
 	npm --workspace frontend run format
 endif
 
 .PHONY: typecheck
 typecheck: ## Strict type check (Python)
-	mypy
+	$(MYPY)
 
 .PHONY: dead-check
 dead-check: ## Find unused code (Python: vulture, Frontend: knip)
-	vulture backend/app --min-confidence 80
+	$(VULTURE) backend/app --min-confidence 80
 ifdef FRONTEND_READY
 	npx --no-install knip
 endif
@@ -103,7 +118,7 @@ ifdef EVAL
 	  (echo "promptfoo is required for make eval; install it before running evals." && exit 127)
 endif
 	@set -o pipefail; \
-	  pytest -m "not e2e and not eval" \
+	  $(PYTEST) -m "not e2e and not eval" \
 	    --junitxml=$(ARTIFACTS_DIR)/pytest.xml \
 	    --json-report --json-report-file=$(ARTIFACTS_DIR)/pytest.json || true
 ifdef FRONTEND_READY
@@ -119,7 +134,7 @@ ifdef EVAL
 	promptfoo eval -c backend/eval/promptfoo.yaml \
 	  --output $(ARTIFACTS_DIR)/promptfoo.json || true
 endif
-	python backend/scripts/test_summary.py
+	$(PYTHON) backend/scripts/test_summary.py
 
 .PHONY: e2e
 e2e: ## Run Playwright e2e tests (sets PLAYWRIGHT=1)
@@ -135,12 +150,12 @@ eval: ## Run Promptfoo prompt evals (sets EVAL=1)
 
 .PHONY: coverage
 coverage: _artifacts_dir ## Enforce the 80% line-coverage floor (+ listed 100% modules at 100%)
-	pytest -m "not e2e and not eval" \
+	$(PYTEST) -m "not e2e and not eval" \
 	  --cov=backend/app \
 	  --cov-report=term-missing \
 	  --cov-report=xml:$(COV_BE_XML) \
 	  --cov-fail-under=$(COVERAGE_FLOOR)
-	python backend/scripts/coverage_gate.py $(COV_BE_XML)
+	$(PYTHON) backend/scripts/coverage_gate.py $(COV_BE_XML)
 ifdef FRONTEND_READY
 	npm --workspace frontend run test -- --coverage \
 	  --coverage.thresholds.lines=$(COVERAGE_FLOOR) \
@@ -155,14 +170,14 @@ endif
 
 .PHONY: docs
 docs: ## Regenerate packages/contracts/openapi.json + frontend TS client
-	python backend/scripts/export_openapi.py
+	$(PYTHON) backend/scripts/export_openapi.py
 ifdef FRONTEND_READY
 	npm --workspace frontend run codegen
 endif
 
 .PHONY: link-check
 link-check: ## Verify every relative link in README + docs/** resolves (Phase 9 release gate)
-	python backend/scripts/link_check.py
+	$(PYTHON) backend/scripts/link_check.py
 
 # --------------------------------------------------------------------------- #
 # Database                                                                    #
@@ -170,12 +185,12 @@ link-check: ## Verify every relative link in README + docs/** resolves (Phase 9 
 
 .PHONY: migrate
 migrate: ## Apply Alembic migrations (head)
-	alembic -c backend/alembic.ini upgrade head
+	$(ALEMBIC) -c backend/alembic.ini upgrade head
 
 .PHONY: migrate-rev
 migrate-rev: ## alembic revision --autogenerate -m "<msg>"; pass MSG=...
 	@test -n "$(MSG)" || (echo "usage: make migrate-rev MSG='your message'" && exit 1)
-	alembic -c backend/alembic.ini revision --autogenerate -m "$(MSG)"
+	$(ALEMBIC) -c backend/alembic.ini revision --autogenerate -m "$(MSG)"
 
 # --------------------------------------------------------------------------- #
 # Security                                                                    #
@@ -190,8 +205,8 @@ audit: ## pip-audit + bandit + npm audit (Phase 8 hardening)
 	# --skip-editable so our own ``briefed-backend`` editable install isn't
 	# reported as "not on PyPI". Without ``--strict`` pip-audit still fails
 	# on real vulnerabilities but downgrades the skip to a warning.
-	pip-audit --skip-editable
-	bandit -c pyproject.toml -r backend/app
+	$(PIP_AUDIT) --skip-editable
+	$(BANDIT) -c pyproject.toml -r backend/app
 ifdef FRONTEND_READY
 	npm --workspace frontend audit --audit-level=high
 endif

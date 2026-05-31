@@ -6,6 +6,17 @@ hand-maintained — to prevent drift.
 
 ## Contents
 
+- `system-architecture.html` - self-contained system architecture documentation
+  for onboarding: executive summary, runtime diagrams, pipeline, ERD,
+  table/column inventory, API inventory, operations guidance, and assumptions.
+- `architecture.html` — self-contained onboarding doc (Mermaid diagrams):
+  executive summary, system + pipeline + LLM diagrams, OAuth/request
+  sequence flows, security & encryption, full ERD + per-column reference
+  for all 21 tables, the 32-endpoint API reference, a configuration/env
+  reference, a "how to extend safely" guide, a source map, and
+  assumptions/limitations/ADRs + glossary. Open directly in a browser (no
+  build step). Note: overlaps with `system-architecture.html`; both are
+  kept intentionally.
 - `data-model.md` — Mermaid `erDiagram` of the Postgres schema. Hand-authored
   and updated when Alembic migrations land. Phase 0 ships the placeholder;
   Phases 1–4 populate tables as they're defined.

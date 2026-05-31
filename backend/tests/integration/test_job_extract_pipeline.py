@@ -196,6 +196,7 @@ async def test_extract_happy_path_passes_filter(test_session) -> None:
         "https://acme.example/jobs/staff-backend"
     )
     _account, email = await _seed_job_candidate(test_session, user, excerpt=excerpt)
+    test_session.expire(email, ["body"])
     test_session.add(
         JobFilter(
             user_id=user.id,

@@ -27,6 +27,7 @@ Missing required keys or duplicate ``(id, version)`` pairs raise
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,12 +83,18 @@ class RegisteredPrompt:
 
 
 def default_prompt_root() -> Path:
-    """Return the repo-relative ``packages/prompts/`` directory.
+    """Return the packaged or repo-relative ``packages/prompts/`` directory.
 
     Returns:
         The :class:`pathlib.Path` on disk. Absolute so tests can chdir
         without breaking resolution.
     """
+    lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT")
+    if lambda_task_root:
+        lambda_prompt_root = Path(lambda_task_root) / "packages" / "prompts"
+        if lambda_prompt_root.exists():
+            return lambda_prompt_root
+
     # backend/app/services/prompts/registry.py → repo root is five up.
     return Path(__file__).resolve().parents[4] / "packages" / "prompts"
 

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+import app.llm.redaction.presidio as presidio_module
 from app.llm.redaction import (
     IdentityScrubber,
     RegexSanitizer,
@@ -198,6 +199,30 @@ def test_presidio_sanitizer_no_results_returns_input() -> None:
     result = sanitizer.sanitize("nothing to redact")
     assert result.text == "nothing to redact"
     assert result.counts_by_kind == {}
+
+
+def test_presidio_sanitizer_skips_when_model_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def missing_model(_name: str) -> None:
+        """Return no import spec for the requested model package."""
+        return None
+
+    presidio_module._ENGINE_CACHE[0] = None
+    presidio_module._ENGINE_UNAVAILABLE_REASON[0] = None
+    presidio_module._ENGINE_UNAVAILABLE_WARNED[0] = False
+    monkeypatch.setattr(
+        presidio_module.importlib.util,
+        "find_spec",
+        missing_model,
+    )
+
+    result = PresidioSanitizer().sanitize("Alice mailed bob@example.com")
+
+    assert result.text == "Alice mailed bob@example.com"
+    assert result.counts_by_kind == {}
+    assert result.reversal_map == {}
+    assert "en_core_web_lg" in str(presidio_module._ENGINE_UNAVAILABLE_REASON[0])
+    presidio_module._ENGINE_UNAVAILABLE_REASON[0] = None
+    presidio_module._ENGINE_UNAVAILABLE_WARNED[0] = False
 
 
 @pytest.mark.skipif(

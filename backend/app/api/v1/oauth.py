@@ -33,11 +33,12 @@ from app.api.session import (
 )
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
-from app.core.errors import AuthError
+from app.core.errors import AuthError, CryptoError, ProviderError
 from app.core.security import EnvelopeCipher, token_context
 from app.db.models import ConnectedAccount, OAuthToken, User
 from app.db.session import get_sessionmaker
 from app.services.gmail.oauth import (
+    OAuthTokenBundle,
     build_authorize_url,
     exchange_code,
     expires_at_from_bundle,
@@ -53,16 +54,30 @@ if TYPE_CHECKING:  # pragma: no cover
 router = APIRouter(prefix="/oauth/gmail", tags=["oauth"])
 
 
-def _compute_redirect_uri(request: Request) -> str:
+def _compute_redirect_uri(request: Request, settings: Settings) -> str:
     """Build the canonical callback URL from the incoming request.
 
     Args:
         request: Current FastAPI request.
+        settings: Cached app settings.
 
     Returns:
         Absolute URL, e.g. ``https://api.briefed.dev/api/v1/oauth/gmail/callback``.
     """
-    return str(request.url_for("gmail_oauth_callback"))
+    callback_url = request.url_for("gmail_oauth_callback")
+    if settings.public_base_url:
+        return f"{settings.public_base_url.rstrip('/')}{callback_url.path}"
+
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host:
+        scheme = (
+            request.headers.get("x-forwarded-proto")
+            or request.headers.get("cloudfront-forwarded-proto")
+            or callback_url.scheme
+        )
+        return f"{scheme}://{forwarded_host}{callback_url.path}"
+
+    return str(callback_url)
 
 
 def _require_session_key(settings: Settings) -> str:
@@ -153,7 +168,7 @@ async def start(
 
     url = build_authorize_url(
         client_id=client_id,
-        redirect_uri=_compute_redirect_uri(request),
+        redirect_uri=_compute_redirect_uri(request, settings),
         state=state,
         code_challenge=challenge,
     )
@@ -207,12 +222,12 @@ async def callback(
     if cookie.get("state") != state:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="state mismatch")
 
-    bundle = await exchange_code(
+    bundle = await _exchange_callback_code(
         code=code,
         code_verifier=str(cookie["code_verifier"]),
         client_id=client_id,
         client_secret=client_secret,
-        redirect_uri=_compute_redirect_uri(request),
+        redirect_uri=_compute_redirect_uri(request, settings),
     )
     if not bundle.refresh_token:
         raise HTTPException(
@@ -243,13 +258,11 @@ async def callback(
             email=email,
             gmail_account_id=gmail_account_id,
         )
-        access_blob = cipher.encrypt(
-            bundle.access_token.encode("utf-8"),
-            token_context(account_id=str(account.id), purpose="access_token"),
-        )
-        refresh_blob = cipher.encrypt(
-            bundle.refresh_token.encode("utf-8"),
-            token_context(account_id=str(account.id), purpose="refresh_token"),
+        access_token_ct, refresh_token_ct = _encrypt_oauth_tokens(
+            cipher=cipher,
+            account_id=account.id,
+            access_token=bundle.access_token,
+            refresh_token=bundle.refresh_token,
         )
         tokens = (
             (
@@ -263,15 +276,15 @@ async def callback(
         if tokens is None:
             tokens = OAuthToken(
                 account_id=account.id,
-                access_token_ct=access_blob.ciphertext,
-                refresh_token_ct=refresh_blob.ciphertext,
+                access_token_ct=access_token_ct,
+                refresh_token_ct=refresh_token_ct,
                 scope=bundle.scope.split(),
                 expires_at=expires_at_from_bundle(bundle),
             )
             session.add(tokens)
         else:
-            tokens.access_token_ct = access_blob.ciphertext
-            tokens.refresh_token_ct = refresh_blob.ciphertext
+            tokens.access_token_ct = access_token_ct
+            tokens.refresh_token_ct = refresh_token_ct
             tokens.scope = bundle.scope.split()
             tokens.expires_at = expires_at_from_bundle(bundle)
         user.last_login_at = utcnow()
@@ -290,6 +303,82 @@ async def callback(
         samesite="lax",
     )
     return response
+
+
+async def _exchange_callback_code(
+    *,
+    code: str,
+    code_verifier: str,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
+) -> OAuthTokenBundle:
+    """Exchange Google's callback code and map provider errors to HTTP errors.
+
+    Args:
+        code: Authorization code from Google's callback query.
+        code_verifier: PKCE verifier from the signed OAuth-state cookie.
+        client_id: Google OAuth client id.
+        client_secret: Google OAuth client secret.
+        redirect_uri: Callback URI used in the original authorize request.
+
+    Returns:
+        Token bundle returned by Google's token endpoint.
+
+    Raises:
+        HTTPException: 400 for invalid/reused codes and 503 for transient
+            token endpoint failures.
+    """
+    try:
+        return await exchange_code(
+            code=code,
+            code_verifier=code_verifier,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+        )
+    except AuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ProviderError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
+def _encrypt_oauth_tokens(
+    *,
+    cipher: EnvelopeCipher,
+    account_id: UUID,
+    access_token: str,
+    refresh_token: str,
+) -> tuple[bytes, bytes]:
+    """Encrypt access and refresh tokens for persistence.
+
+    Args:
+        cipher: Token-wrap envelope cipher.
+        account_id: Connected-account id to bind into the KMS context.
+        access_token: Short-lived Google access token.
+        refresh_token: Long-lived Google refresh token.
+
+    Returns:
+        ``(access_token_ct, refresh_token_ct)`` ciphertext blobs.
+
+    Raises:
+        HTTPException: 503 when KMS/token wrapping is unavailable.
+    """
+    try:
+        access_blob = cipher.encrypt(
+            access_token.encode("utf-8"),
+            token_context(account_id=str(account_id), purpose="access_token"),
+        )
+        refresh_blob = cipher.encrypt(
+            refresh_token.encode("utf-8"),
+            token_context(account_id=str(account_id), purpose="refresh_token"),
+        )
+    except CryptoError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="token encryption unavailable",
+        ) from exc
+    return access_blob.ciphertext, refresh_blob.ciphertext
 
 
 def _build_token_cipher(settings: Settings) -> EnvelopeCipher:

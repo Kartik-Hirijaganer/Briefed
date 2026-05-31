@@ -66,6 +66,18 @@ describe('<DashboardPage>', () => {
     expect(await screen.findByText('Must read')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('$0.47')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open must read emails/i })).toHaveAttribute(
+      'href',
+      '/must-read',
+    );
+    expect(screen.getByRole('link', { name: /open good to read emails/i })).toHaveAttribute(
+      'href',
+      '/good-to-read',
+    );
+    expect(screen.getByRole('link', { name: /open ignore emails/i })).toHaveAttribute(
+      'href',
+      '/ignore',
+    );
     expect(screen.getByTestId('email-e1')).toBeInTheDocument();
     expect(screen.getByTestId('scan-now')).toBeInTheDocument();
   });

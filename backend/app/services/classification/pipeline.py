@@ -23,7 +23,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from app.core.clock import utcnow
+from app.core.errors import CryptoError
 from app.core.logging import get_logger
 from app.db.models import ConnectedAccount, Email, PromptCallLog
 from app.domain.providers import EmailAddress, EmailMessage, UnsubscribeInfo
@@ -130,7 +134,11 @@ async def classify_one(
         LookupError: When the email row has vanished between enqueue
             and dispatch.
     """
-    email_row = await session.get(Email, inputs.email_id)
+    email_row = (
+        await session.execute(
+            select(Email).options(selectinload(Email.body)).where(Email.id == inputs.email_id),
+        )
+    ).scalar_one_or_none()
     if email_row is None:
         raise LookupError(f"email {inputs.email_id} not found")
 
@@ -443,7 +451,15 @@ def _excerpt_for(
     cipher: EnvelopeCipher | None,
 ) -> str:
     """Return the best excerpt for the prompt: blob excerpt or snippet."""
-    excerpt = decrypt_excerpt(row.body, user_id=user_id, cipher=cipher)
+    try:
+        excerpt = decrypt_excerpt(row.body, user_id=user_id, cipher=cipher)
+    except CryptoError as exc:
+        logger.warning(
+            "classify.excerpt_decrypt_failed",
+            email_id=str(row.id),
+            error=str(exc),
+        )
+        excerpt = ""
     if excerpt:
         return excerpt
     return email.snippet or ""

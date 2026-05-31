@@ -1,9 +1,10 @@
 """Security-headers middleware (plan §11, §14 Phase 8, §19.14).
 
-Adds the OWASP-baseline header set to every response so direct hits on
-the Lambda Function URL (during debugging or behind a misconfigured
-CDN) are still hardened. CloudFront is the production default; this
-middleware is the belt-and-braces tier when CloudFront is bypassed.
+Adds the OWASP-baseline header set to every response. In production,
+CloudFront fronts the API Lambda Function URL with OAC + SigV4, so the
+Function URL is not directly callable. This middleware remains
+defense-in-depth for local/uvicorn execution and any non-CloudFront
+runtime path.
 
 CSP rules (kept tight per Phase 8 exit criteria):
 

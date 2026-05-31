@@ -7,7 +7,7 @@ dashboard; works on desktop and mobile.
 
 **Stack:** Python · FastAPI · Pydantic · OpenRouter (Gemini Flash +
 Claude Haiku 4.5 routes per ADR 0009) · Gmail API · Supabase · React ·
-TypeScript · Vite · PWA · AWS Lambda + SnapStart · Terraform
+TypeScript · Vite · PWA · AWS Lambda + SnapStart · CloudFront + AWS WAF · Terraform
 
 **Version:** 1.0.0 — released 2026-04-25 ([release notes](docs/release/v1.0.0.md))
 
@@ -29,9 +29,9 @@ TypeScript · Vite · PWA · AWS Lambda + SnapStart · Terraform
 │   ├── config/         Seed defaults + sample policies + generated schemas
 │   └── ui/             Design tokens + reusable React primitives
 ├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
-│                       Route 53 + ACM + two customer-managed KMS CMKs
+│                       AWS WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
-│   ├── adr/            Architecture Decision Records (0001–0008)
+│   ├── adr/            Architecture Decision Records (0001–0011)
 │   ├── architecture/   Data model, pipeline, system diagrams
 │   ├── operations/     Runbook, alarms, restore + rollback drills
 │   ├── release/        Release notes + announcement drafts
@@ -65,6 +65,9 @@ The frontend is an npm workspace — `make bootstrap` runs `npm install` at
 the repo root, which hoists deps across `frontend/` and `packages/{ui,contracts}`.
 The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance
 so cookies + CSRF are same-origin.
+When deploying behind CloudFront or another proxy, set
+`BRIEFED_PUBLIC_BASE_URL` to the browser-facing origin so Google OAuth
+callbacks use the public URL instead of the private Lambda Function URL.
 
 Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
@@ -103,8 +106,11 @@ Enforced by tooling and documented in [CLAUDE.md](CLAUDE.md):
 
 ## Deployment
 
-Release 1.0.0 targets AWS Lambda + SnapStart fronted by CloudFront and
-the Lambda Function URL (ADR 0003). Terraform sources live under
+Release 1.0.0 targets AWS Lambda + SnapStart behind CloudFront and AWS
+WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4
+signing; the Function URL is `AWS_IAM`-only and not publicly callable
+(ADR 0003, ADR 0011).
+Terraform sources live under
 [infra/terraform/](infra/terraform/); see
 [infra/terraform/envs/dev/README.md](infra/terraform/envs/dev/README.md)
 for the bootstrap + deploy flow, and
@@ -124,7 +130,7 @@ operator playbook + the rehearsal we run before every cut.
 
 - [DESIGN.md](DESIGN.md) — canonical design system. Read before any UI
   change; tokens, typography, motion, contrast numbers all live here.
-- [docs/adr/](docs/adr/) — the eight initial architecture decisions.
+- [docs/adr/](docs/adr/) — architecture decision records.
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
 - [docs/operations/](docs/operations/) — runbook, alarms, restore +
   rollback drills, secrets rotation.

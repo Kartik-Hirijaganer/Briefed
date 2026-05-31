@@ -1,6 +1,12 @@
 import { Button, Card } from '@briefed/ui';
+import { useSearchParams } from 'react-router-dom';
 
 import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
+
+const sanitizeReturnTo = (value: string | null): string => {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
+  return value;
+};
 
 /**
  * Unauthenticated landing page. Delegates OAuth start to the backend —
@@ -10,7 +16,8 @@ import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
  * @returns The rendered login card.
  */
 export default function LoginPage(): JSX.Element {
-  const addGmail = useAddGmailFlow({ returnTo: '/' });
+  const [params] = useSearchParams();
+  const addGmail = useAddGmailFlow({ returnTo: sanitizeReturnTo(params.get('next')) });
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-bg-muted px-6">
       <Card className="max-w-md">

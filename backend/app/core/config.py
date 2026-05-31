@@ -24,7 +24,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.integrations.ssm_secrets import fetch_parameters, merge_with_env
@@ -76,15 +76,29 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        populate_by_name=True,
     )
 
-    env: str = Field(default="local", description="Environment slug (local/dev/prod).")
+    env: str = Field(
+        default="local",
+        description="Environment slug (local/dev/prod).",
+        validation_alias=AliasChoices("BRIEFED_ENV", "ENV"),
+    )
     runtime: Runtime = Field(
         default="local",
         description="Which deployment surface this process is serving.",
         validation_alias="BRIEFED_RUNTIME",
     )
     log_level: str = Field(default="info", description="Minimum log level name.")
+
+    public_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Public browser-facing origin used for OAuth callbacks when the API runs behind "
+            "CloudFront or another reverse proxy."
+        ),
+        validation_alias="BRIEFED_PUBLIC_BASE_URL",
+    )
 
     ssm_prefix: str | None = Field(
         default=None,
@@ -95,19 +109,43 @@ class Settings(BaseSettings):
     database_url: str | None = Field(
         default=None,
         description="SQLAlchemy async URL (asyncpg driver).",
-        validation_alias="BRIEFED_DATABASE_URL",
+        validation_alias=AliasChoices("BRIEFED_DATABASE_URL", "DATABASE_URL"),
     )
 
     # Secrets (nullable so local / CI startup is possible without them).
     openrouter_api_key: str | None = Field(
         default=None,
         description="OpenRouter API key — required in Lambda runtimes (ADR 0009).",
+        validation_alias=AliasChoices("BRIEFED_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"),
     )
-    google_oauth_client_id: str | None = None
-    google_oauth_client_secret: str | None = None
-    session_signing_key: str | None = None
-    supabase_url: str | None = None
-    supabase_service_key: str | None = None
+    google_oauth_client_id: str | None = Field(
+        default=None,
+        description="Google OAuth client id for Gmail authorization-code flow.",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_CLIENT_ID", "BRIEFED_GOOGLE_OAUTH_CLIENT_ID"),
+    )
+    google_oauth_client_secret: str | None = Field(
+        default=None,
+        description="Google OAuth client secret for Gmail authorization-code flow.",
+        validation_alias=AliasChoices(
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "BRIEFED_GOOGLE_OAUTH_CLIENT_SECRET",
+        ),
+    )
+    session_signing_key: str | None = Field(
+        default=None,
+        description="HMAC secret used to sign local session and OAuth-state cookies.",
+        validation_alias=AliasChoices("SESSION_SIGNING_KEY", "BRIEFED_SESSION_SIGNING_KEY"),
+    )
+    supabase_url: str | None = Field(
+        default=None,
+        description="Supabase project URL for optional file-storage access.",
+        validation_alias=AliasChoices("SUPABASE_URL", "BRIEFED_SUPABASE_URL"),
+    )
+    supabase_service_key: str | None = Field(
+        default=None,
+        description="Supabase service-role key for optional file-storage access.",
+        validation_alias=AliasChoices("SUPABASE_SERVICE_KEY", "BRIEFED_SUPABASE_SERVICE_KEY"),
+    )
 
     # ADR 0009 — daily USD spend cap.
     daily_llm_usd_cap: float | None = Field(
