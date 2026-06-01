@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Alert, Button, Card, ErrorState, Field, Skeleton } from '@briefed/ui';
 
@@ -18,6 +18,22 @@ const FREQUENCY_OPTIONS: ReadonlyArray<{
   { value: 'once_daily', label: 'Once a day', slots: 1 },
   { value: 'twice_daily', label: 'Twice a day', slots: 2 },
   { value: 'disabled', label: 'Disabled', slots: 0 },
+];
+
+interface TimezoneOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+const US_INDIA_TIMEZONES: ReadonlyArray<TimezoneOption> = [
+  { value: 'America/New_York', label: 'US Eastern — New York' },
+  { value: 'America/Chicago', label: 'US Central — Chicago' },
+  { value: 'America/Denver', label: 'US Mountain — Denver' },
+  { value: 'America/Phoenix', label: 'US Mountain, no DST — Phoenix' },
+  { value: 'America/Los_Angeles', label: 'US Pacific — Los Angeles' },
+  { value: 'America/Anchorage', label: 'US Alaska — Anchorage' },
+  { value: 'Pacific/Honolulu', label: 'US Hawaii — Honolulu' },
+  { value: 'Asia/Kolkata', label: 'India — Kolkata (IST)' },
 ];
 
 const FORM_CONTROL_CLASS =
@@ -84,7 +100,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
   const [frequency, setFrequency] = useState<ScheduleFrequency>(schedule.schedule_frequency);
   const [times, setTimes] = useState<string[]>([...schedule.schedule_times_local]);
   const [timezone, setTimezone] = useState<string>(schedule.schedule_timezone);
-  const timezones = useMemo(listTimezones, []);
+  const timezoneOptions = buildTimezoneOptions(timezone);
   const nextRun = schedule.next_run_at_utc ? new Date(schedule.next_run_at_utc) : null;
 
   const onFrequencyChange = (next: ScheduleFrequency): void => {
@@ -168,9 +184,9 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
               onChange={(event) => onTimezoneChange(event.target.value)}
               className={`${FORM_CONTROL_CLASS} w-full`}
             >
-              {timezones.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
+              {timezoneOptions.map((zone) => (
+                <option key={zone.value} value={zone.value}>
+                  {zone.label}
                 </option>
               ))}
             </select>
@@ -220,15 +236,18 @@ function padSlots(slots: readonly string[], required: number): string[] {
 }
 
 /**
- * Return browser-supported timezones with a small fallback set.
+ * Build the timezone dropdown options, restricted to US + India zones.
  *
- * @returns Sorted IANA timezone names.
+ * The currently stored zone is always included so the controlled select
+ * still reflects a value that pre-dates this restriction (e.g. a legacy
+ * `UTC` setting) rather than silently snapping to another zone.
+ *
+ * @param current - The schedule's currently stored IANA timezone.
+ * @returns Ordered option descriptors for the timezone select.
  */
-function listTimezones(): string[] {
-  const supported =
-    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
-  if (supported.length === 0) {
-    return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London'];
+function buildTimezoneOptions(current: string): ReadonlyArray<TimezoneOption> {
+  if (US_INDIA_TIMEZONES.some((zone) => zone.value === current)) {
+    return US_INDIA_TIMEZONES;
   }
-  return [...supported].sort();
+  return [{ value: current, label: current }, ...US_INDIA_TIMEZONES];
 }

@@ -12,7 +12,7 @@ from app.llm import catalog
 
 def test_resolve_returns_known_entry() -> None:
     entry = catalog.resolve("gemini-flash")
-    assert entry["openrouter_id"] == "google/gemini-2.0-flash-001"
+    assert entry["openrouter_id"] == "google/gemini-2.5-flash"
     assert entry["max_output_tokens"] >= 1
 
 

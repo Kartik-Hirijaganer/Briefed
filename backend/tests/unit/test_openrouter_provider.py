@@ -73,7 +73,7 @@ async def test_success_with_json_mode_and_usage_cost() -> None:
     assert result.tokens_out == 4
     assert result.cost_usd == Decimal("0.000123")
     assert result.provider == "openrouter"
-    assert result.model == "google/gemini-2.0-flash-001"
+    assert result.model == "google/gemini-2.5-flash"
 
 
 @respx.mock
@@ -161,8 +161,8 @@ async def test_local_estimate_used_when_cost_missing() -> None:
             catalog_entry=resolve("gemini-flash"),
         )
         result = await provider.complete_json(_spec(), rendered_prompt="hi")
-    # gemini-flash pricing: 0.10 + 0.40 = 0.50 per million in + million out.
-    assert result.cost_usd == Decimal("0.500000")
+    # gemini-flash pricing: 0.30 + 2.50 = 2.80 per million in + million out.
+    assert result.cost_usd == Decimal("2.800000")
 
 
 @respx.mock
@@ -187,7 +187,7 @@ async def test_malformed_cost_falls_back_to_estimate() -> None:
             catalog_entry=resolve("gemini-flash"),
         )
         result = await provider.complete_json(_spec(), rendered_prompt="hi")
-    assert result.cost_usd == Decimal("0.100000")
+    assert result.cost_usd == Decimal("0.300000")
 
 
 @respx.mock

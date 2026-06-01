@@ -64,4 +64,14 @@ describe('<LoginPage>', () => {
     );
     expect(useAddGmailFlowMock).toHaveBeenCalledWith({ returnTo: '/' });
   });
+
+  it('surfaces a friendly error when the OAuth callback reports access_denied', () => {
+    render(
+      <MemoryRouter initialEntries={['/login?auth_error=access_denied']}>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/cancelled or access was denied/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+  });
 });
