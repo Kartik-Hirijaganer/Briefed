@@ -39,7 +39,10 @@ TypeScript · Vite · PWA · AWS Lambda + SnapStart · CloudFront + AWS WAF · T
 │   └── contributors/   Getting-started for contributors
 ├── tests/              Cross-service e2e + fixtures + prompt-evals
 ├── .claude/            Claude Code config (commands, plans)
+├── .codex/             Codex config, plans, and hooks
+├── .cursor/            Cursor project rules
 ├── .github/            Workflows, CODEOWNERS, PR + issue templates
+├── AGENTS.md           Project rules for Codex
 ├── CLAUDE.md           Project rules for Claude Code
 ├── CHANGELOG.md        Keep-a-Changelog history
 ├── CONTRIBUTING.md     How to contribute
