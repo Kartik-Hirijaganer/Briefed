@@ -88,6 +88,24 @@ lint: ## Run all linters (Python + Frontend)
 ifdef FRONTEND_READY
 	npm --workspace frontend run lint
 endif
+	@$(MAKE) lint-tokens
+
+.PHONY: lint-tokens
+lint-tokens: ## Fail if raw hex or rgb()/rgba() colors appear outside tokens.css (theme guard)
+	@echo "==> lint-tokens: scanning frontend/src + packages/ui/src for hardcoded colors"
+	@hits=$$(grep -rEn \
+	  --exclude=tokens.css \
+	  --exclude-dir=__tests__ \
+	  --exclude='*.test.ts' --exclude='*.test.tsx' \
+	  --exclude='*.spec.ts' --exclude='*.spec.tsx' \
+	  '#[0-9a-fA-F]{3,8}|rgba?\(' \
+	  frontend/src packages/ui/src 2>/dev/null); \
+	if [ -n "$$hits" ]; then \
+	  echo "lint-tokens: hardcoded color(s) found outside tokens.css — use DESIGN.md tokens:"; \
+	  echo "$$hits"; \
+	  exit 1; \
+	fi; \
+	echo "lint-tokens: OK (no hardcoded colors outside tokens.css)"
 
 .PHONY: format
 format: ## Apply formatters

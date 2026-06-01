@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import and_, func, or_, select
 
 from app.api.deps import current_user_id, db_session
+from app.api.errors import api_error_response
 from app.core.app_config import get_app_config
 from app.core.config import Settings, get_settings
 from app.core.errors import CryptoError, ProviderError, QuotaExceededError
@@ -742,31 +743,13 @@ def _mark_read_error_response(*, error: MarkReadApiError, request: Request) -> J
         JSON response with top-level ``code``, ``message``, ``details``,
         and ``requestId`` fields.
     """
-    envelope = ErrorEnvelope(
+    return api_error_response(
+        status_code=error.status_code,
         code=error.code,
         message=error.message,
         details=error.details,
-        request_id=_request_id_for(request),
+        request=request,
     )
-    return JSONResponse(
-        status_code=error.status_code,
-        content=envelope.model_dump(by_alias=True),
-    )
-
-
-def _request_id_for(request: Request) -> str:
-    """Return a request id from headers or create one.
-
-    Args:
-        request: Incoming request.
-
-    Returns:
-        Stable correlation id for the error response.
-    """
-    request_id = request.headers.get("x-request-id")
-    if request_id:
-        return request_id
-    return uuid4().hex
 
 
 def _row_out(

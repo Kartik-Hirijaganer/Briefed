@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
+import { CircleHelp, Inbox } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
@@ -190,7 +191,9 @@ export default function DashboardPage(): JSX.Element {
     <section className="flex flex-col gap-6" {...pullToRefresh}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Today&apos;s Digest</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">
+            Today&apos;s Digest
+          </h1>
           <div className="flex flex-wrap items-center gap-3">
             <FreshnessBadge
               state={freshness.state}
@@ -579,7 +582,7 @@ function EmailTable(props: EmailTableProps): JSX.Element {
         </>
       ) : (
         <EmptyState
-          icon="inbox"
+          icon={Inbox}
           title="No unread emails in this view"
           description="Use the KPI cards above to switch categories, or run a fresh scan."
         />
@@ -628,7 +631,7 @@ function EmailTableRow(props: EmailRowProps): JSX.Element {
             <p className="line-clamp-2 text-sm text-fg-muted">{email.summary_excerpt}</p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            {email.needs_review ? <Badge tone="warn">🤔 double-check</Badge> : null}
+            {email.needs_review ? <NeedsReviewBadge /> : null}
             <OpenInGmailLink accountEmail={email.account_email} threadId={email.thread_id} />
           </div>
         </div>
@@ -679,7 +682,7 @@ function EmailMobileCard(props: EmailRowProps): JSX.Element {
         <p className="text-sm text-fg-muted">{email.summary_excerpt}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        {email.needs_review ? <Badge tone="warn">🤔 double-check</Badge> : null}
+        {email.needs_review ? <NeedsReviewBadge /> : null}
         <span className="text-xs text-fg-muted">{formatReceived(email.received_at)}</span>
         <OpenInGmailLink accountEmail={email.account_email} threadId={email.thread_id} />
       </div>
@@ -708,6 +711,22 @@ interface CategoryBadgeProps {
 function CategoryBadge(props: CategoryBadgeProps): JSX.Element {
   const meta = BUCKET_META[props.email.bucket];
   return <Badge tone={meta.tone}>{meta.label}</Badge>;
+}
+
+/**
+ * Renders the low-confidence review marker without emoji glyphs.
+ *
+ * @returns The rendered review badge.
+ */
+function NeedsReviewBadge(): JSX.Element {
+  return (
+    <Badge tone="warn">
+      <span className="inline-flex items-center gap-1">
+        <CircleHelp aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+        <span>double-check</span>
+      </span>
+    </Badge>
+  );
 }
 
 interface PaginationControlsProps {

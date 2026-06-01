@@ -20,6 +20,11 @@ const FREQUENCY_OPTIONS: ReadonlyArray<{
   { value: 'disabled', label: 'Disabled', slots: 0 },
 ];
 
+const FORM_CONTROL_CLASS =
+  'h-[var(--control-height)] rounded-[var(--radius-md)] border border-border-strong ' +
+  'bg-bg-surface px-3 text-sm focus-visible:border-accent focus-visible:outline-none ' +
+  'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]';
+
 /**
  * Schedule settings (`/settings/schedule`). Reads and writes the dedicated
  * schedule API instead of the legacy preferences digest-hour field.
@@ -138,7 +143,9 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
           <Field label="Local time slots">
             <div className="flex flex-wrap gap-2">
               {frequency === 'disabled' ? (
-                <span className="flex h-10 items-center text-sm text-fg-muted">Disabled</span>
+                <span className="flex h-[var(--control-height)] items-center text-sm text-fg-muted">
+                  Disabled
+                </span>
               ) : (
                 times.map((time, index) => (
                   <input
@@ -147,7 +154,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
                     value={time}
                     disabled={pending}
                     onChange={(event) => onTimeChange(index, event.target.value)}
-                    className="h-10 rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+                    className={FORM_CONTROL_CLASS}
                   />
                 ))
               )}
@@ -159,7 +166,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
               value={timezone}
               disabled={pending}
               onChange={(event) => onTimezoneChange(event.target.value)}
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={`${FORM_CONTROL_CLASS} w-full`}
             >
               {timezones.map((zone) => (
                 <option key={zone} value={zone}>

@@ -24,10 +24,10 @@ describe('NAV_ITEMS', () => {
     );
   });
 
-  it('every item has a non-empty label and glyph', () => {
+  it('every item has a non-empty label and an icon', () => {
     for (const item of NAV_ITEMS) {
       expect(item.label.length).toBeGreaterThan(0);
-      expect(item.glyph.length).toBeGreaterThan(0);
+      expect(item.icon).toBeDefined();
     }
   });
 

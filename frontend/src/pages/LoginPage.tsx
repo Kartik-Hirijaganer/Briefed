@@ -23,7 +23,9 @@ export default function LoginPage(): JSX.Element {
       <Card className="max-w-md">
         <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Welcome to Briefed</h1>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">
+              Welcome to Briefed
+            </h1>
             <p className="mt-1 text-sm text-fg-muted">
               Sign in with Google to connect your first mailbox. We request read-only Gmail access
               and never send, archive, or click unsubscribe on your behalf.

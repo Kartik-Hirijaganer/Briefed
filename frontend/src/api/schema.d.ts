@@ -622,6 +622,7 @@ export interface paths {
          *
          *     Args:
          *         payload: Validated patch body.
+         *         request: Incoming request, used for error correlation.
          *         user_id: Authenticated caller, injected by :func:`current_user_id`.
          *         session: DB session.
          *
@@ -1563,7 +1564,6 @@ export interface components {
          *         redaction_aliases: Free-form strings to scrub from prompts.
          *         presidio_enabled: Legacy toggle retained for compatibility.
          *             Presidio was removed; only identity + regex scrubbers run.
-         *         theme_preference: Server-side mirror of the user's UI theme.
          *         schedule_frequency: Cadence — ``once_daily`` / ``twice_daily`` /
          *             ``disabled``.
          *         schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.
@@ -1581,12 +1581,6 @@ export interface components {
              * @default false
              */
             presidio_enabled: boolean;
-            /**
-             * Theme Preference
-             * @default system
-             * @enum {string}
-             */
-            theme_preference: "system" | "light" | "dark";
             /**
              * Schedule Frequency
              * @default once_daily
@@ -1622,8 +1616,6 @@ export interface components {
             redaction_aliases?: string[] | null;
             /** Presidio Enabled */
             presidio_enabled?: boolean | null;
-            /** Theme Preference */
-            theme_preference?: ("system" | "light" | "dark") | null;
         };
         /**
          * UserScheduleOut
@@ -2527,6 +2519,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2562,6 +2563,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2591,6 +2601,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserScheduleOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Validation Error */
@@ -2628,13 +2647,22 @@ export interface operations {
                     "application/json": components["schemas"]["UserScheduleOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

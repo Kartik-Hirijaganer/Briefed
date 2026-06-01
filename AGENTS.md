@@ -65,6 +65,8 @@ When you generate Python code, these rules are non-negotiable — produce code t
 3. Named exports (no default exports except for route-level pages).
 4. Before any UI change, read [DESIGN.md](DESIGN.md) and use only the tokens defined there. Do not introduce new colors, fonts, or spacing values without updating DESIGN.md in the same change.
 
+> Briefed ships a **single fixed Notion theme**: dark desktop sidebar (`--sidebar-*`), light main (`--bg-*`). Never hardcode colors/px/fonts — use DESIGN.md tokens. Do not reintroduce dark-mode / theme-switching (`data-theme`, `prefers-color-scheme`, a toggle).
+
 **JSDoc format:**
 
 ```ts
@@ -199,6 +201,8 @@ Release 1.0.0 is **recommend-only** (ADR 0006): the agent never clicks unsubscri
 ## 10. Design system
 
 [DESIGN.md](DESIGN.md) at the repo root is the canonical design source of truth. Color, typography, spacing, radius, shadow, and motion tokens are defined there and mirrored into [frontend/src/styles/tokens.css](frontend/src/styles/tokens.css). Read DESIGN.md before any UI change. Do not introduce a new color, font, spacing value, radius, shadow, or motion duration without adding it to DESIGN.md in the same change.
+
+> Briefed ships a **single fixed Notion theme**: dark desktop sidebar (`--sidebar-*`), light main (`--bg-*`). Never hardcode colors/px/fonts — use DESIGN.md tokens. Do not reintroduce dark-mode / theme-switching (`data-theme`, `prefers-color-scheme`, a toggle).
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

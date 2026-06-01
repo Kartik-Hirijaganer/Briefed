@@ -26,11 +26,6 @@ def test_profile_patch_rejects_bad_email() -> None:
         UserProfilePatchRequest(email_aliases=("not-an-email",))
 
 
-def test_profile_patch_validates_theme_enum() -> None:
-    with pytest.raises(ValidationError):
-        UserProfilePatchRequest(theme_preference="solarized")  # type: ignore[arg-type]
-
-
 def test_schedule_patch_rejects_bad_time_format() -> None:
     with pytest.raises(ValidationError):
         UserSchedulePatchRequest(schedule_times_local=("8:00",))

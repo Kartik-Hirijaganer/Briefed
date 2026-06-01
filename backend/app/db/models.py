@@ -90,9 +90,6 @@ class TimestampMixin:
 _SCHEDULE_FREQUENCY_CHOICES = ("once_daily", "twice_daily", "disabled")
 """Allowed values for ``users.schedule_frequency`` (Track C — Phase II.1)."""
 
-_THEME_PREFERENCE_CHOICES = ("system", "light", "dark")
-"""Allowed values for ``users.theme_preference`` (Track C — Phase II.1)."""
-
 
 class User(Base, TimestampMixin):
     """Account owner (plan §8 ``users`` table + Track C extensions).
@@ -115,8 +112,6 @@ class User(Base, TimestampMixin):
         presidio_enabled: Legacy profile toggle retained for API
             compatibility. Presidio itself was removed in Phase 2 of
             the daily-triage revamp; only identity + regex scrubbers run.
-        theme_preference: Server-side mirror of the user's UI theme
-            override (``system`` / ``light`` / ``dark``).
         last_run_finished_at: Schedule cursor — clears the per-user
             "ran in the last hour" lockout.
         current_run_id: Idempotency lock; set when fanout enqueues
@@ -134,10 +129,6 @@ class User(Base, TimestampMixin):
         CheckConstraint(
             "schedule_frequency IN ('once_daily','twice_daily','disabled')",
             name="ck_users_schedule_frequency",
-        ),
-        CheckConstraint(
-            "theme_preference IN ('system','light','dark')",
-            name="ck_users_theme_preference",
         ),
     )
 
@@ -173,11 +164,6 @@ class User(Base, TimestampMixin):
         default="UTC",
     )
     presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    theme_preference: Mapped[str] = mapped_column(
-        String(16),
-        nullable=False,
-        default="system",
-    )
     last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_run_id: Mapped[str | None] = mapped_column(Text)
     current_run_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,62 +12,38 @@
        Mermaid is loaded from a CDN at the bottom of <body>.
        ============================================================ */
     :root {
-      --bg-canvas: #fafafb;
+      color-scheme: light;
+      --bg-canvas: #fafaf9;
       --bg-surface: #ffffff;
-      --bg-muted: #f2f2f4;
-      --bg-code: #f6f7f9;
-      --border: #e4e4e8;
-      --border-strong: #c8c8ce;
-      --fg: #101014;
-      --fg-muted: #54545c;
-      --fg-faint: #7a7a82;
-      --accent: #2563eb;
-      --accent-hover: #1d4ed8;
-      --accent-soft: #eaf1fe;
-      --success: #16a34a;
-      --success-soft: #e7f6ec;
-      --warn: #d97706;
+      --bg-muted: #f6f5f4;
+      --bg-code: #f6f5f4;
+      --border: #e5e3df;
+      --border-strong: #c8c4be;
+      --fg: #37352f;
+      --fg-muted: #5d5b54;
+      --fg-faint: #787671;
+      --accent: #5645d4;
+      --accent-hover: #4534b3;
+      --accent-soft: rgba(86,69,212,.1);
+      --success: #1aae39;
+      --success-soft: rgba(26,174,57,.1);
+      --warn: #dd5b00;
       --warn-soft: #fdf3e7;
-      --danger: #dc2626;
+      --danger: #e03131;
       --danger-soft: #fdecec;
-      --purple: #7c3aed;
+      --purple: #9a7cf0;
       --teal: #0d9488;
-      --shadow-1: 0 1px 2px rgba(0,0,0,.06);
-      --shadow-2: 0 4px 10px rgba(0,0,0,.08);
-      --shadow-3: 0 10px 30px rgba(0,0,0,.12);
+      --shadow-1: 0 1px 2px rgba(15,15,15,.04);
+      --shadow-2: 0 4px 12px rgba(15,15,15,.08);
+      --shadow-3: 0 24px 48px -8px rgba(15,15,15,.2);
       --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 16px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
       --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       --sidebar-w: 290px;
       --maxw: 1080px;
     }
-    @media (prefers-color-scheme: dark) {
-      html:not([data-theme="light"]) {
-        --bg-canvas: #0a0a0f;
-        --bg-surface: #15151b;
-        --bg-muted: #1c1c24;
-        --bg-code: #1a1a22;
-        --border: #27272f;
-        --border-strong: #3a3a44;
-        --fg: #fafafb;
-        --fg-muted: #a1a1aa;
-        --fg-faint: #71717a;
-        --accent: #60a5fa;
-        --accent-hover: #93c5fd;
-        --accent-soft: #16233b;
-        --success: #4ade80;
-        --warn: #fbbf24;
-        --danger: #f87171;
-        --purple: #a78bfa;
-        --teal: #2dd4bf;
-        --shadow-1: 0 1px 2px rgba(0,0,0,.45);
-        --shadow-2: 0 4px 10px rgba(0,0,0,.5);
-        --shadow-3: 0 10px 30px rgba(0,0,0,.6);
-      }
-    }
-
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; scroll-padding-top: 24px; }
     body {
@@ -121,10 +97,10 @@
 
     /* ---------- Hero ---------- */
     .hero {
-      background: radial-gradient(1200px 400px at 20% -10%, rgba(37,99,235,.25), transparent 60%),
-                  radial-gradient(1000px 400px at 90% 0%, rgba(124,58,237,.22), transparent 55%),
-                  #0a0a0f;
-      color: #fafafb; padding: 56px 0 48px; border-bottom: 1px solid var(--border);
+      background: radial-gradient(1200px 400px at 20% -10%, rgba(86,69,212,.25), transparent 60%),
+                  radial-gradient(1000px 400px at 90% 0%, rgba(154,124,240,.22), transparent 55%),
+                  #191919;
+      color: #f7f6f3; padding: 56px 0 48px; border-bottom: 1px solid var(--border);
     }
     .hero .wrap { display: block; }
     .hero .eyebrow { color: #93c5fd; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 12px; }
@@ -219,9 +195,8 @@
     .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
     .pill.pk { background: var(--accent-soft); color: var(--accent); }
     .pill.fk { background: var(--warn-soft); color: var(--warn); }
-    .pill.uk { background: #ede9fe; color: var(--purple); }
+    .pill.uk { background: rgba(154,124,240,.12); color: var(--purple); }
     .pill.enc { background: var(--danger-soft); color: var(--danger); }
-    @media (prefers-color-scheme: dark){ html:not([data-theme="light"]) .pill.uk { background:#241b3d; } }
 
     /* ---------- Mermaid diagram cards ---------- */
     .diagram {
@@ -458,7 +433,7 @@ flowchart TB
     classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12;
     classDef edge fill:#ecfeff,stroke:#0891b2,stroke-width:1.5px,color:#155e75;
     classDef compute fill:#f5f3ff,stroke:#7c3aed,stroke-width:1.5px,color:#4c1d95;
-    classDef queue fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a;
+    classDef queue fill:#f1effd,stroke:#5645d4,stroke-width:1.5px,color:#37352f;
     classDef sched fill:#fef9c3,stroke:#ca8a04,stroke-width:1.5px,color:#713f12;
     classDef data fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
     classDef sec fill:#fef2f2,stroke:#dc2626,stroke-width:1.5px,color:#7f1d1d;
@@ -468,7 +443,7 @@ flowchart TB
               <span><i style="background:#fff7ed;border:1px solid #ea580c"></i>Client</span>
               <span><i style="background:#ecfeff;border:1px solid #0891b2"></i>AWS edge</span>
               <span><i style="background:#f5f3ff;border:1px solid #7c3aed"></i>Compute (Lambda)</span>
-              <span><i style="background:#eff6ff;border:1px solid #2563eb"></i>Messaging (SQS)</span>
+              <span><i style="background:#f1effd;border:1px solid #5645d4"></i>Messaging (SQS)</span>
               <span><i style="background:#fef9c3;border:1px solid #ca8a04"></i>Scheduler</span>
               <span><i style="background:#ecfdf5;border:1px solid #059669"></i>Data</span>
               <span><i style="background:#fef2f2;border:1px solid #dc2626"></i>Security</span>
@@ -537,7 +512,7 @@ flowchart LR
     uns --> dig
 
     classDef sched fill:#fef9c3,stroke:#ca8a04,color:#713f12;
-    classDef stage fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a;
+    classDef stage fill:#f1effd,stroke:#5645d4,stroke-width:1.5px,color:#37352f;
     classDef side fill:#f1f5f9,stroke:#94a3b8,color:#334155;
     classDef out fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
             </pre>
@@ -602,7 +577,7 @@ flowchart TB
     provider -. "fallback" .-> claude["Claude Haiku 4.5<br/>(cap 100 calls/day)"]:::ext
     client -->|"1 row per call"| log[("prompt_call_log<br/>tokens · cost · status")]:::data
 
-    classDef stage fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
+    classDef stage fill:#f1effd,stroke:#5645d4,color:#37352f;
     classDef comp fill:#f5f3ff,stroke:#7c3aed,color:#4c1d95;
     classDef core fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12;
     classDef sec fill:#fef2f2,stroke:#dc2626,color:#7f1d1d;
@@ -942,7 +917,6 @@ erDiagram
               <tr class="col-name"><td><code>schedule_times_local</code></td><td>TEXT[]</td><td><code>HH:MM</code> slots; count must match frequency.</td></tr>
               <tr class="col-name"><td><code>schedule_timezone</code></td><td>VARCHAR(64)</td><td>Timezone the local times resolve in.</td></tr>
               <tr class="col-name"><td><code>presidio_enabled</code></td><td>BOOLEAN</td><td>Run Presidio in the redaction chain (default true).</td></tr>
-              <tr class="col-name"><td><code>theme_preference</code></td><td>VARCHAR(16)</td><td><code>system</code> / <code>light</code> / <code>dark</code> (CHECK).</td></tr>
               <tr class="col-name"><td><code>last_run_finished_at</code></td><td>TIMESTAMPTZ</td><td>Clears the "ran in the last hour" lockout.</td></tr>
               <tr class="col-name"><td><code>current_run_id</code></td><td>TEXT</td><td>Idempotency lock set by fan-out.</td></tr>
               <tr class="col-name"><td><code>current_run_started_at</code></td><td>TIMESTAMPTZ</td><td>Used to detect stale locks (30-min release).</td></tr>
@@ -1570,9 +1544,9 @@ erDiagram
       flowchart: { curve: 'basis', useMaxWidth: true, htmlLabels: true },
       themeVariables: {
         fontFamily: "'Inter Variable', Inter, system-ui, sans-serif",
-        primaryColor: '#eaf1fe',
-        primaryBorderColor: '#2563eb',
-        primaryTextColor: '#101014',
+        primaryColor: 'rgba(86,69,212,.1)',
+        primaryBorderColor: '#5645d4',
+        primaryTextColor: '#37352f',
         lineColor: '#64748b',
         fontSize: '14px'
       }

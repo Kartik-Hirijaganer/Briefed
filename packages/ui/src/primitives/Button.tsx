@@ -41,11 +41,11 @@ interface ButtonAsLink extends BaseProps, AnchorHTMLAttributes<HTMLAnchorElement
 export type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-accent-contrast hover:opacity-90',
-  secondary: 'bg-surface text-fg border border-border hover:bg-border',
-  ghost: 'bg-transparent text-fg hover:bg-surface',
+  primary: 'bg-accent text-accent-contrast hover:bg-accent-hover',
+  secondary: 'bg-transparent text-fg border border-border-strong hover:bg-bg-muted',
+  ghost: 'bg-transparent text-fg hover:bg-bg-muted',
   destructive: 'bg-danger text-accent-contrast hover:opacity-90',
-  link: 'bg-transparent text-accent underline-offset-4 hover:underline',
+  link: 'bg-transparent text-link underline-offset-4 hover:underline',
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
@@ -55,8 +55,8 @@ const SIZE_CLASS: Record<ButtonSize, string> = {
 };
 
 const BASE_CLASS =
-  'inline-flex items-center justify-center gap-2 font-medium transition-opacity ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ' +
+  'inline-flex items-center justify-center gap-2 font-medium transition ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ' +
   'focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 /**

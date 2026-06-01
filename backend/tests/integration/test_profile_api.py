@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from uuid import uuid4
 
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -70,7 +71,26 @@ async def test_get_profile_returns_defaults(
     assert body["presidio_enabled"] is False
     assert body["schedule_frequency"] == "once_daily"
     assert body["schedule_times_local"] == ["08:00"]
-    assert body["theme_preference"] == "system"
+
+
+async def test_get_profile_missing_user_returns_error_envelope(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """Missing profile rows return the Aegis error envelope."""
+    cookie = sign_cookie({"user_id": str(uuid4())}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/profile/me",
+            cookies={SESSION_COOKIE_NAME: cookie},
+            headers={"x-request-id": "test-profile-404"},
+        )
+    assert response.status_code == 404, response.text
+    assert response.json() == {
+        "code": "user_not_found",
+        "message": "User not found.",
+        "details": {},
+        "requestId": "test-profile-404",
+    }
 
 
 async def test_patch_profile_updates_fields(
@@ -87,7 +107,6 @@ async def test_patch_profile_updates_fields(
                 "email_aliases": ["alt@example.com"],
                 "redaction_aliases": ["codename"],
                 "presidio_enabled": False,
-                "theme_preference": "dark",
             },
         )
     assert response.status_code == 200, response.text
@@ -96,7 +115,6 @@ async def test_patch_profile_updates_fields(
     assert body["email_aliases"] == ["alt@example.com"]
     assert body["redaction_aliases"] == ["codename"]
     assert body["presidio_enabled"] is False
-    assert body["theme_preference"] == "dark"
 
 
 async def test_patch_profile_rejects_presidio_enable(
@@ -144,6 +162,8 @@ async def test_patch_schedule_rejects_inconsistent_payload(
         )
     # Existing single-slot row + cadence change → consistency error.
     assert response.status_code == 422
+    assert response.json()["code"] == "schedule_inconsistent"
+    assert response.json()["details"] == {"field": "schedule_frequency"}
 
 
 async def test_patch_schedule_accepts_valid_change(

@@ -40,7 +40,6 @@ const baseProfile = {
   email_aliases: [],
   redaction_aliases: [],
   presidio_enabled: false,
-  theme_preference: 'system',
   schedule_frequency: 'once_daily',
   schedule_times_local: ['08:00'],
   schedule_timezone: 'UTC',
@@ -60,10 +59,9 @@ describe('<PreferencesPage>', () => {
     apiMock.PATCH.mockReset();
     enqueueMutation.mockReset();
     window.localStorage.clear();
-    document.documentElement.removeAttribute('data-theme');
   });
 
-  it('renders all three toggles and the appearance control with current values', async () => {
+  it('renders all three preference toggles with current values', async () => {
     mockPreferenceReads();
     renderPage();
     await waitFor(() =>
@@ -71,7 +69,7 @@ describe('<PreferencesPage>', () => {
     );
     expect(screen.getByLabelText(/redact pii/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/enable secure offline mode/i)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+    expect(apiMock.GET).not.toHaveBeenCalledWith('/api/v1/profile/me');
   });
 
   it('PATCHes the preferences endpoint when a toggle flips', async () => {
@@ -84,18 +82,6 @@ describe('<PreferencesPage>', () => {
     await waitFor(() => expect(apiMock.PATCH).toHaveBeenCalled());
     expect(apiMock.PATCH).toHaveBeenCalledWith('/api/v1/preferences', {
       body: { redact_pii: true },
-    });
-  });
-
-  it('PATCHes the profile endpoint when the theme changes', async () => {
-    mockPreferenceReads();
-    apiMock.PATCH.mockResolvedValue({ data: { ...baseProfile, theme_preference: 'dark' } });
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(await screen.findByRole('radio', { name: 'Dark' }));
-    await waitFor(() => expect(apiMock.PATCH).toHaveBeenCalled());
-    expect(apiMock.PATCH).toHaveBeenCalledWith('/api/v1/profile/me', {
-      body: { theme_preference: 'dark' },
     });
   });
 

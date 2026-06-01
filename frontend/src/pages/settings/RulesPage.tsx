@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -71,6 +72,11 @@ const CATEGORY_LABEL: Record<Bucket, string> = {
   good_to_read: 'Good-to-Read',
   ignore: 'Ignore',
 };
+
+const FORM_CONTROL_CLASS =
+  'h-[var(--control-height)] w-full rounded-[var(--radius-md)] border border-border-strong ' +
+  'bg-bg-surface px-3 text-sm focus-visible:border-accent focus-visible:outline-none ' +
+  'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]';
 
 const EMPTY_FORM: RuleFormState = {
   id: null,
@@ -185,7 +191,7 @@ export default function RulesPage(): JSX.Element {
               type="text"
               value={form.name}
               onChange={(event) => setFormField(setForm, { name: event.target.value })}
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             />
           </Field>
 
@@ -195,7 +201,7 @@ export default function RulesPage(): JSX.Element {
               onChange={(event) =>
                 setFormField(setForm, { matchField: event.target.value as MatchField })
               }
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             >
               {MATCH_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -211,7 +217,7 @@ export default function RulesPage(): JSX.Element {
               value={form.matchValue}
               placeholder={matchPlaceholder(form.matchField)}
               onChange={(event) => setFormField(setForm, { matchValue: event.target.value })}
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             />
           </Field>
 
@@ -221,7 +227,7 @@ export default function RulesPage(): JSX.Element {
               onChange={(event) =>
                 setFormField(setForm, { category: event.target.value as Bucket })
               }
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             >
               {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -239,7 +245,7 @@ export default function RulesPage(): JSX.Element {
               step="0.01"
               value={form.confidence}
               onChange={(event) => setFormField(setForm, { confidence: event.target.value })}
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             />
           </Field>
 
@@ -251,7 +257,7 @@ export default function RulesPage(): JSX.Element {
               step="10"
               value={form.priority}
               onChange={(event) => setFormField(setForm, { priority: event.target.value })}
-              className="h-10 w-full rounded-[var(--radius-md)] border border-border-strong bg-bg-surface px-3 text-sm"
+              className={FORM_CONTROL_CLASS}
             />
           </Field>
         </div>
@@ -286,7 +292,7 @@ export default function RulesPage(): JSX.Element {
 
       {rules.length === 0 ? (
         <EmptyState
-          icon="bolt"
+          icon={Zap}
           title="No rules defined yet"
           description="Create a sender, subject, label, or topic rule to sort recurring mail before the LLM runs."
         />

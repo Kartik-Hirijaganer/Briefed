@@ -81,8 +81,8 @@ export default defineConfig({
         short_name: 'Briefed',
         description: 'Personal AI email agent',
         display: 'standalone',
-        theme_color: '#09090b',
-        background_color: '#09090b',
+        theme_color: '#fafaf9',
+        background_color: '#fafaf9',
         start_url: '/',
         scope: '/',
         icons: [
@@ -95,10 +95,6 @@ export default defineConfig({
   ],
   resolve: {
     alias: [
-      {
-        find: '@briefed/ui/tokens.css',
-        replacement: resolve(projectDir, '../packages/ui/src/tokens.css'),
-      },
       { find: '@briefed/ui', replacement: resolve(projectDir, '../packages/ui/src/index.ts') },
       {
         find: '@briefed/contracts',
