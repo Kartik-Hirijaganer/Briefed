@@ -1,8 +1,15 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SettingsLayout from '../pages/settings/SettingsLayout';
+
+const logoutMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../api/session', () => ({
+  logoutAndClearBrowserSession: logoutMock,
+}));
 
 const renderAt = (path: string): void => {
   render(
@@ -20,6 +27,11 @@ const renderAt = (path: string): void => {
 };
 
 describe('<SettingsLayout>', () => {
+  beforeEach(() => {
+    logoutMock.mockReset();
+    logoutMock.mockResolvedValue(undefined);
+  });
+
   it('renders the four section tabs and active link', () => {
     renderAt('/settings/accounts');
     expect(screen.getByRole('heading', { level: 1, name: /settings/i })).toBeInTheDocument();
@@ -32,5 +44,12 @@ describe('<SettingsLayout>', () => {
   it('renders the matched child outlet', () => {
     renderAt('/settings/preferences');
     expect(screen.getByTestId('child')).toHaveTextContent('prefs');
+  });
+
+  it('logs out from the settings header action', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/accounts');
+    await user.click(screen.getByRole('button', { name: /logout/i }));
+    expect(logoutMock).toHaveBeenCalledTimes(1);
   });
 });

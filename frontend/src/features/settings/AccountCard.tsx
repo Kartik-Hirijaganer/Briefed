@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { Badge, Button, Card, Dialog, Motion, Sheet, Switch, type BadgeTone } from '@briefed/ui';
 
-import { api, unwrap } from '../../api/client';
+import { api, ApiError, unwrap } from '../../api/client';
 import type { Schemas } from '../../api/types';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -49,7 +49,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
   const isMobile = breakpoint === 'sm';
   const reconnect = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'disconnect' | 'remove' | null>(null);
   const [swipeRevealed, setSwipeRevealed] = useState(false);
 
   const patch = useMutation({
@@ -81,20 +81,47 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
   });
 
   const disconnect = useMutation({
-    mutationFn: async (): Promise<void> => {
-      unwrap(
-        await api.DELETE('/api/v1/accounts/{account_id}', {
+    mutationFn: async (): Promise<Schemas['ConnectedAccount']> => {
+      return unwrap(
+        await api.POST('/api/v1/accounts/{account_id}/disconnect', {
           params: { path: { account_id: account.id } },
         }),
       );
     },
+    onSuccess: (updated) => {
+      setConfirmAction(null);
+      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+        if (!current) return current;
+        return {
+          accounts: current.accounts.map((row) => (row.id === updated.id ? updated : row)),
+        };
+      });
+      void client.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: async (): Promise<void> => {
+      const result = await api.DELETE('/api/v1/accounts/{account_id}', {
+        params: { path: { account_id: account.id } },
+      });
+      if (result.error !== undefined || result.response?.ok !== true) {
+        const status = result.response?.status ?? 0;
+        throw new ApiError(`Account removal failed with status ${status}`, status, result.error);
+      }
+    },
     onSuccess: () => {
-      setConfirmOpen(false);
+      setConfirmAction(null);
+      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+        if (!current) return current;
+        return { accounts: current.accounts.filter((row) => row.id !== account.id) };
+      });
       void client.invalidateQueries({ queryKey: ['accounts'] });
     },
   });
 
   const effectiveAutoScan = account.auto_scan_enabled ?? true;
+  const isDisconnected = account.status === 'revoked';
 
   const cardBody = (
     <Card className="flex flex-col gap-3">
@@ -132,7 +159,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <Switch
             checked={effectiveAutoScan}
             onCheckedChange={(next) => patch.mutate({ auto_scan_enabled: next })}
-            disabled={patch.isPending}
+            disabled={patch.isPending || isDisconnected}
             ariaLabel={`Toggle auto-scan for ${account.email}`}
           />
           {account.auto_scan_enabled === null ? (
@@ -140,22 +167,40 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           ) : null}
         </label>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setSheetOpen(true)}
-            aria-label={`More actions for ${account.email}`}
-          >
-            More…
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
-            aria-label={`Disconnect ${account.email}`}
-          >
-            Disconnect
-          </Button>
+          {isDisconnected ? (
+            <>
+              <Button variant="secondary" size="sm" onClick={reconnect.start}>
+                Reconnect
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmAction('remove')}
+                aria-label={`Remove ${account.email}`}
+              >
+                Remove
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSheetOpen(true)}
+                aria-label={`More actions for ${account.email}`}
+              >
+                More…
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmAction('disconnect')}
+                aria-label={`Disconnect ${account.email}`}
+              >
+                Disconnect
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </Card>
@@ -168,22 +213,28 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <button
             type="button"
             onClick={() => {
-              patch.mutate({ auto_scan_enabled: false });
+              if (isDisconnected) {
+                reconnect.start();
+              } else {
+                patch.mutate({ auto_scan_enabled: false });
+              }
               setSwipeRevealed(false);
             }}
-            className="flex flex-1 items-center justify-center bg-warn/10 text-xs font-semibold text-warn"
+            className={`flex flex-1 items-center justify-center text-xs font-semibold ${
+              isDisconnected ? 'bg-accent/10 text-accent' : 'bg-warn/10 text-warn'
+            }`}
           >
-            Pause
+            {isDisconnected ? 'Reconnect' : 'Pause'}
           </button>
           <button
             type="button"
             onClick={() => {
-              setConfirmOpen(true);
+              setConfirmAction(isDisconnected ? 'remove' : 'disconnect');
               setSwipeRevealed(false);
             }}
             className="flex flex-1 items-center justify-center bg-danger text-xs font-semibold text-accent-contrast"
           >
-            Disconnect
+            {isDisconnected ? 'Remove' : 'Disconnect'}
           </button>
         </div>
       ) : null}
@@ -233,27 +284,41 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
       </Sheet>
 
       <Dialog
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title={`Disconnect ${account.email}?`}
-        description="This removes Briefed's cached emails, summaries, and job matches for this account. Your Gmail mailbox is not touched."
+        open={confirmAction !== null}
+        onClose={() => setConfirmAction(null)}
+        title={
+          confirmAction === 'remove' ? `Remove ${account.email}?` : `Disconnect ${account.email}?`
+        }
+        description={
+          confirmAction === 'remove'
+            ? 'This removes the disconnected account entry from Briefed. Your Gmail mailbox is not touched.'
+            : "This removes Briefed's cached emails, summaries, and job matches for this account. Your Gmail mailbox is not touched."
+        }
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Keep connected
+            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
+              {confirmAction === 'remove' ? 'Keep account' : 'Keep connected'}
             </Button>
             <Button
               variant="destructive"
-              onClick={() => disconnect.mutate()}
-              loading={disconnect.isPending}
+              onClick={() => {
+                if (confirmAction === 'remove') {
+                  remove.mutate();
+                } else {
+                  disconnect.mutate();
+                }
+              }}
+              loading={disconnect.isPending || remove.isPending}
             >
-              Disconnect
+              {confirmAction === 'remove' ? 'Remove' : 'Disconnect'}
             </Button>
           </>
         }
       >
         <p className="text-sm text-fg-muted">
-          You can reconnect later — Briefed will pull history back from Gmail.
+          {confirmAction === 'remove'
+            ? 'Connect Gmail again if you want to add this mailbox back later.'
+            : 'You can reconnect later. Briefed will pull history back from Gmail.'}
         </p>
       </Dialog>
     </div>

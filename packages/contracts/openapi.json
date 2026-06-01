@@ -32,6 +32,21 @@
         }
       }
     },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Log out",
+        "description": "Clear Briefed auth cookies and request browser-side site-data cleanup.\n\nArgs:\n    response: Mutable FastAPI response used to expire cookies and set\n        browser cleanup headers.\n    settings: Cached app settings, used to mirror the runtime's cookie\n        security flags.\n\nReturns:\n    None.",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/api/v1/oauth/gmail/start": {
       "get": {
         "tags": [
@@ -285,8 +300,8 @@
         "tags": [
           "accounts"
         ],
-        "summary": "Disconnect a mailbox",
-        "description": "Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).\n\nArgs:\n    account_id: Target account.\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the account does not belong to the caller.",
+        "summary": "Remove a disconnected mailbox",
+        "description": "Remove ``account_id`` after it has been disconnected.\n\nArgs:\n    account_id: Target account.\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the account does not belong to the caller.\n    HTTPException: 409 when the account is still active.",
         "operationId": "delete_account_api_v1_accounts__account_id__delete",
         "parameters": [
           {
@@ -319,6 +334,66 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/disconnect": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Disconnect a mailbox",
+        "description": "Disconnect an account while keeping it available for reconnect/remove.\n\nThe operation removes Briefed's local OAuth grant and account-scoped\ncached data, then marks the account ``revoked`` so the UI can offer a\nreconnect or final remove action. It is safe to call repeatedly.\n\nArgs:\n    account_id: Target account.\n    user_id: Authenticated owner's id.\n    session: Active async session.\n\nReturns:\n    The updated revoked account view.\n\nRaises:\n    HTTPException: 404 when the account does not belong to the caller.",
+        "operationId": "disconnect_account_api_v1_accounts__account_id__disconnect_post",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectedAccountOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",

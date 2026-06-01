@@ -7,7 +7,7 @@ import type * as ApiClient from '../api/client';
 import type { Schemas } from '../api/types';
 import { AccountCard } from '../features/settings/AccountCard';
 
-const apiMock = vi.hoisted(() => ({ PATCH: vi.fn(), DELETE: vi.fn() }));
+const apiMock = vi.hoisted(() => ({ PATCH: vi.fn(), POST: vi.fn(), DELETE: vi.fn() }));
 const startReconnect = vi.hoisted(() => vi.fn());
 const breakpointMock = vi.hoisted(() => ({ value: 'lg' as 'sm' | 'md' | 'lg' }));
 
@@ -49,6 +49,7 @@ const renderCard = (overrides: Partial<typeof account> = {}): { client: QueryCli
 describe('<AccountCard>', () => {
   beforeEach(() => {
     apiMock.PATCH.mockReset();
+    apiMock.POST.mockReset();
     apiMock.DELETE.mockReset();
     startReconnect.mockReset();
     breakpointMock.value = 'lg';
@@ -87,16 +88,18 @@ describe('<AccountCard>', () => {
     });
   });
 
-  it('opens the disconnect dialog and DELETEs on confirm', async () => {
-    apiMock.DELETE.mockResolvedValue({ data: undefined });
+  it('opens the disconnect dialog and disconnects on confirm', async () => {
+    apiMock.POST.mockResolvedValue({
+      data: { ...account, status: 'revoked', auto_scan_enabled: false },
+    });
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByRole('button', { name: /^disconnect me@example.com$/i }));
     expect(screen.getByText(/Disconnect me@example.com\?/)).toBeInTheDocument();
     const dialogConfirm = screen.getAllByRole('button', { name: /^disconnect$/i })[0]!;
     await user.click(dialogConfirm);
-    await waitFor(() => expect(apiMock.DELETE).toHaveBeenCalled());
-    expect(apiMock.DELETE).toHaveBeenCalledWith('/api/v1/accounts/{account_id}', {
+    await waitFor(() => expect(apiMock.POST).toHaveBeenCalled());
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/accounts/{account_id}/disconnect', {
       params: { path: { account_id: 'a1' } },
     });
   });
@@ -105,9 +108,22 @@ describe('<AccountCard>', () => {
     const user = userEvent.setup();
     renderCard({ status: 'revoked' });
     expect(screen.getByText('Needs reconnect')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /more actions/i }));
-    await user.click(screen.getByRole('button', { name: /reconnect account/i }));
+    await user.click(screen.getByRole('button', { name: /^reconnect$/i }));
     expect(startReconnect).toHaveBeenCalled();
+  });
+
+  it('removes a revoked account after confirmation', async () => {
+    apiMock.DELETE.mockResolvedValue({ response: new Response(null, { status: 204 }) });
+    const user = userEvent.setup();
+    renderCard({ status: 'revoked' });
+    await user.click(screen.getByRole('button', { name: /^remove me@example.com$/i }));
+    expect(screen.getByText(/Remove me@example.com\?/)).toBeInTheDocument();
+    const dialogConfirm = screen.getAllByRole('button', { name: /^remove$/i })[0]!;
+    await user.click(dialogConfirm);
+    await waitFor(() => expect(apiMock.DELETE).toHaveBeenCalled());
+    expect(apiMock.DELETE).toHaveBeenCalledWith('/api/v1/accounts/{account_id}', {
+      params: { path: { account_id: 'a1' } },
+    });
   });
 
   it('falls back to the email when no display name is set', () => {

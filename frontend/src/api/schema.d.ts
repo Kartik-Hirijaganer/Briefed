@@ -27,6 +27,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log out
+         * @description Clear Briefed auth cookies and request browser-side site-data cleanup.
+         *
+         *     Args:
+         *         response: Mutable FastAPI response used to expire cookies and set
+         *             browser cleanup headers.
+         *         settings: Cached app settings, used to mirror the runtime's cookie
+         *             security flags.
+         *
+         *     Returns:
+         *         None.
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/gmail/start": {
         parameters: {
             query?: never;
@@ -129,8 +158,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Disconnect a mailbox
-         * @description Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).
+         * Remove a disconnected mailbox
+         * @description Remove ``account_id`` after it has been disconnected.
          *
          *     Args:
          *         account_id: Target account.
@@ -139,6 +168,7 @@ export interface paths {
          *
          *     Raises:
          *         HTTPException: 404 when the account does not belong to the caller.
+         *         HTTPException: 409 when the account is still active.
          */
         delete: operations["delete_account_api_v1_accounts__account_id__delete"];
         options?: never;
@@ -160,6 +190,41 @@ export interface paths {
          *         HTTPException: 404 when the account does not belong to the caller.
          */
         patch: operations["patch_account_api_v1_accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/accounts/{account_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disconnect a mailbox
+         * @description Disconnect an account while keeping it available for reconnect/remove.
+         *
+         *     The operation removes Briefed's local OAuth grant and account-scoped
+         *     cached data, then marks the account ``revoked`` so the UI can offer a
+         *     reconnect or final remove action. It is safe to call repeatedly.
+         *
+         *     Args:
+         *         account_id: Target account.
+         *         user_id: Authenticated owner's id.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The updated revoked account view.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the account does not belong to the caller.
+         */
+        post: operations["disconnect_account_api_v1_accounts__account_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/rubric": {
@@ -1700,6 +1765,24 @@ export interface operations {
             };
         };
     };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gmail_oauth_start_api_v1_oauth_gmail_start_get: {
         parameters: {
             query?: {
@@ -1845,6 +1928,39 @@ export interface operations {
                 "application/json": components["schemas"]["ConnectedAccountPatchRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectedAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_account_api_v1_accounts__account_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
