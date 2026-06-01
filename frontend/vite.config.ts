@@ -21,7 +21,7 @@ const versionJson = JSON.parse(
  * - Aliases `@briefed/ui` + `@briefed/contracts` to the workspace sources so
  *   no separate build step is required.
  * - Wires `vite-plugin-pwa` with Phase 7 runtime caching for digest,
- *   summary, jobs, news, unsubscribe, and history reads.
+ *   summary, news, unsubscribe, and history reads.
  * - Proxies `/api` + `/oauth` to the local uvicorn during development so
  *   cookies and CSRF work against `http://localhost:5173` same-origin.
  */
@@ -54,13 +54,9 @@ export default defineConfig({
           {
             urlPattern: ({ request, url }) =>
               request.method === 'GET' &&
-              [
-                '/api/v1/emails',
-                '/api/v1/jobs',
-                '/api/v1/news',
-                '/api/v1/unsubscribes',
-                '/api/v1/history',
-              ].some((path) => url.pathname.startsWith(path)),
+              ['/api/v1/emails', '/api/v1/news', '/api/v1/unsubscribes', '/api/v1/history'].some(
+                (path) => url.pathname.startsWith(path),
+              ),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'briefed-dashboard-reads',
@@ -70,8 +66,7 @@ export default defineConfig({
           },
           {
             urlPattern: ({ request, url }) =>
-              request.method === 'GET' &&
-              url.pathname.startsWith('/api/v1/summaries/'),
+              request.method === 'GET' && url.pathname.startsWith('/api/v1/summaries/'),
             handler: 'CacheFirst',
             options: {
               cacheName: 'briefed-summary-reads',

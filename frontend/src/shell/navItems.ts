@@ -17,10 +17,7 @@ export interface NavItem {
  */
 export const NAV_ITEMS: readonly NavItem[] = Object.freeze([
   { to: '/', label: 'Home', glyph: '🏠', mobile: true },
-  { to: '/must-read', label: 'Must read', glyph: '⭐', mobile: true },
-  { to: '/jobs', label: 'Jobs', glyph: '💼', mobile: true },
-  { to: '/news', label: 'News', glyph: '📰' },
   { to: '/unsubscribe', label: 'Unsubscribe', glyph: '🧹' },
-  { to: '/history', label: 'History', glyph: '📜' },
+  { to: '/history', label: 'History', glyph: '📜', mobile: true },
   { to: '/settings/accounts', label: 'Settings', glyph: '⚙️', mobile: true },
 ]);

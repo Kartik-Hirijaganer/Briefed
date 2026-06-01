@@ -1,0 +1,42 @@
+rules:
+  - name: Gmail important
+    priority: 800
+    match:
+      has_label: IMPORTANT
+    action:
+      label: must_read
+      confidence: 0.90
+      reasons:
+        - Gmail marked this as important.
+  - name: Security alerts
+    priority: 760
+    match:
+      topic_keyword:
+        - security alert
+        - suspicious sign-in
+        - password reset
+        - verification code
+    action:
+      label: must_read
+      confidence: 0.92
+      reasons:
+        - Security-sensitive message.
+  - name: Receipts and invoices
+    priority: 420
+    match:
+      subject_contains: receipt
+    action:
+      label: ignore
+      confidence: 0.82
+      reasons:
+        - Routine receipt.
+  - name: Newsletters
+    priority: 200
+    match:
+      list_unsubscribe_present: true
+    action:
+      label: good_to_read
+      is_newsletter: true
+      confidence: 0.75
+      reasons:
+        - List-Unsubscribe header present.

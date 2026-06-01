@@ -211,6 +211,42 @@ class RawMessage(BaseModel):
     snippet: str = Field(default="")
 
 
+class MarkReadFailure(BaseModel):
+    """Provider-level failure for one mark-read target.
+
+    Attributes:
+        message_id: Provider-scoped message id that failed.
+        reason: Short provider or permission error suitable for logs/API
+            translation.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    message_id: MessageId = Field(..., description="Provider message id that failed.")
+    reason: str = Field(..., min_length=1, description="Failure reason.")
+
+
+class MarkReadResult(BaseModel):
+    """Result of removing the provider unread label from messages.
+
+    Attributes:
+        marked: Provider message ids successfully processed by the mailbox.
+        failed: Per-message failures. Successful ids are absent from this
+            tuple even when the message was already read upstream.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    marked: tuple[MessageId, ...] = Field(
+        default=(),
+        description="Provider message ids successfully marked read.",
+    )
+    failed: tuple[MarkReadFailure, ...] = Field(
+        default=(),
+        description="Provider message ids that could not be marked read.",
+    )
+
+
 @runtime_checkable
 class MailboxProvider(Protocol):
     """Seam every inbox adapter implements (plan §19.6).
@@ -255,6 +291,24 @@ class MailboxProvider(Protocol):
         Returns:
             A list aligned with ``ids``; missing messages (deleted between
             listing and fetch) are silently dropped rather than raising.
+        """
+        ...
+
+    async def mark_read(
+        self,
+        credentials: ProviderCredentials,
+        message_ids: list[MessageId],
+    ) -> MarkReadResult:
+        """Remove the provider unread marker from messages.
+
+        Args:
+            credentials: Decrypted OAuth credentials with provider write
+                scope for label mutation.
+            message_ids: Provider-scoped message ids to mark read.
+
+        Returns:
+            Per-message success/failure result. Implementations must be
+            idempotent when a message is already read.
         """
         ...
 

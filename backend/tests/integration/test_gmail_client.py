@@ -101,3 +101,41 @@ async def test_get_message_raw_propagates_errors() -> None:
         client = GmailClient(http_client=http)
         with pytest.raises(GmailApiError):
             await client.get_message_raw(access_token="a", message_id="m")
+
+
+async def test_get_message_labels_fetches_minimal_payload() -> None:
+    transport = _ScriptedTransport(responses=[(200, {"labelIds": ["INBOX", "UNREAD"]})])
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = GmailClient(http_client=http)
+        labels = await client.get_message_labels(access_token="a", message_id="m")
+
+    assert labels == ("INBOX", "UNREAD")
+    assert "format=minimal" in str(transport.requests[0].url)
+
+
+async def test_batch_modify_messages_removes_unread_only() -> None:
+    transport = _ScriptedTransport(responses=[(204, "")])
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = GmailClient(http_client=http)
+        await client.batch_modify_messages(
+            access_token="a",
+            message_ids=("m1", "m2"),
+            remove_label_ids=("UNREAD",),
+        )
+
+    request = transport.requests[0]
+    assert request.method == "POST"
+    assert request.url.path.endswith("/messages/batchModify")
+    assert request.content == b'{"ids":["m1","m2"],"removeLabelIds":["UNREAD"]}'
+
+
+async def test_batch_modify_rejects_non_unread_mutation() -> None:
+    transport = _ScriptedTransport(responses=[])
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = GmailClient(http_client=http)
+        with pytest.raises(ValueError, match="UNREAD"):
+            await client.batch_modify_messages(
+                access_token="a",
+                message_ids=("m1",),
+                remove_label_ids=("IMPORTANT",),
+            )

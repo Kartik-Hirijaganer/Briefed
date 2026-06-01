@@ -1,8 +1,8 @@
 """Pydantic models for the Track C profile + schedule API.
 
 The profile endpoints expose the Track C extensions to ``users``: display
-name, email + redaction aliases, schedule cadence, presidio toggle, and
-theme preference. ``UserScheduleOut`` exposes the ``next_run_at_utc``
+name, email + redaction aliases, schedule cadence, legacy presidio toggle,
+and theme preference. ``UserScheduleOut`` exposes the ``next_run_at_utc``
 preview which both the UI and a ``GET /me/schedule`` consumer can render.
 """
 
@@ -58,7 +58,8 @@ class UserProfileOut(BaseModel):
         display_name: Optional display name (consumed by IdentityScrubber).
         email_aliases: Extra email addresses to scrub from prompts.
         redaction_aliases: Free-form strings to scrub from prompts.
-        presidio_enabled: Whether Presidio runs ahead of regex scrubbing.
+        presidio_enabled: Legacy toggle retained for compatibility.
+            Presidio was removed; only identity + regex scrubbers run.
         theme_preference: Server-side mirror of the user's UI theme.
         schedule_frequency: Cadence — ``once_daily`` / ``twice_daily`` /
             ``disabled``.
@@ -71,7 +72,7 @@ class UserProfileOut(BaseModel):
     display_name: str | None = None
     email_aliases: tuple[str, ...] = Field(default_factory=tuple)
     redaction_aliases: tuple[str, ...] = Field(default_factory=tuple)
-    presidio_enabled: bool = True
+    presidio_enabled: bool = False
     theme_preference: ThemePreference = "system"
     schedule_frequency: ScheduleFrequency = "once_daily"
     schedule_times_local: tuple[str, ...] = Field(default=("08:00",))
@@ -92,6 +93,14 @@ class UserProfilePatchRequest(BaseModel):
     redaction_aliases: tuple[str, ...] | None = Field(default=None)
     presidio_enabled: bool | None = Field(default=None)
     theme_preference: ThemePreference | None = Field(default=None)
+
+    @field_validator("presidio_enabled")
+    @classmethod
+    def _reject_presidio_enable(cls, value: bool | None) -> bool | None:
+        """Reject attempts to enable removed Presidio redaction."""
+        if value is True:
+            raise ValueError("Presidio redaction was removed")
+        return value
 
 
 class UserScheduleOut(BaseModel):

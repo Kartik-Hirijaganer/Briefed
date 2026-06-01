@@ -6,53 +6,46 @@
 #
 # Thresholds are enforced separately by backend/eval/thresholds.yaml; CI
 # fails the job when metrics drop below the declared bar. The suite
-# covers three prompts today (triage, summarize_relevant, newsletter_group).
+# covers triage, per-email summaries, newsletter groups, and category
+# digest rollups.
 
 description: "Briefed prompt eval suite"
 
 prompts:
-  - id: triage-v1
-    label: "triage/v1"
-    file: ../../../packages/prompts/triage/v1.md
+  - id: triage-v2
+    label: "triage/v2"
+    file: ../../packages/prompts/triage/v2.md
   - id: summarize-relevant-v1
     label: "summarize_relevant/v1"
-    file: ../../../packages/prompts/summarize/v1.md
+    file: ../../packages/prompts/summarize/v1.md
   - id: newsletter-group-v1
     label: "newsletter_group/v1"
-    file: ../../../packages/prompts/newsletter_group/v1.md
-  - id: job-extract-v1
-    label: "job_extract/v1"
-    file: ../../../packages/prompts/jobs/v1.md
+    file: ../../packages/prompts/newsletter_group/v1.md
+  - id: category-digest-v1
+    label: "category_digest/v1"
+    file: ../../packages/prompts/category_digest/v1.md
 
 providers:
-  - id: google:gemini-1.5-flash
-    label: "Gemini 1.5 Flash"
+  - id: openrouter:google/gemini-2.0-flash-001
+    label: "Gemini Flash via OpenRouter"
     config:
       temperature: 0.0
-      maxOutputTokens: 700
-      responseMimeType: application/json
+      max_tokens: 700
 
-  - id: anthropic:claude-haiku-4-5
-    label: "Claude Haiku 4.5 (fallback)"
+  - id: openrouter:anthropic/claude-haiku-4.5
+    label: "Claude Haiku 4.5 via OpenRouter"
     config:
       temperature: 0.0
       max_tokens: 700
 
 tests:
-  - description: "triage — canonical fixtures"
-    file: golden/triage_v1.jsonl
-  - description: "triage — adversarial fixtures (§19.9)"
-    file: golden/triage_v1_adversarial.jsonl
-  - description: "summarize_relevant — faithfulness fixtures"
-    file: golden/summarize_relevant_v1.jsonl
-  - description: "summarize_relevant — adversarial fixtures (§19.11 Phase 8)"
-    file: golden/summarize_relevant_v1_adversarial.jsonl
-  - description: "newsletter_group — cluster fixtures"
-    file: golden/newsletter_group_v1.jsonl
-  - description: "job_extract — field precision/recall + salary corroboration"
-    file: golden/job_extract_v1.jsonl
-  - description: "job_extract — adversarial fixtures (§19.11 Phase 8)"
-    file: golden/job_extract_v1_adversarial.jsonl
+  - file://promptfoo_cases/triage_v2.jsonl
+  - file://promptfoo_cases/triage_v2_adversarial.jsonl
+  - file://promptfoo_cases/summarize_relevant_v1.jsonl
+  - file://promptfoo_cases/summarize_relevant_v1_adversarial.jsonl
+  - file://promptfoo_cases/newsletter_group_v1.jsonl
+  - file://promptfoo_cases/category_digest_v1.jsonl
+  - file://promptfoo_cases/category_digest_v1_adversarial.jsonl
 
 defaultTest:
   assert:

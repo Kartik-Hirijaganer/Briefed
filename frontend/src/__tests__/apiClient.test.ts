@@ -31,13 +31,19 @@ describe('api client payload hash middleware', () => {
     await api.POST('/api/v1/runs', {
       baseUrl: 'https://briefed.test',
       fetch: fetchSpy as unknown as typeof fetch,
-      body: { kind: 'manual' },
+      body: {
+        kind: 'manual',
+        mode: 'incremental',
+        include_user_overrides: false,
+      },
     });
 
     const request = requests[0]!;
-    await expect(request.clone().text()).resolves.toBe('{"kind":"manual"}');
+    await expect(request.clone().text()).resolves.toBe(
+      '{"kind":"manual","mode":"incremental","include_user_overrides":false}',
+    );
     expect(request.headers.get('x-amz-content-sha256')).toBe(
-      'bbfb1c52b62a74d3ef29ab6a7ff4571471398966c814652dc0367becd0d158b9',
+      'dc68f67c8453285f0571edfffaf9969bccfcf64f8798db21050bd40d6da884a8',
     );
   });
 

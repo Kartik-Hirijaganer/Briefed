@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/triage.v2.json",
+  "title": "TriageDecision",
+  "description": "Structured output produced by triage/v2. The primary category is one of three user-facing buckets; low confidence is handled by backend policy via classifications.needs_review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["category", "confidence", "reasons_short"],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": ["must_read", "good_to_read", "ignore"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "reasons_short": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "is_newsletter": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

@@ -1,11 +1,10 @@
 /**
- * Profile + schedule + appearance + privacy panels (Track C — Phase II.6).
+ * Profile + schedule + appearance panels (Track C — Phase II.6).
  *
- * Renders four cards on the settings landing page:
+ * Renders three cards on the settings landing page:
  *   1. Profile — display name, email aliases, redaction aliases.
  *   2. Schedule — cadence radio, time slots, timezone, next-run preview.
  *   3. Appearance — `<ThemeToggle>` from Group I.
- *   4. Privacy — Presidio toggle.
  *
  * Each section invalidates the relevant React Query cache on mutation.
  * The hook also calls `useTheme().hydrateFromProfile` once the profile
@@ -24,7 +23,6 @@ import { Card } from '../../../../packages/ui/src/primitives/Card';
 import { ErrorState } from '../../../../packages/ui/src/primitives/ErrorState';
 import { Field } from '../../../../packages/ui/src/primitives/Field';
 import { Skeleton } from '../../../../packages/ui/src/primitives/Skeleton';
-import { Switch } from '../../../../packages/ui/src/primitives/Switch';
 
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useTheme } from '../../hooks/useTheme';
@@ -134,10 +132,6 @@ export function ProfileSettings(): JSX.Element {
       <ScheduleCard schedule={scheduleQuery.data} onSave={scheduleMutation.mutate} />
       <AppearanceCard
         onPreferenceChange={(next) => profileMutation.mutate({ theme_preference: next })}
-      />
-      <PrivacyCard
-        profile={profileQuery.data}
-        onToggle={(next) => profileMutation.mutate({ presidio_enabled: next })}
       />
     </div>
   );
@@ -360,37 +354,6 @@ function AppearanceCard(props: AppearanceCardProps): JSX.Element {
         </p>
       </header>
       <ThemeToggle onChange={props.onPreferenceChange} />
-    </Card>
-  );
-}
-
-interface PrivacyCardProps {
-  readonly profile: UserProfile;
-  readonly onToggle: (next: boolean) => void;
-}
-
-/**
- * Privacy card — Presidio toggle.
- *
- * @param props - Component props (current profile + toggle handler).
- * @returns The privacy card section.
- */
-function PrivacyCard(props: PrivacyCardProps): JSX.Element {
-  return (
-    <Card className="flex flex-col gap-3">
-      <header>
-        <h2 className="text-base font-semibold text-fg">Privacy</h2>
-        <p className="text-sm text-fg-muted">
-          Run the Microsoft Presidio entity scrubber ahead of regex / alias redaction.
-        </p>
-      </header>
-      <Field label="Presidio enabled">
-        <Switch
-          checked={props.profile.presidio_enabled}
-          onCheckedChange={props.onToggle}
-          ariaLabel="Run Presidio entity scrubber"
-        />
-      </Field>
     </Card>
   );
 }

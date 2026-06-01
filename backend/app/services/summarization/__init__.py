@@ -6,6 +6,8 @@ Public entrypoints:
   summary for ``must_read`` / ``good_to_read`` / ``newsletter`` rows.
 * :func:`app.services.summarization.tech_news.cluster_and_summarize` —
   newsletter clustering + group summary.
+* :func:`app.services.summarization.category.summarize_category` —
+  complete run/category digest summaries.
 * :func:`app.services.summarization.dispatch.enqueue_unsummarized_for_run`
   — worker-edge helper that enqueues ``SummarizeMessage`` payloads for
   classified rows that still lack a :class:`app.db.models.Summary`.
@@ -21,6 +23,13 @@ from app.services.summarization.batch import (
     InMemoryBatchProvider,
     SyntheticBatchProvider,
     build_call_result,
+)
+from app.services.summarization.category import (
+    CategoryDigestInputs,
+    CategoryDigestItem,
+    CategoryDigestNotReadyError,
+    CategoryDigestOutcome,
+    summarize_category,
 )
 from app.services.summarization.cluster_router import (
     ClusterRoute,
@@ -40,6 +49,7 @@ from app.services.summarization.relevant import (
 )
 from app.services.summarization.repository import (
     SummariesRepo,
+    SummaryCategoryDigestWrite,
     SummaryEmailWrite,
     SummaryTechNewsWrite,
 )
@@ -56,12 +66,17 @@ __all__ = [
     "BatchResult",
     "BatchSubmission",
     "BatchTimeoutError",
+    "CategoryDigestInputs",
+    "CategoryDigestItem",
+    "CategoryDigestNotReadyError",
+    "CategoryDigestOutcome",
     "ClusterRoute",
     "ClusterRouter",
     "InMemoryBatchProvider",
     "SummariesRepo",
     "SummarizeInputs",
     "SummarizeOutcome",
+    "SummaryCategoryDigestWrite",
     "SummaryEmailWrite",
     "SummaryTechNewsWrite",
     "SyntheticBatchProvider",
@@ -74,5 +89,6 @@ __all__ = [
     "enqueue_unsummarized_for_run",
     "load_default_router",
     "parse_summarize_body",
+    "summarize_category",
     "summarize_email",
 ]

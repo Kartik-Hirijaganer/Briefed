@@ -57,6 +57,11 @@
   --space-12: 48px;
   --space-16: 64px;
 
+  /* Layout */
+  --container-wide: 1440px;
+  --container-settings: 960px;
+  --measure: 72ch;
+
   /* Radii */
   --radius-sm: 4px;
   --radius-md: 8px;

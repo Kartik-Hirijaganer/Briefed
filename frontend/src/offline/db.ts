@@ -35,7 +35,7 @@ export type PendingMutationPayload =
   | {
       readonly type: 'email_bucket_update';
       readonly emailId: string;
-      readonly bucket: 'must_read' | 'good_to_read' | 'ignore' | 'waste';
+      readonly bucket: 'must_read' | 'good_to_read' | 'ignore';
     }
   | {
       readonly type: 'preferences_patch';

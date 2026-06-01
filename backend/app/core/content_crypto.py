@@ -20,7 +20,6 @@ rows. Purposes in use today:
 * ``classifications_reasons`` (Phase 2).
 * ``summaries_body`` (Phase 3).
 * ``email_body_excerpt`` (Phase 3).
-* ``job_match_reason`` (Phase 4).
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ def content_context(
 
     Args:
         table: Destination table (``classifications``, ``summaries``,
-            ``email_content_blobs``, ``job_matches``).
+            ``email_content_blobs``).
         row_id: Primary key of the target row (string form).
         purpose: Column-level discriminator (e.g.
             ``classifications_reasons``). Pick a stable string —

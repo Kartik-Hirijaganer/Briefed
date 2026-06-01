@@ -193,12 +193,13 @@ class Settings(BaseSettings):
         validation_alias="BRIEFED_MANUAL_RUN_DAILY_CAP",
     )
 
-    # Track B / ADR 0010 — LLM prompt redaction.
+    # LLM prompt redaction. Presidio was removed in the Phase 2 daily
+    # triage revamp; setting this true now fails fast when the chain is built.
     redaction_presidio_enabled: bool = Field(
-        default=True,
+        default=False,
         description=(
-            "Enable the Presidio sanitizer in the redaction chain. "
-            "Flip to False if Phase 6 quality eval shows regression."
+            "Legacy Presidio toggle. Presidio support was removed; "
+            "keep this false and use identity + regex scrubbers."
         ),
         validation_alias="BRIEFED_REDACTION_PRESIDIO_ENABLED",
     )

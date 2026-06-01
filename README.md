@@ -1,8 +1,8 @@
 # Briefed
 
 Personal AI email agent that runs a daily pipeline on your Gmail inbox.
-Summarizes what matters, extracts job matches, and recommends what to
-unsubscribe from — never acts without your say-so (ADR 0006). React PWA
+Summarizes what matters, recommends what to unsubscribe from, and only
+marks mail read when you explicitly request it (ADR 0013). React PWA
 dashboard; works on desktop and mobile.
 
 **Stack:** Python · FastAPI · Pydantic · OpenRouter (Gemini Flash +
@@ -26,12 +26,12 @@ TypeScript · Vite · PWA · AWS Lambda + SnapStart · CloudFront + AWS WAF · T
 ├── packages/           Shared contracts / prompts / config / UI primitives
 │   ├── contracts/      OpenAPI source of truth + provider types
 │   ├── prompts/        Versioned LLM prompt bundles + JSON Schemas
-│   ├── config/         Seed defaults + sample policies + generated schemas
+│   ├── config/         Runtime YAML config, LLM catalog, seeds, schemas
 │   └── ui/             Design tokens + reusable React primitives
 ├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
 │                       AWS WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
-│   ├── adr/            Architecture Decision Records (0001–0011)
+│   ├── adr/            Architecture Decision Records (0001–0013)
 │   ├── architecture/   Data model, pipeline, system diagrams
 │   ├── operations/     Runbook, alarms, restore + rollback drills
 │   ├── release/        Release notes + announcement drafts
@@ -57,7 +57,7 @@ git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
 cp .env.example .env        # fill in BRIEFED_OPENROUTER_API_KEY + OAuth creds; other values optional
 make bootstrap              # installs deps, starts docker-compose services
-make migrate                # apply all Alembic migrations (Phase 1–4)
+make migrate                # apply all Alembic migrations
 make dev                    # backend on :8000, frontend on :5173
 ```
 
@@ -68,6 +68,15 @@ so cookies + CSRF are same-origin.
 When deploying behind CloudFront or another proxy, set
 `BRIEFED_PUBLIC_BASE_URL` to the browser-facing origin so Google OAuth
 callbacks use the public URL instead of the private Lambda Function URL.
+
+Product knobs live in `packages/config/app_config.yml`; model routes and
+per-model caps live in `packages/config/llm/catalog.yml`. Lambda runtimes
+fail fast if those YAML files are missing or malformed.
+Daily scans are unread-only. Gmail mark-read requires re-consenting
+connected accounts because Google exposes this labels-only operation
+through the broader `gmail.modify` scope.
+Prompt redaction now uses the lightweight identity + regex scrubbers only;
+Presidio and its spaCy/NumPy dependency chain were removed in ADR 0012.
 
 Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
@@ -85,7 +94,7 @@ calls the same targets — there is one source of truth.
 | `make coverage`      | Enforce the 80% line-coverage floor (plan §20.1).                      |
 | `make docs`          | Regenerate `packages/contracts/openapi.json` + frontend TS client.     |
 | `make e2e`           | Playwright e2e (sets `PLAYWRIGHT=1`).                                  |
-| `make eval`          | Promptfoo prompt evals (sets `EVAL=1`).                                |
+| `make eval`          | Promptfoo prompt evals via pinned `npx` (sets `EVAL=1`).               |
 | `make migrate`       | `alembic upgrade head`.                                                |
 | `make secrets-lint`  | `gitleaks detect` full-repo scan.                                      |
 | `make link-check`    | Verify every relative markdown link resolves (Phase 9 release gate).   |

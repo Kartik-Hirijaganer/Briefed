@@ -7,12 +7,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import EncryptionContext, EnvelopeCipher, token_context
-from app.db.models import ConnectedAccount, Email, OAuthToken, User
+from app.db.models import ConnectedAccount, DigestRun, DigestRunEmail, Email, OAuthToken, User
 from app.domain.providers import (
     MailboxProvider,
+    MarkReadResult,
     MessageId,
     ProviderCredentials,
     RawMessage,
@@ -63,6 +65,13 @@ class _DummyProvider(MailboxProvider):
     ) -> list[RawMessage]:
         return [self.messages[i] for i in ids]
 
+    async def mark_read(
+        self,
+        credentials: ProviderCredentials,
+        message_ids: list[MessageId],
+    ) -> MarkReadResult:
+        return MarkReadResult(marked=tuple(message_ids))
+
     async def refresh_cursor(
         self,
         credentials: ProviderCredentials,
@@ -107,6 +116,15 @@ async def test_handle_ingest_decrypts_tokens_and_inserts_emails(
         expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     test_session.add(tokens)
+    run = DigestRun(
+        user_id=user.id,
+        status="queued",
+        trigger_type="manual",
+        started_at=datetime.now(UTC),
+        stats={"account_ids": [str(account.id)]},
+        cost_cents=0,
+    )
+    test_session.add(run)
     await test_session.commit()
 
     mime = b"Subject: Hi\r\nFrom: a@b.com\r\n\r\nbody"
@@ -124,16 +142,25 @@ async def test_handle_ingest_decrypts_tokens_and_inserts_emails(
     deps = IngestDeps(session=test_session, provider=provider, cipher=cipher)
 
     stats = await handle_ingest(
-        IngestMessage(user_id=user.id, account_id=account.id),
+        IngestMessage(user_id=user.id, account_id=account.id, run_id=run.id),
         deps=deps,
     )
     await test_session.commit()
     assert stats.new == 1
 
-    from sqlalchemy import select
-
     emails = (await test_session.execute(select(Email))).scalars().all()
     assert len(emails) == 1
+    membership = (
+        (
+            await test_session.execute(
+                select(DigestRunEmail).where(DigestRunEmail.run_id == run.id),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(membership) == 1
+    assert membership[0].email_id == emails[0].id
 
 
 async def test_handle_ingest_missing_tokens_raises(test_session: AsyncSession) -> None:

@@ -4,7 +4,7 @@ Routes:
 
 * ``GET /api/v1/profile/me`` — current user's profile.
 * ``PATCH /api/v1/profile/me`` — partial profile update (display name,
-  aliases, presidio toggle, theme preference).
+  aliases, legacy presidio toggle, theme preference).
 * ``GET /api/v1/profile/me/schedule`` — schedule view with a
   ``next_run_at_utc`` preview.
 * ``PATCH /api/v1/profile/me/schedule`` — partial schedule update

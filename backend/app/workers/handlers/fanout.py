@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
@@ -29,8 +30,8 @@ from sqlalchemy import select
 from app.core.clock import utcnow
 from app.core.ids import new_uuid
 from app.core.logging import get_logger
-from app.core.scheduling import UserScheduleView, is_due
-from app.db.models import ConnectedAccount, User
+from app.core.scheduling import LOCK_STALE_AFTER, UserScheduleView, is_due
+from app.db.models import ConnectedAccount, DigestRun, User
 from app.workers.messages import IngestMessage
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -84,6 +85,26 @@ def _schedule_view(user: User) -> UserScheduleView:
     )
 
 
+def _has_stale_lock(*, now_utc: datetime, user: User) -> bool:
+    """Return whether ``user`` carries an expired run lock.
+
+    Args:
+        now_utc: Reference UTC instant.
+        user: Candidate user row from fan-out.
+
+    Returns:
+        True when the user has a lock older than the stale-lock window.
+    """
+    if user.current_run_id is None:
+        return False
+    if user.current_run_started_at is None:
+        return True
+    started = user.current_run_started_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=now_utc.tzinfo)
+    return now_utc - started >= LOCK_STALE_AFTER
+
+
 async def run_fanout(
     *,
     deps: FanoutDeps,
@@ -122,7 +143,19 @@ async def run_fanout(
     enqueued = 0
     skipped_disabled = 0
     skipped_locked = 0
+    stale_locks = 0
     for user in users:
+        stale_lock = _has_stale_lock(now_utc=now_utc, user=user)
+        if user.current_run_id is not None and stale_lock:
+            stale_locks += 1
+            logger.warning(
+                "fanout.stale_lock_released",
+                user_id=str(user.id),
+                previous_run_id=user.current_run_id,
+            )
+        elif user.current_run_id is not None:
+            skipped_locked += 1
+
         if not is_due(now_utc, _schedule_view(user)):
             skipped_disabled += 1
             continue
@@ -137,12 +170,30 @@ async def run_fanout(
             continue
 
         run_id = new_uuid()
+        account_ids = [str(account.id) for account in accounts]
+        run = DigestRun(
+            id=run_id,
+            user_id=user.id,
+            status="queued",
+            trigger_type="scheduled",
+            started_at=now_utc,
+            completed_at=None,
+            stats={
+                "ingested": 0,
+                "classified": 0,
+                "summarized": 0,
+                "new_must_read": 0,
+                "account_ids": account_ids,
+            },
+            cost_cents=0,
+        )
+        deps.session.add(run)
         # Acquire the idempotency lock before enqueueing. A second tick
         # that lands while messages are still in flight will fail the
         # is_due check and skip — see app.core.scheduling docstring.
         user.current_run_id = str(run_id)
         user.current_run_started_at = now_utc
-        await deps.session.flush()
+        await deps.session.commit()
 
         for account in accounts:
             message = IngestMessage(
@@ -162,6 +213,7 @@ async def run_fanout(
         enqueued=enqueued,
         skipped_disabled=skipped_disabled,
         skipped_locked=skipped_locked,
+        stale_locks=stale_locks,
         user_filter=str(user_id) if user_id else None,
     )
     return enqueued

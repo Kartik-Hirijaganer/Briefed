@@ -10,9 +10,9 @@ const renderAt = (path: string): void => {
       <Routes>
         <Route path="/settings" element={<SettingsLayout />}>
           <Route path="accounts" element={<div data-testid="child">accounts</div>} />
-          <Route path="preferences" element={<div data-testid="child">prefs</div>} />
-          <Route path="prompts" element={<div data-testid="child">prompts</div>} />
           <Route path="schedule" element={<div data-testid="child">schedule</div>} />
+          <Route path="rules" element={<div data-testid="child">rules</div>} />
+          <Route path="preferences" element={<div data-testid="child">prefs</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -23,7 +23,7 @@ describe('<SettingsLayout>', () => {
   it('renders the four section tabs and active link', () => {
     renderAt('/settings/accounts');
     expect(screen.getByRole('heading', { level: 1, name: /settings/i })).toBeInTheDocument();
-    for (const label of ['Accounts', 'Preferences', 'Prompts', 'Schedule']) {
+    for (const label of ['Accounts', 'Schedule', 'Rules', 'Preferences']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole('link', { name: 'Accounts' }).className).toMatch(/border-accent/);

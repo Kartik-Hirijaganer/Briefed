@@ -25,12 +25,16 @@ PYTEST ?= $(PYTHON) -m pytest
 RUFF ?= $(PYTHON) -m ruff
 UVICORN ?= $(PYTHON) -m uvicorn
 VULTURE ?= $(PYTHON) -m vulture
+PROMPTFOO ?= npx --yes promptfoo@0.121.13
 
 export PYTHONPATH := backend:$(PYTHONPATH)
 
 ifneq (,$(wildcard .env))
 include .env
 export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
+endif
+ifneq ($(BRIEFED_OPENROUTER_API_KEY),)
+export OPENROUTER_API_KEY ?= $(BRIEFED_OPENROUTER_API_KEY)
 endif
 
 # Frontend scaffolding landed in Phase 6 (sources + tsconfig + primitives).
@@ -114,8 +118,7 @@ test: _artifacts_dir ## Run the full Briefed test suite and print a unified summ
 	  $(ARTIFACTS_DIR)/vitest.json $(ARTIFACTS_DIR)/playwright.json \
 	  $(ARTIFACTS_DIR)/promptfoo.json
 ifdef EVAL
-	@command -v promptfoo >/dev/null || \
-	  (echo "promptfoo is required for make eval; install it before running evals." && exit 127)
+	@$(PROMPTFOO) --version >/dev/null
 endif
 	@set -o pipefail; \
 	  $(PYTEST) -m "not e2e and not eval" \
@@ -124,14 +127,14 @@ endif
 ifdef FRONTEND_READY
 	@set -o pipefail; \
 	  npm --workspace frontend run test -- \
-	    --reporter=json --outputFile=$(ARTIFACTS_DIR)/vitest.json || true
+	    --reporter=json --outputFile=../$(ARTIFACTS_DIR)/vitest.json || true
 endif
 ifdef PLAYWRIGHT
 	PLAYWRIGHT=$(PLAYWRIGHT) npx playwright test \
 	  --reporter=json > $(ARTIFACTS_DIR)/playwright.json || true
 endif
 ifdef EVAL
-	promptfoo eval -c backend/eval/promptfoo.yaml \
+	$(PROMPTFOO) eval -c backend/eval/promptfoo.yaml \
 	  --output $(ARTIFACTS_DIR)/promptfoo.json || true
 endif
 	$(PYTHON) backend/scripts/test_summary.py

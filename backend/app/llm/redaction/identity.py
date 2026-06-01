@@ -2,9 +2,8 @@
 
 Replaces user-specific strings (own email, full name, account aliases,
 opaque user-id) with stable placeholders **before** the regex sanitizer
-runs. The deterministic identity scrub is what actually moves the
-needle on "OR cannot tie a request to *this* user" — Presidio's NER is
-too fuzzy to rely on for the user's own tokens.
+runs. The deterministic identity scrub is what moves the needle on
+"OR cannot tie a request to *this* user".
 """
 
 from __future__ import annotations

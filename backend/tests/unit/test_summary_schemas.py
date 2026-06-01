@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.llm.schemas import EmailSummary, TechNewsClusterSummary
+from app.llm.schemas import CategoryDigestSummary, EmailSummary, TechNewsClusterSummary
 
 _SCHEMA_DIR = Path(__file__).resolve().parents[3] / "packages" / "prompts" / "schemas"
 
@@ -92,6 +92,34 @@ def test_tech_news_cluster_summary_rejects_extra() -> None:
         )
 
 
+def test_category_digest_summary_happy_path() -> None:
+    summary = CategoryDigestSummary(
+        narrative="  Must-read mail centers on board planning.  ",
+        groups=(
+            {
+                "label": "  Board review ",
+                "bullets": ("Packet is due Friday", ""),
+                "item_refs": ("E1",),
+            },
+        ),
+        confidence=0.91,
+    )
+    assert summary.narrative == "Must-read mail centers on board planning."
+    assert summary.groups[0].label == "Board review"
+    assert summary.groups[0].bullets == ("Packet is due Friday",)
+
+
+def test_category_digest_summary_rejects_extra() -> None:
+    with pytest.raises(ValidationError):
+        CategoryDigestSummary.model_validate(
+            {
+                "narrative": "Hello",
+                "confidence": 0.9,
+                "unexpected": True,
+            },
+        )
+
+
 def test_json_schema_in_sync_with_pydantic_email_summary() -> None:
     schema = _load_schema("summarize_relevant.v1.json")
     required = set(schema["required"])  # type: ignore[index]
@@ -116,5 +144,17 @@ def test_json_schema_in_sync_with_pydantic_cluster_summary() -> None:
         "headline",
         "bullets",
         "sources",
+        "confidence",
+    }
+
+
+def test_json_schema_in_sync_with_pydantic_category_digest() -> None:
+    schema = _load_schema("category_digest.v1.json")
+    required = set(schema["required"])  # type: ignore[index]
+    assert required == {"narrative", "confidence"}
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == {  # type: ignore[index]
+        "narrative",
+        "groups",
         "confidence",
     }

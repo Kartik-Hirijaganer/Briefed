@@ -7,9 +7,9 @@ interface SettingsTab {
 
 const TABS: readonly SettingsTab[] = [
   { to: '/settings/accounts', label: 'Accounts' },
-  { to: '/settings/preferences', label: 'Preferences' },
-  { to: '/settings/prompts', label: 'Prompts' },
   { to: '/settings/schedule', label: 'Schedule' },
+  { to: '/settings/rules', label: 'Rules' },
+  { to: '/settings/preferences', label: 'Preferences' },
 ];
 
 /**
@@ -19,7 +19,7 @@ const TABS: readonly SettingsTab[] = [
  */
 export default function SettingsLayout(): JSX.Element {
   return (
-    <section className="flex flex-col gap-6">
+    <section className="mx-auto flex w-full max-w-[var(--container-settings)] flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       <nav aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-border">
         {TABS.map((tab) => (

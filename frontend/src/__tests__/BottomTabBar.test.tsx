@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { BottomTabBar } from '../shell/BottomTabBar';
 
 describe('<BottomTabBar>', () => {
-  it('renders only the four mobile-flagged tabs', () => {
+  it('renders only the three mobile-flagged tabs', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <BottomTabBar />
@@ -13,21 +13,20 @@ describe('<BottomTabBar>', () => {
     );
     const nav = screen.getByRole('navigation', { name: /primary mobile/i });
     const links = within(nav).getAllByRole('link');
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(3);
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
       '/',
-      '/must-read',
-      '/jobs',
+      '/history',
       '/settings/accounts',
     ]);
   });
 
   it('highlights the active tab', () => {
     render(
-      <MemoryRouter initialEntries={['/must-read']}>
+      <MemoryRouter initialEntries={['/history']}>
         <BottomTabBar />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: /must read/i }).className).toMatch(/text-accent/);
+    expect(screen.getByRole('link', { name: /history/i }).className).toMatch(/text-accent/);
   });
 });

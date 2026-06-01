@@ -3,7 +3,7 @@
 Every queue carries a discriminated-union payload. Phase 1 shipped
 :class:`IngestMessage`; Phase 2 added :class:`ClassifyMessage`; Phase 3
 added :class:`SummarizeEmailMessage` and :class:`TechNewsClusterMessage`;
-Phase 4 added :class:`JobExtractMessage`; Phase 5 adds
+Phase 4 adds :class:`CategoryDigestMessage`; Phase 5 adds
 :class:`UnsubscribeMessage` (per-account hygiene run).
 """
 
@@ -13,6 +13,8 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.llm.schemas import CategoryDigestCategory
 
 
 class IngestMessage(BaseModel):
@@ -49,7 +51,7 @@ class ClassifyMessage(BaseModel):
         email_id: Target email.
         run_id: Optional digest-run this classification belongs to.
         prompt_name: Prompt key to use; defaults to ``"triage"``.
-        prompt_version: Version; defaults to ``1``.
+        prompt_version: Version; defaults to ``2``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -60,7 +62,7 @@ class ClassifyMessage(BaseModel):
     email_id: UUID
     run_id: UUID | None = Field(default=None)
     prompt_name: str = Field(default="triage")
-    prompt_version: int = Field(default=1, ge=1)
+    prompt_version: int = Field(default=2, ge=1)
 
 
 class SummarizeEmailMessage(BaseModel):
@@ -125,33 +127,25 @@ class TechNewsClusterMessage(BaseModel):
     max_cluster_size: int = Field(default=8, ge=1, le=50)
 
 
-class JobExtractMessage(BaseModel):
-    """SQS payload for the ``briefed-*-jobs`` queue (plan §14 Phase 4).
+class CategoryDigestMessage(BaseModel):
+    """SQS payload for the ``briefed-*-summarize`` queue — category digest.
 
-    One message per job-candidate flagged email. Workers fetch the email
-    row, render the ``job_extract`` prompt, corroborate the salary
-    against the body, evaluate every active ``job_filters`` predicate,
-    and write a :class:`app.db.models.JobMatch` row keyed by ``email_id``.
+    Emitted by run finalization only after the run's classification and
+    per-email summary work is fully drained. The worker loads the run to
+    recover the owning user and then builds one digest row for this
+    category.
 
     Attributes:
-        kind: Discriminator literal. Always ``"job_extract"``.
-        user_id: Owning user — bound into the encryption context.
-        account_id: Connected account the email belongs to.
-        email_id: Target email.
-        run_id: Optional digest-run scope.
-        prompt_name: Prompt key; defaults to ``"job_extract"``.
-        prompt_version: Version; defaults to ``1``.
+        kind: Discriminator literal. Always ``"category_digest"``.
+        run_id: Digest run scope.
+        category: Summarizable triage category.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["job_extract"] = "job_extract"
-    user_id: UUID
-    account_id: UUID
-    email_id: UUID
-    run_id: UUID | None = Field(default=None)
-    prompt_name: str = Field(default="job_extract")
-    prompt_version: int = Field(default=1, ge=1)
+    kind: Literal["category_digest"] = "category_digest"
+    run_id: UUID
+    category: CategoryDigestCategory
 
 
 class UnsubscribeMessage(BaseModel):
@@ -201,10 +195,10 @@ class FanoutMessage(BaseModel):
 
 
 __all__ = [
+    "CategoryDigestMessage",
     "ClassifyMessage",
     "FanoutMessage",
     "IngestMessage",
-    "JobExtractMessage",
     "SummarizeEmailMessage",
     "TechNewsClusterMessage",
     "UnsubscribeMessage",

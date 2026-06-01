@@ -12,7 +12,7 @@ const baseProfile: UserProfile = {
   display_name: 'Alex',
   email_aliases: [],
   redaction_aliases: [],
-  presidio_enabled: true,
+  presidio_enabled: false,
   theme_preference: 'system',
   schedule_frequency: 'once_daily',
   schedule_times_local: ['08:00'],
@@ -50,12 +50,11 @@ afterEach(() => {
 });
 
 describe('<ProfileSettings>', () => {
-  it('renders the four Track C panels once data resolves', async () => {
+  it('renders the three Track C panels once data resolves', async () => {
     render(wrap(<ProfileSettings />));
     expect(await screen.findByText('Profile')).toBeInTheDocument();
     expect(screen.getByText('Schedule')).toBeInTheDocument();
     expect(screen.getByText('Appearance')).toBeInTheDocument();
-    expect(screen.getByText('Privacy')).toBeInTheDocument();
   });
 
   it('updates the display name on blur', async () => {

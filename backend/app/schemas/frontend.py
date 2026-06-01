@@ -60,12 +60,18 @@ class ManualRunRequest(BaseModel):
     Attributes:
         kind: Only ``manual`` is supported by the HTTP trigger.
         account_ids: Optional subset of connected accounts to scan.
+        mode: Incremental scan or recent-mail reclassification.
+        window_days: Optional recent-mail window for reclassification.
+        include_user_overrides: Whether user-moved rows may be overwritten.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["manual"] = "manual"
     account_ids: tuple[UUID, ...] | None = Field(default=None)
+    mode: Literal["incremental", "reclassify_recent"] = Field(default="incremental")
+    window_days: int | None = Field(default=None, ge=1, le=90)
+    include_user_overrides: bool = Field(default=False)
 
 
 class ManualRunResponse(BaseModel):
@@ -139,7 +145,46 @@ class DigestCounts(BaseModel):
     must_read: int = Field(default=0, ge=0)
     good_to_read: int = Field(default=0, ge=0)
     ignore: int = Field(default=0, ge=0)
-    waste: int = Field(default=0, ge=0)
+
+
+class CategoryDigestGroupOut(BaseModel):
+    """Thematic group inside a category digest.
+
+    Attributes:
+        label: Short group heading.
+        bullets: Source-backed summary bullets.
+        item_refs: Opaque source refs cited by the group.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str = Field(..., description="Short group heading.")
+    bullets: tuple[str, ...] = Field(default=(), description="Source-backed bullets.")
+    item_refs: tuple[str, ...] = Field(default=(), description="Opaque source refs.")
+
+
+class CategoryDigestOut(BaseModel):
+    """Decrypted run/category digest returned by ``/digest/today``.
+
+    Attributes:
+        category: Triage category summarized by the digest.
+        narrative: Plaintext rollup narrative.
+        groups: Thematic source-backed groups.
+        confidence: Calibrated ``[0, 1]``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    category: Literal["must_read", "good_to_read"] = Field(
+        ...,
+        description="Summarized triage category.",
+    )
+    narrative: str = Field(..., description="Plaintext rollup narrative.")
+    groups: tuple[CategoryDigestGroupOut, ...] = Field(
+        default=(),
+        description="Thematic source-backed groups.",
+    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Digest confidence.")
 
 
 class DigestTodayResponse(BaseModel):
@@ -149,6 +194,8 @@ class DigestTodayResponse(BaseModel):
         generated_at: Timestamp of the latest successful run.
         cost_cents_today: Rounded prompt spend for today.
         counts: Current triage counts.
+        rule_decided: Count of latest-run classifications decided by rules.
+        category_summaries: Decrypted latest-run category digests.
         must_read_preview: Newest must-read rows.
         last_successful_run_at: Timestamp used for freshness warnings.
     """
@@ -158,6 +205,15 @@ class DigestTodayResponse(BaseModel):
     generated_at: datetime | None = Field(default=None)
     cost_cents_today: int = Field(ge=0)
     counts: DigestCounts
+    rule_decided: int = Field(
+        default=0,
+        ge=0,
+        description="Latest-run classifications decided by rules.",
+    )
+    category_summaries: tuple[CategoryDigestOut, ...] = Field(
+        default=(),
+        description="Latest-run category digest summaries.",
+    )
     must_read_preview: tuple[EmailRowOut, ...] = Field(default=())
     last_successful_run_at: datetime | None = Field(default=None)
 
@@ -190,6 +246,8 @@ class NewsDigestResponse(BaseModel):
 
 
 __all__ = [
+    "CategoryDigestGroupOut",
+    "CategoryDigestOut",
     "DigestCounts",
     "DigestTodayResponse",
     "ManualRunRequest",

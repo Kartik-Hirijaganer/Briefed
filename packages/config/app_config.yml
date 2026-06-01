@@ -1,0 +1,30 @@
+features:
+  jobs: false
+  unsubscribe: true
+  newsletter_clustering: true
+  presidio: false
+
+classification:
+  low_confidence_threshold: 0.55
+  needs_review_threshold: 0.55
+
+api:
+  dashboard_preview_limit: 5
+  emails_default_limit: 50
+  emails_max_limit: 100
+  unsubscribe_recommendation_confidence_min: 0.800
+  top_domain_cap: 10
+
+taxonomy:
+  user_facing_buckets:
+    - must_read
+    - good_to_read
+    - ignore
+  summarizable_labels:
+    - must_read
+    - good_to_read
+  newsletter_label: newsletter
+
+scan:
+  lookback_days: 14
+  unread_only: true

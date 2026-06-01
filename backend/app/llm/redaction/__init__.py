@@ -1,11 +1,10 @@
-"""LLM prompt-redaction package (Track B / ADR 0010).
+"""LLM prompt-redaction package.
 
 Public surface:
 
 * :class:`Sanitizer` / :class:`RedactionResult` — protocol + value object.
 * :class:`RegexSanitizer` — zero-deps regex set (emails, phones, ...).
 * :class:`IdentityScrubber` — user-specific token replacement.
-* :class:`PresidioSanitizer` — Presidio-backed NER pass.
 * :class:`SanitizerChain` — composition primitive.
 * :func:`build_default_chain` — Briefed defaults; reads from settings.
 
@@ -15,9 +14,9 @@ outbound prompt passes through redaction before reaching a provider.
 
 from __future__ import annotations
 
+from app.core.app_config import get_app_config
 from app.llm.redaction.chain import SanitizerChain
 from app.llm.redaction.identity import IdentityScrubber
-from app.llm.redaction.presidio import PresidioSanitizer
 from app.llm.redaction.regex_sanitizer import RegexSanitizer
 from app.llm.redaction.types import RedactionResult, Sanitizer
 
@@ -29,11 +28,13 @@ def build_default_chain(
     user_id: str | None = None,
     aliases: tuple[str, ...] = (),
     email_aliases: tuple[str, ...] = (),
-    presidio_enabled: bool = True,
+    presidio_enabled: bool = False,
 ) -> SanitizerChain:
     """Construct the Briefed default sanitizer chain.
 
-    Order is identity → regex → presidio, per ADR 0010 §Decision.
+    Order is identity → regex. Presidio was removed in the Phase 2
+    daily-triage revamp; requesting it is a configuration error, not a
+    hidden fallback.
 
     Args:
         user_email: User's primary email; folded into ``<USER_EMAIL>``.
@@ -44,12 +45,18 @@ def build_default_chain(
         email_aliases: Additional email addresses; folded into
             ``<USER_EMAIL>``. Track C populates this from the user
             profile's ``email_aliases`` column.
-        presidio_enabled: Track B Phase 6 escape hatch — when ``False``
-            the chain runs only identity + regex.
+        presidio_enabled: Legacy toggle. ``True`` raises because
+            Presidio support was removed.
 
     Returns:
         A :class:`SanitizerChain` ready to pass to ``LLMClient.call``.
+
+    Raises:
+        RuntimeError: If Presidio is requested by argument or app config.
     """
+    if presidio_enabled or get_app_config().features.presidio:
+        raise RuntimeError("Presidio redaction was removed; use identity + regex scrubbers.")
+
     identities: dict[str, list[str]] = {}
     email_candidates = [e for e in (user_email, *email_aliases) if e]
     if email_candidates:
@@ -64,14 +71,11 @@ def build_default_chain(
     if identities:
         sanitizers.append(IdentityScrubber(identities))
     sanitizers.append(RegexSanitizer())
-    if presidio_enabled:
-        sanitizers.append(PresidioSanitizer())
     return SanitizerChain(sanitizers)
 
 
 __all__ = [
     "IdentityScrubber",
-    "PresidioSanitizer",
     "RedactionResult",
     "RegexSanitizer",
     "Sanitizer",
