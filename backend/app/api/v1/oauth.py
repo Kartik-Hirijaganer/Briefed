@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import secrets
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
@@ -53,6 +54,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 router = APIRouter(prefix="/oauth/gmail", tags=["oauth"])
+
+_LOGIN_PATH = "/login"
+"""SPA route shown to unauthenticated users; OAuth denials bounce here."""
 
 
 def _compute_redirect_uri(request: Request, settings: Settings) -> str:
@@ -192,26 +196,44 @@ async def start(
 )
 async def callback(
     request: Request,
-    code: str = Query(...),
-    state: str = Query(...),
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
     oauth_state_cookie: str | None = Cookie(default=None, alias=OAUTH_STATE_COOKIE_NAME),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
     """Handle the Google consent-screen redirect.
 
+    Google redirects here with either ``code`` (success) or ``error`` (the
+    user cancelled / denied consent — RFC 6749 §4.1.2.1). Both success
+    parameters are optional so a denial never fails request validation with
+    a raw 422; the error path bounces to the login page instead.
+
     Args:
         request: FastAPI request.
-        code: Authorization code from Google.
-        state: State parameter Google echoed back.
+        code: Authorization code from Google, present on success.
+        state: State parameter Google echoed back, present on success.
+        error: OAuth error code (e.g. ``access_denied``) on user denial.
         oauth_state_cookie: Pre-authorize cookie set by :func:`start`.
         settings: Cached :class:`Settings`.
 
     Returns:
-        A 302 redirect back to the UI (``return_to`` or ``/``).
+        A 302 redirect back to the UI (``return_to`` or ``/``) on success,
+        or to ``/login`` carrying an ``auth_error`` code on denial / a
+        malformed callback.
 
     Raises:
-        HTTPException: 400 when the state mismatch / cookie missing.
+        HTTPException: 400 on state mismatch / missing cookie; 503 when
+            server OAuth configuration is missing.
     """
+    # RFC 6749 §4.1.2.1: on cancel/deny Google sends ``error`` and no
+    # ``code``. Surface it on the login page instead of 422-ing on the
+    # missing required query parameter.
+    if error:
+        return _redirect_after_oauth_error(error)
+    if not code or not state:
+        return _redirect_after_oauth_error("invalid_request")
+
     client_id, client_secret = _require_oauth_credentials(settings)
     signing_key = _require_session_key(settings)
     if not oauth_state_cookie:
@@ -303,6 +325,29 @@ async def callback(
         secure=settings.runtime != "local",
         samesite="lax",
     )
+    return response
+
+
+def _redirect_after_oauth_error(error: str) -> RedirectResponse:
+    """Bounce a failed authorization response back to the login page.
+
+    Google redirects to the callback with an ``error`` query parameter (and
+    no ``code``) when the user cancels or denies consent (RFC 6749
+    §4.1.2.1). Rather than failing request validation with a raw 422, send
+    the browser to the SPA login page with a stable error code the UI maps
+    to a friendly message.
+
+    Args:
+        error: Stable OAuth error code (e.g. ``access_denied``), or
+            ``invalid_request`` when the callback was malformed.
+
+    Returns:
+        A 302 redirect to ``/login`` carrying the ``auth_error`` code; the
+        stale pre-authorize cookie is cleared in passing.
+    """
+    query = urlencode({"auth_error": error})
+    response = RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME)
     return response
 
 
@@ -479,7 +524,7 @@ async def _get_or_create_user(
     )
     if existing is not None:
         return existing
-    user = User(email=email, tz="UTC", status="active")
+    user = User(email=email, tz="America/New_York", status="active")
     session.add(user)
     await session.flush()
     for rule in _default_rubric_rules_for(user_id=user.id):

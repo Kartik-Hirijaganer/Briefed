@@ -302,6 +302,28 @@ async def test_get_or_create_user_seeds_default_rubric_rules(
     assert len(repeat_rows) == len(rows)
 
 
+def test_oauth_callback_redirects_to_login_on_access_denied(wired_app: TestClient) -> None:
+    """User-denied consent (Google ``error``, no ``code``) bounces to /login, not a 422."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"error": "access_denied", "state": "STATE-123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == "/login?auth_error=access_denied"
+
+
+def test_oauth_callback_redirects_to_login_on_missing_code(wired_app: TestClient) -> None:
+    """A callback with neither ``code`` nor ``error`` is malformed → /login, not a 422."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"state": "STATE-123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == "/login?auth_error=invalid_request"
+
+
 def test_oauth_callback_rejects_state_mismatch(wired_app: TestClient) -> None:
     cookie_value = sign_cookie(
         {"state": "A", "code_verifier": "V" * 50, "return_to": None},

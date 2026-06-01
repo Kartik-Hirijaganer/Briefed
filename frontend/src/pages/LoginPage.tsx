@@ -1,4 +1,4 @@
-import { Button, Card } from '@briefed/ui';
+import { Alert, Button, Card } from '@briefed/ui';
 import { useSearchParams } from 'react-router-dom';
 
 import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
@@ -6,6 +6,16 @@ import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
 const sanitizeReturnTo = (value: string | null): string => {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
   return value;
+};
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: 'Google sign-in was cancelled or access was denied. Please try again.',
+  invalid_request: "Google's sign-in response was incomplete. Please try again.",
+};
+
+const describeAuthError = (code: string | null): string | null => {
+  if (!code) return null;
+  return AUTH_ERROR_MESSAGES[code] ?? 'Google sign-in did not complete. Please try again.';
 };
 
 /**
@@ -17,6 +27,7 @@ const sanitizeReturnTo = (value: string | null): string => {
  */
 export default function LoginPage(): JSX.Element {
   const [params] = useSearchParams();
+  const authError = describeAuthError(params.get('auth_error'));
   const addGmail = useAddGmailFlow({ returnTo: sanitizeReturnTo(params.get('next')) });
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-bg-muted px-6">
@@ -31,6 +42,11 @@ export default function LoginPage(): JSX.Element {
               and never send, archive, or click unsubscribe on your behalf.
             </p>
           </div>
+          {authError ? (
+            <Alert tone="danger" title="Sign-in failed">
+              <p>{authError}</p>
+            </Alert>
+          ) : null}
           <Button variant="primary" onClick={addGmail.start} aria-label="Continue with Google">
             Continue with Google
           </Button>

@@ -99,7 +99,7 @@ class User(Base, TimestampMixin):
         email: Owner email — unique, case-insensitive.
         display_name: Optional display name; consumed by the Track B
             IdentityScrubber when present.
-        tz: IANA timezone string (defaults to UTC).
+        tz: IANA timezone string (defaults to America/New_York).
         status: Lifecycle state (one of ``_USER_STATUS_CHOICES``).
         last_login_at: UTC timestamp of the most recent login.
         email_aliases: Extra email addresses to scrub from prompts.
@@ -135,7 +135,7 @@ class User(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
     email: Mapped[str] = mapped_column(citext_column(320), nullable=False, unique=True)
     display_name: Mapped[str | None] = mapped_column(String(255))
-    tz: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    tz: Mapped[str] = mapped_column(String(64), nullable=False, default="America/New_York")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_aliases: Mapped[list[str]] = mapped_column(
@@ -161,7 +161,7 @@ class User(Base, TimestampMixin):
     schedule_timezone: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
-        default="UTC",
+        default="America/New_York",
     )
     presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,8 +1,8 @@
 models:
   gemini-flash:
-    openrouter_id: google/gemini-2.0-flash-001
-    cost_per_m_input_usd: 0.10
-    cost_per_m_output_usd: 0.40
+    openrouter_id: google/gemini-2.5-flash
+    cost_per_m_input_usd: 0.30
+    cost_per_m_output_usd: 2.50
     daily_call_cap: null
     max_output_tokens: 8192
   claude-haiku:

@@ -71,7 +71,7 @@ class UserProfileOut(BaseModel):
     presidio_enabled: bool = False
     schedule_frequency: ScheduleFrequency = "once_daily"
     schedule_times_local: tuple[str, ...] = Field(default=("08:00",))
-    schedule_timezone: str = "UTC"
+    schedule_timezone: str = "America/New_York"
 
 
 class UserProfilePatchRequest(BaseModel):

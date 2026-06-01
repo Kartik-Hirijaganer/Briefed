@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,5 +79,53 @@ describe('<SchedulePage>', () => {
     apiMock.GET.mockResolvedValue({ error: { detail: 'boom' }, response: { status: 500 } });
     renderPage();
     await waitFor(() => expect(screen.getByText(/could not load schedule/i)).toBeInTheDocument());
+  });
+
+  it('limits the timezone dropdown to US and India zones', async () => {
+    apiMock.GET.mockResolvedValue({
+      data: {
+        schedule_frequency: 'once_daily',
+        schedule_times_local: ['08:00'],
+        schedule_timezone: 'America/New_York',
+        next_run_at_utc: '2026-06-01T12:00:00Z',
+      },
+    });
+    renderPage();
+
+    await screen.findByText(/automatic scan schedule/i);
+    const values = within(screen.getByRole('combobox'))
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value);
+    expect(values).toEqual([
+      'America/New_York',
+      'America/Chicago',
+      'America/Denver',
+      'America/Phoenix',
+      'America/Los_Angeles',
+      'America/Anchorage',
+      'Pacific/Honolulu',
+      'Asia/Kolkata',
+    ]);
+  });
+
+  it('keeps a legacy stored zone selectable outside the US/India set', async () => {
+    apiMock.GET.mockResolvedValue({
+      data: {
+        schedule_frequency: 'once_daily',
+        schedule_times_local: ['08:00'],
+        schedule_timezone: 'Europe/London',
+        next_run_at_utc: '2026-06-01T12:00:00Z',
+      },
+    });
+    renderPage();
+
+    await screen.findByText(/automatic scan schedule/i);
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    const values = within(select)
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value);
+    expect(values[0]).toBe('Europe/London');
+    expect(values).toContain('Asia/Kolkata');
+    expect(select.value).toBe('Europe/London');
   });
 });
