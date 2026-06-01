@@ -156,6 +156,19 @@ describe('<DashboardPage>', () => {
     );
   });
 
+  it('uses the loaded table total for the active KPI count', async () => {
+    mockDashboardRequests({
+      digest: { ...digest, counts: { must_read: 3, good_to_read: 7, ignore: 12 } },
+      total: 1,
+    });
+    renderPage('/?bucket=must_read');
+
+    const mustReadKpi = await screen.findByRole('button', { name: /must-read/i });
+
+    expect(within(mustReadKpi).getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('1 unread messages in this view')).toBeInTheDocument();
+  });
+
   it('pagination advances the offset query', async () => {
     const user = userEvent.setup();
     mockDashboardRequests({ total: 50 });
@@ -183,6 +196,31 @@ describe('<DashboardPage>', () => {
         body: { email_ids: ['e1'] },
       }),
     );
+  });
+
+  it('prompts Gmail reconnect when mark-read needs new authorization', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests();
+    apiMock.POST.mockResolvedValue({
+      error: {
+        code: 'gmail_reauthorization_required',
+        message: 'Gmail re-authorization is required before mark-read.',
+        details: { accountId: 'account-1', scope: 'gmail.modify' },
+        requestId: 'request-409',
+      },
+      response: { status: 409 },
+    });
+    renderPage();
+
+    const row = await screen.findByRole('row', { name: /call tomorrow/i });
+    await user.click(within(row).getByRole('button', { name: /mark read/i }));
+
+    expect(await screen.findByText(/reconnect gmail to mark mail read/i)).toBeInTheDocument();
+    expect(
+      screen.getByText('Gmail re-authorization is required before mark-read.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reconnect gmail/i })).toBeInTheDocument();
+    expect(screen.queryByText(/api request failed with status 409/i)).not.toBeInTheDocument();
   });
 
   it('bulk select-all optimistically removes selected rows before mark-read settles', async () => {

@@ -25,6 +25,7 @@ export interface Schemas {
   EmailRow: Components['EmailRowOut'];
   EmailBucketPatchRequest: Components['EmailBucketPatchRequest'];
   EmailsListResponse: Components['EmailsListResponse'];
+  ErrorEnvelope: Components['ErrorEnvelope'];
   MarkReadResponse: Components['MarkReadResponse'];
   UnsubscribeSuggestion: Components['UnsubscribeSuggestionOut'];
   UnsubscribesListResponse: Components['UnsubscribeSuggestionsListResponse'];
