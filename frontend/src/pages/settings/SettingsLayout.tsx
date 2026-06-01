@@ -1,4 +1,10 @@
+import { LogOut } from 'lucide-react';
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+
+import { Button } from '@briefed/ui';
+
+import { logoutAndClearBrowserSession } from '../../api/session';
 
 interface SettingsTab {
   readonly to: string;
@@ -18,9 +24,42 @@ const TABS: readonly SettingsTab[] = [
  * @returns The rendered layout.
  */
 export default function SettingsLayout(): JSX.Element {
+  const [logoutPending, setLogoutPending] = useState<boolean>(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const handleLogout = async (): Promise<void> => {
+    setLogoutPending(true);
+    setLogoutError(null);
+    try {
+      await logoutAndClearBrowserSession();
+    } catch {
+      setLogoutError('Logout failed. Try again.');
+      setLogoutPending(false);
+    }
+  };
+
   return (
     <section className="mx-auto flex w-full max-w-[var(--container-settings)] flex-col gap-6">
-      <h1 className="font-display text-2xl font-semibold tracking-tight">Settings</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Settings</h1>
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleLogout}
+            loading={logoutPending}
+            aria-label="Logout"
+          >
+            <LogOut aria-hidden="true" strokeWidth={1.75} className="h-4 w-4" />
+            Logout
+          </Button>
+          {logoutError ? (
+            <p role="alert" className="text-xs text-fg-muted">
+              {logoutError}
+            </p>
+          ) : null}
+        </div>
+      </div>
       <nav aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-border">
         {TABS.map((tab) => (
           <NavLink

@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1.accounts import router as accounts_router
+from app.api.v1.auth import router as auth_router
 from app.api.v1.emails import router as emails_router
 from app.api.v1.frontend import router as frontend_router
 from app.api.v1.oauth import router as oauth_router
@@ -24,6 +25,7 @@ from app.api.v1.unsubscribes import hygiene_router, unsubscribes_router
 api_router = APIRouter(prefix="/api/v1")
 """Top-level v1 router — include this one on the FastAPI app."""
 
+api_router.include_router(auth_router)
 api_router.include_router(oauth_router)
 api_router.include_router(accounts_router)
 api_router.include_router(rubric_router)
