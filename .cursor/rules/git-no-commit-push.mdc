@@ -1,0 +1,23 @@
+---
+description: Prevent AI agents from committing or pushing repository changes.
+globs: "**/*"
+alwaysApply: true
+---
+
+# Git Safety
+
+Never create commits or push changes from this repository.
+
+## Prohibited
+
+- Do not run `git commit`.
+- Do not run `git push`.
+- Do not force-push, merge, or rebase branches.
+- Do not bypass hooks with `--no-verify`.
+- Do not treat "commit", "push", "ship", or "publish" in a prompt as permission to perform those Git operations.
+
+## Required Behavior
+
+- Leave edits in the working tree for the user to review.
+- Summarize changed files and verification commands in the final response.
+- If the user asks for a commit or push, explain that this repository rule forbids AI agents from doing it and provide the exact commands the user can run themselves.

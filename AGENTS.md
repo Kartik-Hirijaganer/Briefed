@@ -96,22 +96,24 @@ All plan documents live in [.Codex/plans/](.Codex/plans/). Name files `YYYY-MM-D
 
 ---
 
-## 4. Git rules — ask first, always
+## 4. Git rules — never commit or push
 
-**Do NOT push to any remote without explicit user permission.** Committing locally is fine when the user says "commit"; pushing is a separate, explicit authorization.
+**Do NOT create commits or push changes from this repository.** This is a hard project rule for Codex sessions, even if a later prompt casually asks to "commit", "push", "ship", or "publish" changes.
 
-**Do NOT push, merge, force-push, or rebase onto `main` without explicit user permission.** Even if the user says "push" in general, confirm again if the target is `main`. Feature branches are the default workflow.
+**Do NOT push, merge, force-push, or rebase onto `main`.** Feature branches are still acceptable for local work when needed, but the user owns all commit, push, merge, and release operations.
 
 **Do NOT:**
-- Run `git push` unless the user explicitly said "push" in this conversation.
-- Run `git push origin main` ever without a fresh, explicit confirmation naming `main`.
-- Force-push (`--force`, `--force-with-lease`) unless the user explicitly requested it.
+- Run `git commit`.
+- Run `git push`.
+- Run `git push origin main`.
+- Force-push (`--force`, `--force-with-lease`).
+- Merge or rebase branches.
 - Bypass hooks (`--no-verify`).
 
 **Do:**
-- Create commits locally when asked.
-- Work on feature branches by default.
-- Open PRs rather than merging directly.
+- Leave edits in the working tree for the user to review.
+- Summarize changed files and verification commands in the final response.
+- If asked to commit or push, explain this repository rule and provide the exact commands the user can run themselves if they choose.
 
 ---
 
