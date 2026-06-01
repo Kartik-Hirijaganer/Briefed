@@ -15,6 +15,7 @@ const baseEmail: Schemas['EmailRow'] = {
   reasons: ['rubric'],
   decision_source: 'rule',
   confidence: 0.92,
+  needs_review: false,
   summary_excerpt: 'Please confirm by 5pm.',
   received_at: '2026-04-25T10:00:00Z',
 };

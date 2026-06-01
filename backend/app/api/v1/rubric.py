@@ -86,6 +86,7 @@ async def create_rule(
     """
     row = RubricRule(
         user_id=user_id,
+        name=payload.name,
         priority=payload.priority,
         match=payload.match,
         action=payload.action,
@@ -127,6 +128,7 @@ async def update_rule(
     if row is None or row.user_id != user_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="rule not found")
     row.priority = payload.priority
+    row.name = payload.name
     row.match = payload.match
     row.action = payload.action
     row.active = payload.active

@@ -13,6 +13,7 @@ import pytest
 from app.db.models import (
     Classification,
     ConnectedAccount,
+    DigestRun,
     Email,
     User,
 )
@@ -20,6 +21,7 @@ from app.services.classification.dispatch import (
     enqueue_unclassified_for_account,
     parse_classify_body,
 )
+from app.services.runs import stamp_run_membership
 from app.workers.messages import ClassifyMessage
 
 
@@ -100,6 +102,68 @@ async def test_enqueue_skips_already_classified(test_session) -> None:
     body = json.loads(sqs.messages[0][1])
     assert body["kind"] == "classify"
     assert body["email_id"] == str(email_b.id)
+    assert body["prompt_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_enqueue_run_scoped_unclassified_uses_membership(test_session) -> None:
+    """Run-scoped dispatch ignores old account-level unclassified rows."""
+    user = User(email="member@x.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    account = ConnectedAccount(
+        user_id=user.id,
+        provider="gmail",
+        email="member@x.com",
+        status="active",
+    )
+    test_session.add(account)
+    await test_session.flush()
+    member = _email(account=account, message_id="member")
+    old = _email(account=account, message_id="old")
+    run = DigestRun(
+        user_id=user.id,
+        status="queued",
+        trigger_type="manual",
+        started_at=datetime.now(tz=UTC),
+        stats={"account_ids": [str(account.id)]},
+        cost_cents=0,
+    )
+    test_session.add_all([member, old, run])
+    await test_session.flush()
+    await stamp_run_membership(session=test_session, run_id=run.id, email_ids=(member.id,))
+
+    sqs = _FakeSqs()
+    count = await enqueue_unclassified_for_account(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/classify",
+        sqs=sqs,
+        run_id=run.id,
+    )
+
+    assert count == 1
+    body = json.loads(sqs.messages[0][1])
+    assert body["email_id"] == str(member.id)
+    assert body["email_id"] != str(old.id)
+
+
+def _email(*, account: ConnectedAccount, message_id: str) -> Email:
+    """Build a minimal email row for classify-dispatch tests."""
+    return Email(
+        account_id=account.id,
+        gmail_message_id=message_id,
+        thread_id=f"t-{message_id}",
+        internal_date=datetime.now(tz=UTC),
+        from_addr="x@y.com",
+        to_addrs=[],
+        cc_addrs=[],
+        subject=message_id,
+        snippet="",
+        labels=[],
+        content_hash=hashlib.sha256(message_id.encode()).digest(),
+    )
 
 
 def test_parse_classify_body_roundtrip() -> None:

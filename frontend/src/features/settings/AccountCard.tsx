@@ -21,18 +21,16 @@ export interface AccountCardProps {
   readonly account: Schemas['ConnectedAccount'];
 }
 
-const STATUS_TONE: Record<Schemas['ConnectedAccount']['status'], BadgeTone> = {
+const STATUS_TONE: Record<string, BadgeTone> = {
   active: 'success',
-  paused: 'neutral',
-  needs_reauth: 'warn',
-  error: 'danger',
+  disabled: 'neutral',
+  revoked: 'warn',
 };
 
-const STATUS_LABEL: Record<Schemas['ConnectedAccount']['status'], string> = {
+const STATUS_LABEL: Record<string, string> = {
   active: 'Active',
-  paused: 'Paused',
-  needs_reauth: 'Needs reauth',
-  error: 'Error',
+  disabled: 'Disabled',
+  revoked: 'Needs reconnect',
 };
 
 /**
@@ -112,7 +110,9 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
             <h3 className="truncate text-sm font-semibold text-fg">
               {account.display_name || account.email}
             </h3>
-            <Badge tone={STATUS_TONE[account.status]}>{STATUS_LABEL[account.status]}</Badge>
+            <Badge tone={STATUS_TONE[account.status] ?? 'neutral'}>
+              {STATUS_LABEL[account.status] ?? account.status}
+            </Badge>
           </div>
           <p className="truncate text-xs text-fg-muted">{account.email}</p>
           <p className="mt-1 text-xs text-fg-muted">

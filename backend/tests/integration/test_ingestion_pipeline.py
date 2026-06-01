@@ -14,6 +14,7 @@ from app.db.models import ConnectedAccount, Email, User
 from app.db.models import SyncCursor as SyncCursorRow
 from app.domain.providers import (
     MailboxProvider,
+    MarkReadResult,
     MessageId,
     ProviderCredentials,
     RawMessage,
@@ -54,6 +55,13 @@ class _FakeGmail(MailboxProvider):
         ids: list[MessageId],
     ) -> list[RawMessage]:
         return [self.messages[i] for i in ids if i in self.messages]
+
+    async def mark_read(
+        self,
+        credentials: ProviderCredentials,
+        message_ids: list[MessageId],
+    ) -> MarkReadResult:
+        return MarkReadResult(marked=tuple(message_ids))
 
     async def refresh_cursor(
         self,

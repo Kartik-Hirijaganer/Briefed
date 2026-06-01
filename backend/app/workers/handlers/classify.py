@@ -9,7 +9,7 @@ Retry semantics:
   to classify); log and return.
 * Missing prompt version → raises; SQS re-delivers.
 * :class:`app.llm.client.LLMClientError` is handled inside the pipeline
-  by writing a ``needs_review`` row with ``status='error'`` — we do not
+  by writing an ``ignore`` row with ``needs_review=true`` — we do not
   retry at the SQS level because the breaker already backed off.
 """
 

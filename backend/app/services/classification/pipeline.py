@@ -26,10 +26,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.errors import CryptoError
 from app.core.logging import get_logger
-from app.db.models import ConnectedAccount, Email, PromptCallLog
+from app.db.models import Classification, ConnectedAccount, Email, PromptCallLog
 from app.domain.providers import EmailAddress, EmailMessage, UnsubscribeInfo
 from app.llm.client import (
     LLMClient,
@@ -53,13 +54,14 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 logger = get_logger(__name__)
+_APP_CONFIG = get_app_config()
 
 
-_LOW_CONFIDENCE_THRESHOLD = 0.55
+_LOW_CONFIDENCE_THRESHOLD = _APP_CONFIG.classification.low_confidence_threshold
 """Below this rule confidence we still call the LLM (plan §6)."""
 
-_NEEDS_REVIEW_THRESHOLD = 0.55
-"""Below this model confidence we force ``needs_review`` (plan §6)."""
+_NEEDS_REVIEW_THRESHOLD = _APP_CONFIG.classification.needs_review_threshold
+"""Below this model confidence we set ``Classification.needs_review``."""
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,10 @@ async def classify_one(
     if account_row is None:
         raise LookupError(f"account {email_row.account_id} not found")
 
+    protected = await _protected_user_override(session=session, email_id=inputs.email_id)
+    if protected is not None:
+        return protected
+
     engine = rule_engine
     if engine is None:
         engine = await load_default_rules(session, user_id=inputs.user_id)
@@ -202,7 +208,7 @@ async def classify_one(
             email_id=str(inputs.email_id),
             error=str(exc),
         )
-        # Graceful degradation: persist a needs_review row.
+        # Graceful degradation: persist an ignored row with the review flag.
         return await _persist_needs_review(
             session=session,
             inputs=inputs,
@@ -214,10 +220,8 @@ async def classify_one(
 
     final_label = triage.category
     final_conf = triage.confidence
-    if triage.confidence < _NEEDS_REVIEW_THRESHOLD:
-        final_label = "needs_review"
-    final_is_newsletter = triage.is_newsletter if final_label != "needs_review" else False
-    final_is_job_candidate = triage.is_job_candidate if final_label != "needs_review" else False
+    needs_review = triage.confidence < _NEEDS_REVIEW_THRESHOLD
+    final_is_newsletter = triage.is_newsletter
 
     decision_source = "model" if rule_decision is None else "hybrid"
     reasons_payload: dict[str, object] = {
@@ -225,8 +229,8 @@ async def classify_one(
         "model_reasons": triage.reasons_short,
         "model_confidence": triage.confidence,
         "model_category": triage.category,
+        "needs_review": needs_review,
         "is_newsletter": triage.is_newsletter,
-        "is_job_candidate": triage.is_job_candidate,
     }
     if rule_decision is not None:
         reasons_payload["rule_reasons"] = list(rule_decision.reasons)
@@ -247,9 +251,9 @@ async def classify_one(
             tokens_in=response.call_result.tokens_in,
             tokens_out=response.call_result.tokens_out,
             is_newsletter=final_is_newsletter,
-            is_job_candidate=final_is_job_candidate,
             reasons=reasons_payload,
             user_id=inputs.user_id,
+            needs_review=needs_review,
         ),
     )
 
@@ -279,7 +283,6 @@ async def _persist_rule_only(
         "rule_confidence": rule_decision.confidence,
         "rule_version": rule_decision.rubric_version,
         "is_newsletter": rule_decision.is_newsletter,
-        "is_job_candidate": rule_decision.is_job_candidate,
     }
     await inputs.repo.upsert(
         session,
@@ -294,9 +297,9 @@ async def _persist_rule_only(
             tokens_in=0,
             tokens_out=0,
             is_newsletter=rule_decision.is_newsletter,
-            is_job_candidate=rule_decision.is_job_candidate,
             reasons=reasons_payload,
             user_id=inputs.user_id,
+            needs_review=False,
         ),
     )
     return ClassifyOutcome(
@@ -317,16 +320,17 @@ async def _persist_needs_review(
     inputs: ClassifyInputs,
     reason: str,
 ) -> ClassifyOutcome:
-    """Persist a ``needs_review`` verdict when all providers fail."""
+    """Persist an ``ignore`` verdict flagged for review when all providers fail."""
     reasons_payload: dict[str, object] = {
         "source": "error",
         "error": reason,
+        "needs_review": True,
     }
     await inputs.repo.upsert(
         session,
         ClassificationWrite(
             email_id=inputs.email_id,
-            label="needs_review",
+            label="ignore",
             score=Decimal("0.0"),
             rubric_version=0,
             prompt_version_id=None,
@@ -335,16 +339,49 @@ async def _persist_needs_review(
             tokens_in=0,
             tokens_out=0,
             is_newsletter=False,
-            is_job_candidate=False,
             reasons=reasons_payload,
             user_id=inputs.user_id,
+            needs_review=True,
         ),
     )
     return ClassifyOutcome(
         email_id=inputs.email_id,
-        label="needs_review",
+        label="ignore",
         score=0.0,
         decision_source="model",
+        tokens_in=0,
+        tokens_out=0,
+        cost_usd=Decimal("0"),
+        llm_used=False,
+    )
+
+
+async def _protected_user_override(
+    *,
+    session: AsyncSession,
+    email_id: UUID,
+) -> ClassifyOutcome | None:
+    """Return an existing user override outcome without reclassifying it.
+
+    Args:
+        session: Active async session.
+        email_id: Target email id.
+
+    Returns:
+        Existing override outcome, or ``None`` when classification may proceed.
+    """
+    existing = (
+        await session.execute(
+            select(Classification).where(Classification.email_id == email_id),
+        )
+    ).scalar_one_or_none()
+    if existing is None or existing.model != "user_override":
+        return None
+    return ClassifyOutcome(
+        email_id=email_id,
+        label=existing.label,
+        score=float(existing.score),
+        decision_source=existing.decision_source,
         tokens_in=0,
         tokens_out=0,
         cost_usd=Decimal("0"),

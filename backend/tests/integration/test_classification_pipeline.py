@@ -35,7 +35,7 @@ from app.db.models import (
 from app.llm.client import LLMClient, LLMClientConfig
 from app.llm.providers.base import LLMCallResult, LLMProviderError, PromptSpec
 from app.services.classification.pipeline import ClassifyInputs, classify_one
-from app.services.classification.repository import ClassificationsRepo
+from app.services.classification.repository import ClassificationsRepo, ClassificationWrite
 from app.services.classification.rubric import RuleEngine
 from app.services.prompts.registry import RegisteredPrompt
 
@@ -186,7 +186,7 @@ async def test_rule_short_circuit_records_rule_source(test_session) -> None:
         session=test_session,
         rule_engine=engine,
     )
-    assert outcome.label == "waste"
+    assert outcome.label == "ignore"
     assert outcome.decision_source == "rule"
     assert outcome.tokens_in == 0
 
@@ -195,7 +195,7 @@ async def test_rule_short_circuit_records_rule_source(test_session) -> None:
             select(Classification).where(Classification.email_id == email.id),
         )
     ).scalar_one()
-    assert row.label == "waste"
+    assert row.label == "ignore"
     assert row.decision_source == "rule"
 
     calls = (await test_session.execute(select(PromptCallLog))).scalars().all()
@@ -222,7 +222,6 @@ async def test_llm_path_records_prompt_call_log(test_session) -> None:
                     "confidence": 0.9,
                     "reasons_short": "direct message",
                     "is_newsletter": False,
-                    "is_job_candidate": False,
                 },
             ),
         ],
@@ -266,7 +265,7 @@ async def test_llm_path_records_prompt_call_log(test_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_low_confidence_demoted_to_needs_review(test_session) -> None:
+async def test_low_confidence_sets_needs_review_flag(test_session) -> None:
     user = User(email="me@x.com", tz="UTC", status="active")
     test_session.add(user)
     await test_session.flush()
@@ -298,7 +297,107 @@ async def test_low_confidence_demoted_to_needs_review(test_session) -> None:
         session=test_session,
         rule_engine=RuleEngine(user_rules=(), seed_waste=()),
     )
-    assert outcome.label == "needs_review"
+    assert outcome.label == "must_read"
+    row = (
+        await test_session.execute(
+            select(Classification).where(Classification.email_id == email.id),
+        )
+    ).scalar_one()
+    assert row.label == "must_read"
+    assert row.needs_review is True
+
+
+@pytest.mark.asyncio
+async def test_all_providers_fail_persists_ignore_with_review_flag(test_session) -> None:
+    user = User(email="me@x.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    _account, email = await _seed_email(test_session, user)
+    registered, prompt_version_id = await _registered_prompt(test_session)
+
+    llm = LLMClient(
+        primary=_FakeProvider("gemini", [LLMProviderError("down", retryable=False)]),
+        config=LLMClientConfig(max_retries=1, base_backoff_seconds=0.0),
+    )
+    outcome = await classify_one(
+        ClassifyInputs(
+            email_id=email.id,
+            user_id=user.id,
+            prompt=registered,
+            llm=llm,
+            repo=ClassificationsRepo(cipher=None),
+            prompt_version_id=prompt_version_id,
+        ),
+        session=test_session,
+        rule_engine=RuleEngine(user_rules=(), seed_waste=()),
+    )
+
+    assert outcome.label == "ignore"
+    row = (
+        await test_session.execute(
+            select(Classification).where(Classification.email_id == email.id),
+        )
+    ).scalar_one()
+    assert row.label == "ignore"
+    assert row.needs_review is True
+
+
+@pytest.mark.asyncio
+async def test_user_override_is_protected_from_reclassification(test_session) -> None:
+    user = User(email="me@x.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    _account, email = await _seed_email(test_session, user)
+    registered, prompt_version_id = await _registered_prompt(test_session)
+
+    await ClassificationsRepo(cipher=None).upsert(
+        test_session,
+        ClassificationWrite(
+            email_id=email.id,
+            label="must_read",
+            score=Decimal("1.000"),
+            rubric_version=0,
+            prompt_version_id=None,
+            decision_source="rule",
+            model="user_override",
+            tokens_in=0,
+            tokens_out=0,
+            is_newsletter=False,
+            reasons={"reasons": ["User moved this email."]},
+            user_id=user.id,
+        ),
+    )
+    rule = RubricRule(
+        user_id=user.id,
+        priority=1000,
+        match={"from_email": "sender@corp.example"},
+        action={"label": "ignore", "confidence": 1.0},
+        version=1,
+        active=True,
+    )
+    test_session.add(rule)
+    await test_session.flush()
+
+    outcome = await classify_one(
+        ClassifyInputs(
+            email_id=email.id,
+            user_id=user.id,
+            prompt=registered,
+            llm=LLMClient(primary=_FakeProvider("gemini", [])),
+            repo=ClassificationsRepo(cipher=None),
+            prompt_version_id=prompt_version_id,
+        ),
+        session=test_session,
+    )
+
+    assert outcome.label == "must_read"
+    row = (
+        await test_session.execute(
+            select(Classification).where(Classification.email_id == email.id),
+        )
+    ).scalar_one()
+    assert row.label == "must_read"
+    assert row.model == "user_override"
 
 
 @pytest.mark.asyncio

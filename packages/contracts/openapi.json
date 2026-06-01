@@ -562,309 +562,6 @@
         }
       }
     },
-    "/api/v1/jobs": {
-      "get": {
-        "tags": [
-          "jobs"
-        ],
-        "summary": "List curated job matches",
-        "description": "Return job matches the caller owns.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n    include_filtered: Override the curated default.\n    limit: Maximum rows to return.\n\nReturns:\n    :class:`JobMatchesListResponse` with newest matches first.",
-        "operationId": "list_job_matches_api_v1_jobs_get",
-        "parameters": [
-          {
-            "name": "include_filtered",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor.",
-              "default": false,
-              "title": "Include Filtered"
-            },
-            "description": "When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor."
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "briefed_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Briefed Session"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobMatchesListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/job-filters": {
-      "get": {
-        "tags": [
-          "job-filters"
-        ],
-        "summary": "List job filters",
-        "description": "Return every filter the authenticated user owns.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    :class:`JobFiltersListResponse` ordered by ``created_at ASC``.",
-        "operationId": "list_filters_api_v1_job_filters_get",
-        "parameters": [
-          {
-            "name": "briefed_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Briefed Session"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobFiltersListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "job-filters"
-        ],
-        "summary": "Create a job filter",
-        "description": "Insert a new filter for the authenticated user.\n\nArgs:\n    payload: Validated request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The created :class:`JobFilterOut`.\n\nRaises:\n    HTTPException: 409 when ``name`` already exists for the user.",
-        "operationId": "create_filter_api_v1_job_filters_post",
-        "parameters": [
-          {
-            "name": "briefed_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Briefed Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobFilterIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobFilterOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/job-filters/{filter_id}": {
-      "put": {
-        "tags": [
-          "job-filters"
-        ],
-        "summary": "Replace a job filter",
-        "description": "Replace ``filter_id``'s predicate + active flag, bumping ``version``.\n\nArgs:\n    filter_id: Target filter.\n    payload: Validated request body.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nReturns:\n    The updated :class:`JobFilterOut`.\n\nRaises:\n    HTTPException: 404 when the filter does not belong to the caller.\n    HTTPException: 409 when the rename collides with another filter.",
-        "operationId": "update_filter_api_v1_job_filters__filter_id__put",
-        "parameters": [
-          {
-            "name": "filter_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Filter Id"
-            }
-          },
-          {
-            "name": "briefed_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Briefed Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobFilterIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobFilterOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "job-filters"
-        ],
-        "summary": "Delete a job filter",
-        "description": "Hard-delete ``filter_id``.\n\nArgs:\n    filter_id: Target filter.\n    user_id: Authenticated owner.\n    session: Active async session.\n\nRaises:\n    HTTPException: 404 when the filter does not belong to the caller.",
-        "operationId": "delete_filter_api_v1_job_filters__filter_id__delete",
-        "parameters": [
-          {
-            "name": "filter_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Filter Id"
-            }
-          },
-          {
-            "name": "briefed_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Briefed Session"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/unsubscribes": {
       "get": {
         "tags": [
@@ -1101,7 +798,7 @@
           "emails"
         ],
         "summary": "List classified emails",
-        "description": "Return classified email rows for the PWA.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached app settings.\n    bucket: Optional primary bucket filter.\n    account_id: Optional account filter.\n    limit: Maximum row count.\n\nReturns:\n    Newest-first rows plus total count.",
+        "description": "Return classified email rows for the PWA.\n\nArgs:\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached app settings.\n    bucket: Optional primary bucket filter.\n    account_id: Optional account filter.\n    q: Optional case-insensitive subject/sender search.\n    sender: Optional exact sender filter.\n    received_after: Optional lower bound for provider received time.\n    received_before: Optional upper bound for provider received time.\n    has_summary: Optional filter for rows with or without email summaries.\n    offset: Result offset for pagination.\n    limit: Maximum row count.\n\nReturns:\n    Newest-first rows plus total count.",
         "operationId": "list_emails_api_v1_emails_get",
         "parameters": [
           {
@@ -1114,8 +811,7 @@
                   "enum": [
                     "must_read",
                     "good_to_read",
-                    "ignore",
-                    "waste"
+                    "ignore"
                   ],
                   "type": "string"
                 },
@@ -1141,6 +837,103 @@
                 }
               ],
               "title": "Account Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "sender",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 320
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sender"
+            }
+          },
+          {
+            "name": "received_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Received After"
+            }
+          },
+          {
+            "name": "received_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Received Before"
+            }
+          },
+          {
+            "name": "has_summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Summary"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           },
           {
@@ -1182,6 +975,96 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emails/mark-read": {
+      "post": {
+        "tags": [
+          "emails"
+        ],
+        "summary": "Mark emails read in Gmail",
+        "description": "Remove ``UNREAD`` from selected Gmail messages and local labels.\n\nArgs:\n    body: Explicit email ids or a category selector.\n    request: Incoming request, used for error correlation.\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached app settings.\n\nReturns:\n    Count of successfully processed messages and per-email failures.",
+        "operationId": "mark_read_emails_api_v1_emails_mark_read_post",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkReadResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -1380,7 +1263,7 @@
           "frontend"
         ],
         "summary": "Start a manual digest run",
-        "description": "Create a digest run and enqueue one ingest message per selected account.\n\nPlan \u00a719.16 + \u00a720.2 cap manual triggers at ``settings.manual_run_daily_cap``\nper user per rolling 24h window; the limiter raises ``429`` with a\n``Retry-After`` header when exhausted.",
+        "description": "Create a digest run and enqueue incremental or reclassification work.\n\nPlan \u00a719.16 + \u00a720.2 cap manual triggers at ``settings.manual_run_daily_cap``\nper user per rolling 24h window; the limiter raises ``429`` with a\n``Retry-After`` header when exhausted.",
         "operationId": "start_manual_run_api_v1_runs_post",
         "parameters": [
           {
@@ -1902,6 +1785,81 @@
         "title": "AccountsListResponse",
         "description": "Envelope wrapping the ``GET /accounts`` list.\n\nAttributes:\n    accounts: Every :class:`ConnectedAccountOut` owned by the caller."
       },
+      "CategoryDigestGroupOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Short group heading."
+          },
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bullets",
+            "description": "Source-backed bullets.",
+            "default": []
+          },
+          "item_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Refs",
+            "description": "Opaque source refs.",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "CategoryDigestGroupOut",
+        "description": "Thematic group inside a category digest.\n\nAttributes:\n    label: Short group heading.\n    bullets: Source-backed summary bullets.\n    item_refs: Opaque source refs cited by the group."
+      },
+      "CategoryDigestOut": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "must_read",
+              "good_to_read"
+            ],
+            "title": "Category",
+            "description": "Summarized triage category."
+          },
+          "narrative": {
+            "type": "string",
+            "title": "Narrative",
+            "description": "Plaintext rollup narrative."
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryDigestGroupOut"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "Thematic source-backed groups.",
+            "default": []
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Digest confidence."
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "narrative",
+          "confidence"
+        ],
+        "title": "CategoryDigestOut",
+        "description": "Decrypted run/category digest returned by ``/digest/today``.\n\nAttributes:\n    category: Triage category summarized by the digest.\n    narrative: Plaintext rollup narrative.\n    groups: Thematic source-backed groups.\n    confidence: Calibrated ``[0, 1]``."
+      },
       "ConnectedAccountOut": {
         "properties": {
           "id": {
@@ -2045,12 +2003,6 @@
             "minimum": 0.0,
             "title": "Ignore",
             "default": 0
-          },
-          "waste": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Waste",
-            "default": 0
           }
         },
         "type": "object",
@@ -2079,6 +2031,22 @@
           "counts": {
             "$ref": "#/components/schemas/DigestCounts"
           },
+          "rule_decided": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Rule Decided",
+            "description": "Latest-run classifications decided by rules.",
+            "default": 0
+          },
+          "category_summaries": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryDigestOut"
+            },
+            "type": "array",
+            "title": "Category Summaries",
+            "description": "Latest-run category digest summaries.",
+            "default": []
+          },
           "must_read_preview": {
             "items": {
               "$ref": "#/components/schemas/EmailRowOut"
@@ -2106,7 +2074,7 @@
           "counts"
         ],
         "title": "DigestTodayResponse",
-        "description": "Dashboard summary for the current daily digest.\n\nAttributes:\n    generated_at: Timestamp of the latest successful run.\n    cost_cents_today: Rounded prompt spend for today.\n    counts: Current triage counts.\n    must_read_preview: Newest must-read rows.\n    last_successful_run_at: Timestamp used for freshness warnings."
+        "description": "Dashboard summary for the current daily digest.\n\nAttributes:\n    generated_at: Timestamp of the latest successful run.\n    cost_cents_today: Rounded prompt spend for today.\n    counts: Current triage counts.\n    rule_decided: Count of latest-run classifications decided by rules.\n    category_summaries: Decrypted latest-run category digests.\n    must_read_preview: Newest must-read rows.\n    last_successful_run_at: Timestamp used for freshness warnings."
       },
       "DomainWasteEntry": {
         "properties": {
@@ -2140,8 +2108,7 @@
             "enum": [
               "must_read",
               "good_to_read",
-              "ignore",
-              "waste"
+              "ignore"
             ],
             "title": "Bucket"
           }
@@ -2188,8 +2155,7 @@
             "enum": [
               "must_read",
               "good_to_read",
-              "ignore",
-              "waste"
+              "ignore"
             ],
             "title": "Bucket"
           },
@@ -2198,6 +2164,11 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Confidence"
+          },
+          "needs_review": {
+            "type": "boolean",
+            "title": "Needs Review",
+            "default": false
           },
           "decision_source": {
             "type": "string",
@@ -2241,7 +2212,7 @@
           "decision_source"
         ],
         "title": "EmailRowOut",
-        "description": "Single row shown in dashboard and bucket lists.\n\nAttributes:\n    id: Email primary key.\n    account_email: Connected mailbox address.\n    thread_id: Gmail thread id for deep-linking.\n    subject: Decoded subject.\n    sender: Raw sender address.\n    received_at: Provider internal date.\n    bucket: Primary triage bucket.\n    confidence: Classification confidence in ``[0, 1]``.\n    decision_source: Rule / LLM / hybrid source label.\n    reasons: Human-readable rationale entries.\n    summary_excerpt: Optional decrypted summary preview."
+        "description": "Single row shown in dashboard and bucket lists.\n\nAttributes:\n    id: Email primary key.\n    account_email: Connected mailbox address.\n    thread_id: Gmail thread id for deep-linking.\n    subject: Decoded subject.\n    sender: Raw sender address.\n    received_at: Provider internal date.\n    bucket: Primary triage bucket.\n    confidence: Classification confidence in ``[0, 1]``.\n    needs_review: Low-confidence badge source.\n    decision_source: Rule / LLM / hybrid source label.\n    reasons: Human-readable rationale entries.\n    summary_excerpt: Optional decrypted summary preview."
       },
       "EmailsListResponse": {
         "properties": {
@@ -2265,6 +2236,39 @@
         ],
         "title": "EmailsListResponse",
         "description": "Envelope for ``GET /emails``.\n\nAttributes:\n    emails: Newest-first rows.\n    total: Total matching rows before the response ``limit``."
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Stable machine-readable error code."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable error summary."
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "description": "Structured context."
+          },
+          "requestId": {
+            "type": "string",
+            "title": "Requestid",
+            "description": "Request correlation id."
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "requestId"
+        ],
+        "title": "ErrorEnvelope",
+        "description": "Aegis-compatible API error response envelope.\n\nAttributes:\n    code: Stable machine-readable error code.\n    message: Human-readable error summary safe to show in the UI.\n    details: Structured diagnostic context.\n    request_id: Correlation id from the incoming request or generated locally."
       },
       "HTTPValidationError": {
         "properties": {
@@ -2312,261 +2316,6 @@
         "title": "HygieneStatsResponse",
         "description": "Envelope for ``GET /hygiene/stats``.\n\nAttributes:\n    total_candidates: Count of active (``dismissed=False``)\n        suggestion rows.\n    dismissed_count: Count of rows the user has dismissed.\n    average_frequency: Mean ``frequency_30d`` over active\n        suggestions. ``0`` when there are none.\n    top_domains: Up to ten highest-volume sender domains in the\n        30-day window, by summed frequency."
       },
-      "JobFilterIn": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Name"
-          },
-          "predicate": {
-            "additionalProperties": true,
-            "type": "object",
-            "minProperties": 1,
-            "title": "Predicate"
-          },
-          "active": {
-            "type": "boolean",
-            "title": "Active",
-            "default": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "predicate"
-        ],
-        "title": "JobFilterIn",
-        "description": "Request body for ``POST /job-filters`` and ``PUT /job-filters/{id}``.\n\nAttributes:\n    name: Human-readable label, unique per user (DB enforces).\n    predicate: JSONB document consumed by\n        :func:`app.services.jobs.predicate.evaluate`.\n    active: Soft-delete switch. Defaults to ``True``."
-      },
-      "JobFilterOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "predicate": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Predicate"
-          },
-          "version": {
-            "type": "integer",
-            "title": "Version"
-          },
-          "active": {
-            "type": "boolean",
-            "title": "Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "predicate",
-          "version",
-          "active",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "JobFilterOut",
-        "description": "Response body for any ``/job-filters`` endpoint.\n\nAttributes:\n    id: Filter primary key.\n    name: Label.\n    predicate: JSONB document.\n    version: Bumped on every PUT.\n    active: Soft-delete switch.\n    created_at: First-insert timestamp.\n    updated_at: Last-modified timestamp."
-      },
-      "JobFiltersListResponse": {
-        "properties": {
-          "filters": {
-            "items": {
-              "$ref": "#/components/schemas/JobFilterOut"
-            },
-            "type": "array",
-            "title": "Filters",
-            "default": []
-          }
-        },
-        "type": "object",
-        "title": "JobFiltersListResponse",
-        "description": "Envelope for ``GET /job-filters``.\n\nAttributes:\n    filters: Every :class:`JobFilterOut` owned by the caller,\n        ordered by ``created_at ASC`` so client-side ordering is\n        stable across requests."
-      },
-      "JobMatchOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "email_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Email Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "company": {
-            "type": "string",
-            "title": "Company"
-          },
-          "location": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location"
-          },
-          "remote": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Remote"
-          },
-          "comp_min": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Comp Min"
-          },
-          "comp_max": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Comp Max"
-          },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency"
-          },
-          "seniority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Seniority"
-          },
-          "source_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Url"
-          },
-          "match_score": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Match Score"
-          },
-          "filter_version": {
-            "type": "integer",
-            "title": "Filter Version"
-          },
-          "passed_filter": {
-            "type": "boolean",
-            "title": "Passed Filter"
-          },
-          "match_reason": {
-            "type": "string",
-            "title": "Match Reason"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "email_id",
-          "title",
-          "company",
-          "location",
-          "remote",
-          "comp_min",
-          "comp_max",
-          "currency",
-          "seniority",
-          "source_url",
-          "match_score",
-          "filter_version",
-          "passed_filter",
-          "match_reason",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "JobMatchOut",
-        "description": "Response row for ``GET /jobs``.\n\nAttributes:\n    id: Match primary key.\n    email_id: Source email FK.\n    title: Role title.\n    company: Hiring company / firm.\n    location: Free-text location, ``None`` when the posting omitted it.\n    remote: Tri-state remote flag.\n    comp_min: Lower compensation bound.\n    comp_max: Upper compensation bound.\n    currency: ISO-4217 code.\n    seniority: Normalized tier string.\n    source_url: Apply / posting URL with tracking params stripped.\n    match_score: Calibrated confidence, three-decimal precision.\n    filter_version: Active-filter version snapshot at extract time.\n    passed_filter: ``True`` when the row cleared every active filter\n        and the confidence floor; the curated board surfaces only\n        these.\n    match_reason: Plaintext rationale (decrypted by the router).\n    created_at: When the match row was first written.\n    updated_at: When it was last replaced (re-extraction)."
-      },
-      "JobMatchesListResponse": {
-        "properties": {
-          "matches": {
-            "items": {
-              "$ref": "#/components/schemas/JobMatchOut"
-            },
-            "type": "array",
-            "title": "Matches",
-            "default": []
-          }
-        },
-        "type": "object",
-        "title": "JobMatchesListResponse",
-        "description": "Envelope for ``GET /jobs``.\n\nAttributes:\n    matches: Newest-first list of :class:`JobMatchOut` rows the\n        caller is allowed to see."
-      },
       "ManualRunRequest": {
         "properties": {
           "kind": {
@@ -2589,12 +2338,39 @@
               }
             ],
             "title": "Account Ids"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "incremental",
+              "reclassify_recent"
+            ],
+            "title": "Mode",
+            "default": "incremental"
+          },
+          "window_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 90.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Days"
+          },
+          "include_user_overrides": {
+            "type": "boolean",
+            "title": "Include User Overrides",
+            "default": false
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "ManualRunRequest",
-        "description": "Request body for ``POST /runs``.\n\nAttributes:\n    kind: Only ``manual`` is supported by the HTTP trigger.\n    account_ids: Optional subset of connected accounts to scan."
+        "description": "Request body for ``POST /runs``.\n\nAttributes:\n    kind: Only ``manual`` is supported by the HTTP trigger.\n    account_ids: Optional subset of connected accounts to scan.\n    mode: Incremental scan or recent-mail reclassification.\n    window_days: Optional recent-mail window for reclassification.\n    include_user_overrides: Whether user-moved rows may be overwritten."
       },
       "ManualRunResponse": {
         "properties": {
@@ -2616,6 +2392,99 @@
         ],
         "title": "ManualRunResponse",
         "description": "Accepted manual-run response.\n\nAttributes:\n    run_id: New ``digest_runs.id`` for polling/history.\n    accounts_queued: Number of owned accounts included in the run."
+      },
+      "MarkReadFailureOut": {
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Email Id"
+          },
+          "provider_message_id": {
+            "type": "string",
+            "title": "Provider Message Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email_id",
+          "provider_message_id",
+          "reason"
+        ],
+        "title": "MarkReadFailureOut",
+        "description": "One email that could not be marked read.\n\nAttributes:\n    email_id: Local email id.\n    provider_message_id: Gmail message id.\n    reason: Short provider or permission error."
+      },
+      "MarkReadRequest": {
+        "properties": {
+          "email_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Email Ids",
+            "default": []
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "must_read",
+                  "good_to_read",
+                  "ignore"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MarkReadRequest",
+        "description": "Request body for ``POST /emails/mark-read``.\n\nAttributes:\n    email_ids: Explicit email ids to mark read.\n    category: Optional category selector for bulk mark-read.\n    account_id: Optional connected-account scope for either selector."
+      },
+      "MarkReadResponse": {
+        "properties": {
+          "marked": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Marked"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/MarkReadFailureOut"
+            },
+            "type": "array",
+            "title": "Failed",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "marked"
+        ],
+        "title": "MarkReadResponse",
+        "description": "Response from ``POST /emails/mark-read``.\n\nAttributes:\n    marked: Count of local emails successfully marked read.\n    failed: Per-email failures."
       },
       "NewsCluster": {
         "properties": {
@@ -2749,6 +2618,13 @@
             "title": "Priority",
             "default": 100
           },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "default": "Untitled rule"
+          },
           "match": {
             "additionalProperties": true,
             "type": "object",
@@ -2773,7 +2649,7 @@
           "action"
         ],
         "title": "RubricRuleIn",
-        "description": "Request body for POST / PUT.\n\nAttributes:\n    priority: Higher wins. Defaults to ``100``.\n    match: Predicate dict; keys limited to\n        :data:`_ALLOWED_MATCH_KEYS`.\n    action: Verdict dict; must contain ``label`` \u2208\n        :data:`_ALLOWED_LABELS` and ``confidence`` \u2208 ``[0, 1]``.\n    active: Soft-delete switch. Defaults to ``True``."
+        "description": "Request body for POST / PUT.\n\nAttributes:\n    priority: Higher wins. Defaults to ``100``.\n    name: Human-readable settings label.\n    match: Predicate dict; keys limited to\n        :data:`_ALLOWED_MATCH_KEYS`.\n    action: Verdict dict; must contain ``label`` \u2208\n        :data:`_ALLOWED_LABELS` and ``confidence`` \u2208 ``[0, 1]``.\n    active: Soft-delete switch. Defaults to ``True``."
       },
       "RubricRuleOut": {
         "properties": {
@@ -2781,6 +2657,10 @@
             "type": "string",
             "format": "uuid",
             "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
           },
           "priority": {
             "type": "integer",
@@ -2818,6 +2698,7 @@
         "type": "object",
         "required": [
           "id",
+          "name",
           "priority",
           "match",
           "action",
@@ -2827,7 +2708,7 @@
           "updated_at"
         ],
         "title": "RubricRuleOut",
-        "description": "Response body for list / create / update.\n\nAttributes:\n    id: Rule primary key.\n    priority: Priority plumbed through from the DB row.\n    match: Predicate dict.\n    action: Verdict dict.\n    version: Monotonically increasing version.\n    active: Soft-delete switch.\n    created_at: When the rule was first inserted.\n    updated_at: Last-modified timestamp."
+        "description": "Response body for list / create / update.\n\nAttributes:\n    id: Rule primary key.\n    name: Human-readable settings label.\n    priority: Priority plumbed through from the DB row.\n    match: Predicate dict.\n    action: Verdict dict.\n    version: Monotonically increasing version.\n    active: Soft-delete switch.\n    created_at: When the rule was first inserted.\n    updated_at: Last-modified timestamp."
       },
       "RubricRulesListResponse": {
         "properties": {
@@ -3210,7 +3091,7 @@
           "presidio_enabled": {
             "type": "boolean",
             "title": "Presidio Enabled",
-            "default": true
+            "default": false
           },
           "theme_preference": {
             "type": "string",
@@ -3250,7 +3131,7 @@
         },
         "type": "object",
         "title": "UserProfileOut",
-        "description": "Current user's profile (Track C \u2014 Phase II.3).\n\nAttributes:\n    display_name: Optional display name (consumed by IdentityScrubber).\n    email_aliases: Extra email addresses to scrub from prompts.\n    redaction_aliases: Free-form strings to scrub from prompts.\n    presidio_enabled: Whether Presidio runs ahead of regex scrubbing.\n    theme_preference: Server-side mirror of the user's UI theme.\n    schedule_frequency: Cadence \u2014 ``once_daily`` / ``twice_daily`` /\n        ``disabled``.\n    schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.\n    schedule_timezone: IANA timezone name."
+        "description": "Current user's profile (Track C \u2014 Phase II.3).\n\nAttributes:\n    display_name: Optional display name (consumed by IdentityScrubber).\n    email_aliases: Extra email addresses to scrub from prompts.\n    redaction_aliases: Free-form strings to scrub from prompts.\n    presidio_enabled: Legacy toggle retained for compatibility.\n        Presidio was removed; only identity + regex scrubbers run.\n    theme_preference: Server-side mirror of the user's UI theme.\n    schedule_frequency: Cadence \u2014 ``once_daily`` / ``twice_daily`` /\n        ``disabled``.\n    schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.\n    schedule_timezone: IANA timezone name."
       },
       "UserProfilePatchRequest": {
         "properties": {

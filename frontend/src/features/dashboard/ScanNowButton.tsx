@@ -48,7 +48,15 @@ export function ScanNowButton(): JSX.Element {
 
   const startRun = useMutation({
     mutationFn: async (): Promise<Schemas['ManualRunResponse']> =>
-      unwrap(await api.POST('/api/v1/runs', { body: { kind: 'manual' } })),
+      unwrap(
+        await api.POST('/api/v1/runs', {
+          body: {
+            kind: 'manual',
+            mode: 'incremental',
+            include_user_overrides: false,
+          },
+        }),
+      ),
     onSuccess: (data) => {
       setActiveRunId(data.run_id);
       setJustFinishedCount(null);
@@ -114,7 +122,7 @@ export function ScanNowButton(): JSX.Element {
 
   const tooltip = !online ? 'Connect to the internet to scan.' : undefined;
   const handleSuccessTap = (): void => {
-    if (mode === 'success') navigate('/must-read');
+    if (mode === 'success') navigate('/?bucket=must_read');
   };
 
   if (isMobile) {

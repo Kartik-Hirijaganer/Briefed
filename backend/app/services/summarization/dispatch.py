@@ -21,9 +21,12 @@ from uuid import UUID
 
 from sqlalchemy import or_, select
 
+from app.core.app_config import get_app_config
 from app.core.logging import get_logger
-from app.db.models import Classification, Email, Summary, TechNewsCluster
+from app.db.models import Classification, DigestRunEmail, Email, Summary, TechNewsCluster
+from app.services.email_labels import unread_email_filter
 from app.workers.messages import (
+    CategoryDigestMessage,
     SummarizeEmailMessage,
     TechNewsClusterMessage,
 )
@@ -33,15 +36,13 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 logger = get_logger(__name__)
+_APP_CONFIG = get_app_config()
 
-_SUMMARIZABLE_LABELS: tuple[str, ...] = (
-    "must_read",
-    "good_to_read",
-    "newsletter",
-)
+_SUMMARIZABLE_LABELS: tuple[str, ...] = _APP_CONFIG.taxonomy.summarizable_labels
 """Primary labels and legacy pseudo-labels that qualify for a summary."""
 
-_NEWSLETTER_LABEL = "newsletter"
+_NEWSLETTER_LABEL = _APP_CONFIG.taxonomy.newsletter_label
+_NEWSLETTER_CLUSTERING_ENABLED = _APP_CONFIG.features.newsletter_clustering
 
 
 class SqsSender(Protocol):
@@ -96,6 +97,7 @@ async def enqueue_unsummarized_for_run(
         .outerjoin(Summary, Summary.email_id == Email.id)
         .where(
             Email.account_id == account_id,
+            unread_email_filter(session),
             or_(
                 Classification.label.in_(_SUMMARIZABLE_LABELS),
                 Classification.is_newsletter.is_(True),
@@ -105,6 +107,10 @@ async def enqueue_unsummarized_for_run(
         .order_by(Email.internal_date.desc())
         .limit(limit)
     )
+    if run_id is not None:
+        stmt = stmt.join(DigestRunEmail, DigestRunEmail.email_id == Email.id).where(
+            DigestRunEmail.run_id == run_id,
+        )
     rows = (await session.execute(stmt)).scalars().all()
 
     per_email = 0
@@ -173,6 +179,9 @@ async def enqueue_tech_news_cluster_for_account(
     Returns:
         ``1`` when a cluster message was enqueued, otherwise ``0``.
     """
+    if not _NEWSLETTER_CLUSTERING_ENABLED:
+        return 0
+
     existing_stmt = (
         select(Summary.id)
         .join(TechNewsCluster, Summary.cluster_id == TechNewsCluster.id)
@@ -194,6 +203,7 @@ async def enqueue_tech_news_cluster_for_account(
         .join(Classification, Classification.email_id == Email.id)
         .where(
             Email.account_id == account_id,
+            unread_email_filter(session),
             or_(
                 Classification.label == _NEWSLETTER_LABEL,
                 Classification.is_newsletter.is_(True),
@@ -202,6 +212,10 @@ async def enqueue_tech_news_cluster_for_account(
         .order_by(Email.internal_date.desc())
         .limit(limit)
     )
+    if run_id is not None:
+        stmt = stmt.join(DigestRunEmail, DigestRunEmail.email_id == Email.id).where(
+            DigestRunEmail.run_id == run_id,
+        )
     newsletter_ids = list((await session.execute(stmt)).scalars().all())
     if len(newsletter_ids) < 2:
         return 0
@@ -253,6 +267,7 @@ async def enqueue_summary_for_email(
         .where(
             Email.id == email_id,
             Email.account_id == account_id,
+            unread_email_filter(session),
             or_(
                 Classification.label.in_(_SUMMARIZABLE_LABELS),
                 Classification.is_newsletter.is_(True),
@@ -261,6 +276,10 @@ async def enqueue_summary_for_email(
         )
         .limit(1)
     )
+    if run_id is not None:
+        stmt = stmt.join(DigestRunEmail, DigestRunEmail.email_id == Email.id).where(
+            DigestRunEmail.run_id == run_id,
+        )
     row = (await session.execute(stmt)).scalar_one_or_none()
     if row is None:
         return 0
@@ -285,15 +304,14 @@ async def enqueue_summary_for_email(
 
 def parse_summarize_body(
     body: str,
-) -> SummarizeEmailMessage | TechNewsClusterMessage:
+) -> SummarizeEmailMessage | TechNewsClusterMessage | CategoryDigestMessage:
     """Validate + parse a raw SQS summarize-queue body.
 
     Args:
         body: Raw JSON body string from the SQS event record.
 
     Returns:
-        Validated :class:`SummarizeEmailMessage` or
-        :class:`TechNewsClusterMessage`.
+        Validated summarize-queue message payload.
 
     Raises:
         ValueError: When the JSON is malformed or the discriminator is
@@ -310,6 +328,8 @@ def parse_summarize_body(
         return SummarizeEmailMessage.model_validate(payload)
     if kind == "tech_news_cluster":
         return TechNewsClusterMessage.model_validate(payload)
+    if kind == "category_digest":
+        return CategoryDigestMessage.model_validate(payload)
     raise ValueError(f"unknown summarize message kind: {kind!r}")
 
 

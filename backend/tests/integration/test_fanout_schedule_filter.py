@@ -126,7 +126,7 @@ async def test_fanout_skips_locked_user(test_session: AsyncSession) -> None:
 
 async def test_fanout_runs_after_stale_lock(test_session: AsyncSession) -> None:
     now = datetime(2026, 4, 25, 8, 5, tzinfo=ZoneInfo("UTC"))
-    await _seed(
+    user = await _seed(
         test_session,
         schedule_times_local=["08:00"],
         current_run_id="run-1",
@@ -141,6 +141,9 @@ async def test_fanout_runs_after_stale_lock(test_session: AsyncSession) -> None:
     with patch("app.workers.handlers.fanout.utcnow", return_value=now):
         enqueued = await run_fanout(deps=deps)
     assert enqueued == 1
+    refreshed = await test_session.get(User, user.id)
+    assert refreshed is not None
+    assert refreshed.current_run_id != "run-1"
 
 
 async def test_fanout_skips_disabled_user(test_session: AsyncSession) -> None:

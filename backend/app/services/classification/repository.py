@@ -47,11 +47,12 @@ class ClassificationWrite:
         tokens_in: Tokens billed (0 for rule-only).
         tokens_out: Tokens billed.
         is_newsletter: Independent newsletter flag for downstream routing.
-        is_job_candidate: Independent jobs flag for downstream routing.
         reasons: Plaintext JSON-serializable rationale payload.
         user_id: Owner id — bound into the encryption context so
             re-assigning the row to another owner makes the ciphertext
             unreadable.
+        needs_review: Low-confidence / degraded-path marker surfaced
+            as a UI badge without creating a fourth bucket.
     """
 
     email_id: UUID
@@ -64,9 +65,9 @@ class ClassificationWrite:
     tokens_in: int
     tokens_out: int
     is_newsletter: bool
-    is_job_candidate: bool
     reasons: dict[str, object]
     user_id: UUID
+    needs_review: bool = False
 
 
 class ClassificationsRepo:
@@ -125,7 +126,7 @@ class ClassificationsRepo:
         existing.tokens_in = payload.tokens_in
         existing.tokens_out = payload.tokens_out
         existing.is_newsletter = payload.is_newsletter
-        existing.is_job_candidate = payload.is_job_candidate
+        existing.needs_review = payload.needs_review
 
         ciphertext = self._encrypt_reasons(
             reasons=payload.reasons,

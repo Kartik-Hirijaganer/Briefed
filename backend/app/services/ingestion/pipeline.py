@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
 from app.core.clock import utcnow
 from app.core.logging import get_logger
 from app.db.models import ConnectedAccount, Email, EmailContentBlob, SyncCursor
@@ -59,6 +61,7 @@ class IngestStats:
         raw_uploaded: Count of raw-MIME uploads (0 when opt-out).
         cursor_stale: True if the provider reported a stale cursor and we
             ran the bounded fallback scan.
+        email_ids: Non-divergent email rows touched by this ingest call.
     """
 
     new: int
@@ -66,6 +69,7 @@ class IngestStats:
     divergent: int
     raw_uploaded: int
     cursor_stale: bool
+    email_ids: tuple[UUID, ...] = ()
 
 
 async def run_ingest(
@@ -117,6 +121,7 @@ async def run_ingest(
     outcome = classify_incoming(metadatas, known_hashes=known)
 
     raw_uploaded = 0
+    inserted: list[Email] = []
     for raw, (meta, body) in zip(raw_messages, parsed, strict=True):
         if meta not in outcome.to_insert:
             continue
@@ -152,6 +157,7 @@ async def run_ingest(
             size_bytes=body.size_bytes,
         )
         session.add(email)
+        inserted.append(email)
         if raw_storage is not None and raw_bucket is not None:
             stored = maybe_store_raw_mime(
                 store=raw_storage,
@@ -166,6 +172,20 @@ async def run_ingest(
                 raw_uploaded += 1
 
     await session.flush()
+    duplicate_message_ids = [message.message_id for message in outcome.duplicates]
+    duplicate_email_ids = tuple(
+        (
+            await session.execute(
+                select(Email.id).where(
+                    Email.account_id == account_id,
+                    Email.gmail_message_id.in_(duplicate_message_ids),
+                ),
+            )
+        )
+        .scalars()
+        .all(),
+    )
+    email_ids = tuple(dict.fromkeys([email.id for email in inserted] + list(duplicate_email_ids)))
     await _persist_cursor(session, cursor_row, advanced_cursor, touched=True)
 
     logger.info(
@@ -183,6 +203,7 @@ async def run_ingest(
         divergent=len(outcome.divergent),
         raw_uploaded=raw_uploaded,
         cursor_stale=advanced_cursor.stale,
+        email_ids=email_ids,
     )
 
 

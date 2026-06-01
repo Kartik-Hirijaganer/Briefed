@@ -6,7 +6,7 @@ pass; ``reversal_map`` and ``counts_by_kind`` are merged across passes
 (later wins on collision, counts accumulate).
 
 Order matters at the call site, not here. The Briefed defaults run
-identity → regex → presidio so user-specific tokens get a stable
+identity → regex so user-specific tokens get a stable
 placeholder before anything else runs.
 """
 

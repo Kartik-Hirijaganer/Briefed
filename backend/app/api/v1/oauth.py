@@ -35,8 +35,9 @@ from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError, CryptoError, ProviderError
 from app.core.security import EnvelopeCipher, token_context
-from app.db.models import ConnectedAccount, OAuthToken, User
+from app.db.models import ConnectedAccount, OAuthToken, RubricRule, User
 from app.db.session import get_sessionmaker
+from app.services.classification.rubric import default_rubric_seed
 from app.services.gmail.oauth import (
     OAuthTokenBundle,
     build_authorize_url,
@@ -481,7 +482,35 @@ async def _get_or_create_user(
     user = User(email=email, tz="UTC", status="active")
     session.add(user)
     await session.flush()
+    for rule in _default_rubric_rules_for(user_id=user.id):
+        session.add(rule)
+    await session.flush()
     return user
+
+
+def _default_rubric_rules_for(*, user_id: UUID) -> tuple[RubricRule, ...]:
+    """Build the default rule rows for a newly-provisioned user.
+
+    Args:
+        user_id: New owner id.
+
+    Returns:
+        Rubric rule ORM rows ready to insert in the caller's transaction.
+    """
+    rows: list[RubricRule] = []
+    for seed in default_rubric_seed():
+        rows.append(
+            RubricRule(
+                user_id=user_id,
+                name=cast(str, seed["name"]),
+                priority=cast(int, seed["priority"]),
+                match=cast(dict[str, object], seed["match"]),
+                action=cast(dict[str, object], seed["action"]),
+                version=1,
+                active=True,
+            ),
+        )
+    return tuple(rows)
 
 
 async def _upsert_connected_account(

@@ -144,7 +144,12 @@ reference in this section, (c) tests in [frontend/src/__tests__/](frontend/src/_
   reads as a clear separation.
 - **Radius scale:** 4 / 8 / 16 / 9999 px (`--radius-sm`, `--radius-md`,
   `--radius-lg`, `--radius-full`).
-- **Container width:** dashboard caps at 1080px; settings at 720px.
+- **Container width:** data screens cap at `--container-wide` (1440px)
+  with page gutters; settings caps at `--container-settings` (960px).
+- **Readable measure:** narrative summaries cap at `--measure` (72ch) so
+  generated prose stays scannable on wide displays.
+- **Compact forms:** settings forms use 1 column below `md`, 2 columns at
+  `md`, and 3 columns at `lg` / `xl` when the fields are independent.
 - **Sidebar:** 224px wide on desktop; collapses to a bottom tab bar
   below 768px (see [frontend/src/shell/](frontend/src/shell/)).
 
@@ -209,7 +214,9 @@ collapse to `0ms` under `prefers-reduced-motion: reduce`.
 | `xl` | 1280px | Wide desktop |
 
 Sidebar appears at `md`. Dense data tables collapse to stacked cards
-below `md`.
+below `md`. Settings forms switch from 1 → 2 → 3 columns across
+`sm` / `md` / `lg` while preserving `--measure` for long help text and
+generated narrative copy.
 
 ---
 

@@ -23,11 +23,11 @@ describe('<Sidebar>', () => {
 
   it('marks the active route with the accent class', () => {
     render(
-      <MemoryRouter initialEntries={['/jobs']}>
+      <MemoryRouter initialEntries={['/history']}>
         <Sidebar />
       </MemoryRouter>,
     );
-    const active = screen.getByRole('link', { name: /jobs/i });
+    const active = screen.getByRole('link', { name: /history/i });
     expect(active.className).toMatch(/text-accent/);
   });
 });

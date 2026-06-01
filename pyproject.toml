@@ -14,6 +14,7 @@ dependencies = [
     # Validation + settings
     "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
+    "pyyaml>=6.0",
     # LLM providers — OpenRouter only (ADR 0009). Both Gemini Flash and
     # Claude Haiku are reached via the openrouter.ai/api/v1 surface, so
     # we use plain httpx and avoid the upstream SDKs entirely.
@@ -42,18 +43,6 @@ dependencies = [
     "sentry-sdk>=2.18",
     # Supabase client (kept for admin / file-storage paths)
     "supabase>=2.9",
-    # Track B / ADR 0010 — LLM prompt redaction (regular dependency,
-    # not optional). Setting ``redaction_presidio_enabled=False`` makes
-    # the chain skip Presidio at runtime; the import stays available.
-    "presidio-analyzer>=2.2",
-    "presidio-anonymizer>=2.2",
-    # numpy is pulled in transitively via spaCy (which presidio-analyzer
-    # depends on). Pinned to <2.0 because numpy 2.x wheels target
-    # manylinux_2_28 (glibc ≥ 2.28); the Lambda Python 3.11 base image
-    # is Amazon Linux 2 with glibc 2.26, so 2.x falls back to source
-    # build and fails on GCC 7.3 / required GCC 9.3+. The 1.26.x line
-    # ships manylinux2014 wheels that work on AL2.
-    "numpy>=1.26,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +58,7 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "types-requests",
+    "types-PyYAML",
     "pip-audit>=2.7",
     "bandit[toml]>=1.8",
     "vulture>=2.13",
@@ -139,11 +129,7 @@ convention = "google"
 "backend/app/workers/handlers/fanout.py" = ["N803"]
 "backend/app/services/classification/dispatch.py" = ["N803"]
 "backend/app/services/summarization/dispatch.py" = ["N803"]
-"backend/app/services/jobs/dispatch.py" = ["N803"]
 "backend/app/services/unsubscribe/dispatch.py" = ["N803"]
-# The predicate evaluator accepts arbitrary JSON values from job_filters.predicate;
-# the entry point validates keys, and each clause handler coerces before use.
-"backend/app/services/jobs/predicate.py" = ["ANN401", "PLR0911"]
 # anthropic_batch.py wraps a boto3-like HTTP response; ``Any`` types are required.
 "backend/app/llm/providers/anthropic_batch.py" = ["ANN401", "PLR0911"]
 # Lambda handlers receive opaque ``LambdaContext`` objects we don't own — ``Any`` is correct.
@@ -153,14 +139,9 @@ convention = "google"
 "backend/app/lambda_api.py" = ["ANN401"]
 # OAuth router defers boto3 + base64/json imports to the callback path.
 "backend/app/api/v1/oauth.py" = ["PLC0415"]
-# Jobs router defers boto3 + envelope-cipher imports until the content KMS alias
-# is configured so local + test runs never load boto3.
-"backend/app/api/v1/jobs.py" = ["PLC0415"]
 "backend/app/api/v1/unsubscribes.py" = ["PLC0415"]
 "backend/app/api/v1/emails.py" = ["PLC0415"]
 "backend/app/api/v1/frontend.py" = ["PLC0415"]
-# Presidio engines are deferred to first use so SnapStart can warm them lazily.
-"backend/app/llm/redaction/presidio.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
@@ -268,7 +249,6 @@ exclude_lines = [
 # (KeyId, Plaintext, QueueUrl, MessageBody, ContentType, ...). Vulture flags
 # them as "unused variables" because Protocol method bodies are ``...`` —
 # but the names are part of the public call signature, so they must stay.
-# ``operators`` is the same case for the Presidio anonymizer Protocol.
 ignore_names = [
     "KeyId",
     "Plaintext",
@@ -282,5 +262,4 @@ ignore_names = [
     "Bucket",
     "Key",
     "Body",
-    "operators",
 ]

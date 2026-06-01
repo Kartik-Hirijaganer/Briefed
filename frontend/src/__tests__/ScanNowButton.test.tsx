@@ -64,7 +64,13 @@ describe('<ScanNowButton>', () => {
     renderButton();
     await user.click(await screen.findByRole('button', { name: /start a manual scan/i }));
     await waitFor(() => expect(apiMock.POST).toHaveBeenCalled());
-    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/runs', { body: { kind: 'manual' } });
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/runs', {
+      body: {
+        kind: 'manual',
+        mode: 'incremental',
+        include_user_overrides: false,
+      },
+    });
   });
 
   it('shows the error label when the start mutation fails', async () => {

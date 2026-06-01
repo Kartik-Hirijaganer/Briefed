@@ -17,14 +17,16 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
 from app.api.session import OAUTH_STATE_COOKIE_NAME, sign_cookie
-from app.api.v1.oauth import _build_token_cipher
+from app.api.v1.oauth import _build_token_cipher, _get_or_create_user
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError
 from app.core.security import EncryptionContext, EnvelopeCipher
+from app.db.models import RubricRule
 from app.main import app
 from app.services.gmail import oauth as oauth_module
 
@@ -258,6 +260,46 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
     payload = list_response.json()
     assert len(payload["accounts"]) == 1
     assert payload["accounts"][0]["email"] == "user@example.com"
+
+
+async def test_get_or_create_user_seeds_default_rubric_rules(
+    test_engine: AsyncEngine,
+) -> None:
+    """First-time OAuth user provisioning inserts the default rubric rows."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        user = await _get_or_create_user(session, email="seeded@example.com")
+        rows = (
+            (
+                await session.execute(
+                    select(RubricRule)
+                    .where(RubricRule.user_id == user.id)
+                    .order_by(RubricRule.priority.desc()),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [row.name for row in rows] == [
+            "Gmail important",
+            "Security alerts",
+            "Receipts and invoices",
+            "Newsletters",
+        ]
+
+        same_user = await _get_or_create_user(session, email="seeded@example.com")
+        repeat_rows = (
+            (
+                await session.execute(
+                    select(RubricRule).where(RubricRule.user_id == user.id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert same_user.id == user.id
+    assert len(repeat_rows) == len(rows)
 
 
 def test_oauth_callback_rejects_state_mismatch(wired_app: TestClient) -> None:

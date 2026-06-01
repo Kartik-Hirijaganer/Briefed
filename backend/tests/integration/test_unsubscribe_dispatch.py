@@ -156,7 +156,7 @@ async def _seed(session) -> tuple[User, ConnectedAccount]:
         session.add(
             Classification(
                 email_id=email.id,
-                label="waste",
+                label="ignore",
                 score=Decimal("0.8"),
                 rubric_version=0,
                 prompt_version_id=None,

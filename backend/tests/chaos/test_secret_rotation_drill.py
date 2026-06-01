@@ -21,6 +21,20 @@ from app.integrations.ssm_secrets import MissingSecretError
 
 pytestmark = pytest.mark.chaos
 
+_SECRET_ENV_ALIASES = (
+    "BRIEFED_OPENROUTER_API_KEY",
+    "OPENROUTER_API_KEY",
+    "BRIEFED_SESSION_SIGNING_KEY",
+    "SESSION_SIGNING_KEY",
+    "GOOGLE_OAUTH_CLIENT_ID",
+    "BRIEFED_GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
+    "BRIEFED_GOOGLE_OAUTH_CLIENT_SECRET",
+    "BRIEFED_DATABASE_URL",
+    "DATABASE_URL",
+)
+"""Environment aliases that must not override the SSM rotation stub."""
+
 
 class _RotatingSsm:
     """SSM stub whose ``openrouter_api_key`` rotates per call."""
@@ -52,6 +66,8 @@ class _RotatingSsm:
 
 def _enable_lambda_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force ``Settings()`` to read the lambda-runtime hydration path."""
+    for name in _SECRET_ENV_ALIASES:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
     monkeypatch.setenv("BRIEFED_SSM_PREFIX", "/briefed/test/")
 

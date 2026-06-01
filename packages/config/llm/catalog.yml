@@ -1,0 +1,17 @@
+models:
+  gemini-flash:
+    openrouter_id: google/gemini-2.0-flash-001
+    cost_per_m_input_usd: 0.10
+    cost_per_m_output_usd: 0.40
+    daily_call_cap: null
+    max_output_tokens: 8192
+  claude-haiku:
+    openrouter_id: anthropic/claude-haiku-4.5
+    cost_per_m_input_usd: 1.00
+    cost_per_m_output_usd: 5.00
+    daily_call_cap: 100
+    max_output_tokens: 8192
+
+primary: gemini-flash
+fallbacks:
+  - claude-haiku

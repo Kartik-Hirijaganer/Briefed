@@ -7,6 +7,8 @@ import pytest
 
 from app.core.errors import AuthError, ProviderError
 from app.services.gmail.oauth import (
+    GMAIL_MODIFY_SCOPE,
+    GMAIL_SCOPES,
     OAuthTokenBundle,
     build_authorize_url,
     exchange_code,
@@ -38,6 +40,8 @@ def test_authorize_url_contains_required_params() -> None:
     assert "code_challenge_method=S256" in url
     assert "access_type=offline" in url
     assert "prompt=consent" in url
+    assert GMAIL_MODIFY_SCOPE.replace(":", "%3A").replace("/", "%2F") in url
+    assert GMAIL_MODIFY_SCOPE in GMAIL_SCOPES
 
 
 def test_expires_at_adds_safety_margin() -> None:

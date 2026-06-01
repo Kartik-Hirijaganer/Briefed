@@ -23,5 +23,7 @@ short, dated, numbered, immutable once accepted.
 | 0007 | `MailboxProvider` interface                           | Accepted                |
 | 0008 | KMS CMK for token-wrap key                            | Accepted                |
 | 0009 | OpenRouter as the LLM routing layer                   | Accepted                |
-| 0010 | LLM prompt redaction                                  | Accepted                |
+| 0010 | LLM prompt redaction                                  | Superseded by ADR 0012  |
 | 0011 | CloudFront OAC over API Gateway for API edge hardening | Accepted                |
+| 0012 | Remove Presidio from prompt redaction                 | Accepted                |
+| 0013 | Gmail mark-read write scope                           | Accepted                |

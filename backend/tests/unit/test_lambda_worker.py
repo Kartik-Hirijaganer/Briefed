@@ -15,7 +15,7 @@ from app.lambda_worker import (
     sqs_dispatcher,
 )
 from app.lambda_worker import _SqsEvent as SqsEvent
-from app.llm.redaction import IdentityScrubber, PresidioSanitizer
+from app.llm.redaction import IdentityScrubber, RegexSanitizer
 from app.services.ingestion.pipeline import IngestStats
 from app.workers.messages import IngestMessage
 
@@ -92,10 +92,6 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
         calls.append(("summary", kwargs["queue_url"]))
         return 2, 1
 
-    async def _enqueue_jobs(**kwargs: Any) -> int:
-        calls.append(("jobs", kwargs["queue_url"]))
-        return 1
-
     async def _mark_run_running(*_args: Any, **_kwargs: Any) -> None:
         return None
 
@@ -106,7 +102,6 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
     monkeypatch.setenv("BRIEFED_CONTENT_KEY_ALIAS", "alias/content")
     monkeypatch.setenv("BRIEFED_CLASSIFY_QUEUE_URL", "https://sqs.example/classify")
     monkeypatch.setenv("BRIEFED_SUMMARIZE_QUEUE_URL", "https://sqs.example/summarize")
-    monkeypatch.setenv("BRIEFED_JOBS_QUEUE_URL", "https://sqs.example/jobs")
 
     def _kms_client() -> object:
         return object()
@@ -132,10 +127,6 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
         "app.services.summarization.enqueue_unsummarized_for_run",
         _enqueue_summary,
     )
-    monkeypatch.setattr(
-        "app.services.jobs.dispatch.enqueue_unextracted_for_account",
-        _enqueue_jobs,
-    )
     monkeypatch.setattr("app.services.runs.mark_run_running", _mark_run_running)
     monkeypatch.setattr("app.services.runs.maybe_finalize_run", _maybe_finalize_run)
 
@@ -144,7 +135,6 @@ async def test_handle_ingest_record_requeues_downstream_backlog(
 
     assert calls == [
         ("summary", "https://sqs.example/summarize"),
-        ("jobs", "https://sqs.example/jobs"),
     ]
     assert sqs_creations == 1
     assert fake_session.committed is True
@@ -240,9 +230,9 @@ async def test_build_redaction_chain_for_user_uses_profile_fields() -> None:
     )
     session = _StubSession(user)
     chain = await _build_redaction_chain_for_user(session, uuid.uuid4())
-    # Identity scrubber present; Presidio skipped per profile flag.
+    # Identity scrubber present; regex remains the fallback sanitizer.
     assert any(isinstance(s, IdentityScrubber) for s in chain.sanitizers)
-    assert all(not isinstance(s, PresidioSanitizer) for s in chain.sanitizers)
+    assert any(isinstance(s, RegexSanitizer) for s in chain.sanitizers)
     redacted = chain.sanitize(
         "From me@example.com / alias@example.com — signed Nickname",
     )

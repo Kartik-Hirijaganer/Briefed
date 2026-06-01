@@ -11,12 +11,12 @@ from app.services.prompts.registry import (
 )
 
 
-def _write(tmp_path, name, version, body="body text"):
+def _write(tmp_path, name, version, body="body text", model="gemini-flash"):
     dir_ = tmp_path / name
     dir_.mkdir(parents=True, exist_ok=True)
     path = dir_ / f"v{version}.md"
     path.write_text(
-        f"---\nid: {name}\nversion: {version}\nmodel: gemini-1.5-flash\n"
+        f"---\nid: {name}\nversion: {version}\nmodel: {model}\n"
         f"temperature: 0.0\nmax_tokens: 400\n---\n{body}\n",
         encoding="utf-8",
     )
@@ -30,7 +30,7 @@ def test_load_single_prompt(tmp_path) -> None:
     assert entry.spec.name == "triage"
     assert entry.spec.version == 1
     assert entry.content_hash != b""
-    assert entry.spec.model == "gemini-1.5-flash"
+    assert entry.spec.model == "gemini-flash"
 
 
 def test_latest_picks_highest_version(tmp_path) -> None:
@@ -44,11 +44,11 @@ def test_duplicate_versions_raise(tmp_path) -> None:
     dir_ = tmp_path / "triage"
     dir_.mkdir()
     (dir_ / "v1.md").write_text(
-        "---\nid: triage\nversion: 1\nmodel: g\ntemperature: 0\nmax_tokens: 1\n---\na",
+        "---\nid: triage\nversion: 1\nmodel: gemini-flash\ntemperature: 0\nmax_tokens: 1\n---\na",
         encoding="utf-8",
     )
     (dir_ / "v1b.md").write_text(
-        "---\nid: triage\nversion: 1\nmodel: g\ntemperature: 0\nmax_tokens: 1\n---\nb",
+        "---\nid: triage\nversion: 1\nmodel: gemini-flash\ntemperature: 0\nmax_tokens: 1\n---\nb",
         encoding="utf-8",
     )
     with pytest.raises(PromptBundleError):
@@ -79,10 +79,19 @@ def test_empty_registry_raises(tmp_path) -> None:
         PromptRegistry.load(tmp_path)
 
 
+def test_unknown_catalog_model_raises(tmp_path) -> None:
+    _write(tmp_path, "triage", 1, model="not-a-catalog-key")
+
+    with pytest.raises(PromptBundleError, match="unknown model"):
+        PromptRegistry.load(tmp_path)
+
+
 def test_default_prompt_root_exists() -> None:
-    # The real packages/prompts/triage/v1.md shipped with this repo.
+    # The real packages/prompts/triage/v1.md and v2.md ship with this repo.
     registry = PromptRegistry.load(default_prompt_root())
-    assert registry.get("triage", version=1).spec.model.startswith("gemini")
+    assert registry.get("triage", version=1).spec.model == "gemini-flash"
+    assert registry.get("triage", version=2).spec.model == "gemini-flash"
+    assert registry.latest("triage").spec.version == 2
 
 
 def test_default_prompt_root_uses_lambda_task_root(monkeypatch, tmp_path) -> None:

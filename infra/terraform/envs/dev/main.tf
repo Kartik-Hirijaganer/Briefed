@@ -131,7 +131,6 @@ module "worker" {
     BRIEFED_CONTENT_KEY_ALIAS     = module.kms.content_alias
     BRIEFED_CLASSIFY_QUEUE_URL    = module.sqs.queue_urls["classify"]
     BRIEFED_SUMMARIZE_QUEUE_URL   = module.sqs.queue_urls["summarize"]
-    BRIEFED_JOBS_QUEUE_URL        = module.sqs.queue_urls["jobs"]
     BRIEFED_UNSUBSCRIBE_QUEUE_URL = module.sqs.queue_urls["unsubscribe"]
     BRIEFED_RAW_EMAIL_BUCKET      = module.s3.bucket_names["raw_email"]
     BRIEFED_STORE_RAW_MIME        = "0"

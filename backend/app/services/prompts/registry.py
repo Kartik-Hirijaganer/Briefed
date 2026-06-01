@@ -12,7 +12,7 @@ Frontmatter contract (required keys):
     version: 1
     owner: "@user"
     provider: gemini
-    model: gemini-1.5-flash
+    model: gemini-flash
     temperature: 0.0
     max_tokens: 400
     output_schema: ../schemas/triage.v1.json
@@ -20,8 +20,9 @@ Frontmatter contract (required keys):
     cache_tier: gemini_context
     ---
 
-Missing required keys or duplicate ``(id, version)`` pairs raise
-:class:`PromptBundleError` loudly at boot.
+``model`` is a catalog key from ``packages/config/llm/catalog.yml``.
+Missing required keys, unknown model keys, or duplicate ``(id, version)``
+pairs raise :class:`PromptBundleError` loudly at boot.
 """
 
 from __future__ import annotations
@@ -36,7 +37,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from app.core.logging import get_logger
+from app.core.yaml import YamlConfigError, safe_load_yaml_mapping
 from app.db.models import PromptVersion
+from app.llm.catalog import UnknownModelError
+from app.llm.catalog import resolve as resolve_model
 from app.llm.providers.base import PromptSpec
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -273,12 +277,18 @@ def _load_file(path: Path) -> RegisteredPrompt:
     if missing:
         raise PromptBundleError(f"{path} frontmatter missing keys: {missing}")
 
+    model = str(front["model"])
+    try:
+        resolve_model(model)
+    except UnknownModelError as exc:
+        raise PromptBundleError(f"{path} frontmatter references unknown model {model!r}") from exc
+
     content_hash = hashlib.sha256(body.encode("utf-8")).digest()
     spec = PromptSpec(
         name=str(front["id"]),
         version=int(front["version"]),
         content=body,
-        model=str(front["model"]),
+        model=model,
         temperature=float(front.get("temperature", 0.0)),
         max_tokens=int(front.get("max_tokens", 512)),
         cache_tier=str(front.get("cache_tier", "none")),
@@ -306,22 +316,8 @@ def _load_file(path: Path) -> RegisteredPrompt:
     )
 
 
-_SCALAR_STR_RE = re.compile(r"^\"(.*)\"$|^'(.*)'$")
-"""Match a quoted scalar value; captures the inner string."""
-
-_INT_RE = re.compile(r"^-?\d+$")
-"""Match a signed integer literal."""
-
-_FLOAT_RE = re.compile(r"^-?\d+\.\d+$")
-"""Match a signed float literal."""
-
-
 def _parse_frontmatter(text: str, *, source: str) -> dict[str, Any]:
-    """Minimal YAML-flavored frontmatter parser (no external dep).
-
-    Supports the subset we need: ``key: value`` per line with optional
-    quoting, integers, and floats. Complex YAML (nested maps, anchors,
-    block scalars) is out of scope — the prompt bundle never needs it.
+    """Parse YAML frontmatter into a mapping.
 
     Args:
         text: Raw frontmatter block (between the ``---`` markers).
@@ -333,44 +329,10 @@ def _parse_frontmatter(text: str, *, source: str) -> dict[str, Any]:
     Raises:
         PromptBundleError: On a malformed line.
     """
-    out: dict[str, Any] = {}
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].rstrip()
-        if not line.strip():
-            continue
-        if ":" not in line:
-            raise PromptBundleError(f"{source}: malformed frontmatter line {raw!r}")
-        key, _, value = line.partition(":")
-        out[key.strip()] = _coerce(value.strip())
-    return out
-
-
-_BOOL_SCALARS: dict[str, bool] = {"true": True, "false": False}
-"""Boolean literals the frontmatter parser recognizes."""
-
-
-def _coerce(value: str) -> str | int | float | bool:
-    """Coerce a frontmatter scalar into a typed Python value.
-
-    Args:
-        value: Raw right-hand side.
-
-    Returns:
-        Parsed scalar (str / int / float / bool).
-    """
-    if not value:
-        return ""
-    match = _SCALAR_STR_RE.match(value)
-    if match is not None:
-        return match.group(1) or match.group(2) or ""
-    boolean = _BOOL_SCALARS.get(value.lower())
-    if boolean is not None:
-        return boolean
-    if _INT_RE.match(value):
-        return int(value)
-    if _FLOAT_RE.match(value):
-        return float(value)
-    return value
+    try:
+        return safe_load_yaml_mapping(text, source=source)
+    except YamlConfigError as exc:
+        raise PromptBundleError(str(exc)) from exc
 
 
 __all__ = [

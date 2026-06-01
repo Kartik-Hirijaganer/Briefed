@@ -5,7 +5,6 @@ import { Button, EmptyState, ErrorState, Skeleton } from '@briefed/ui';
 import { api, unwrap } from '../../api/client';
 import { AppVersion } from '../../components/AppVersion';
 import { AccountCard } from '../../features/settings/AccountCard';
-import { ProfileSettings } from '../../features/settings/ProfileSettings';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
@@ -80,9 +79,6 @@ export default function AccountsPage(): JSX.Element {
           }
         />
       )}
-
-      <ProfileSettings />
-
       {isMobile ? (
         <div
           className="fixed inset-x-0 bottom-[76px] z-20 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur md:hidden"

@@ -39,13 +39,41 @@ REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 """Google OAuth revoke endpoint."""
 
 
-GMAIL_READONLY_SCOPES: tuple[str, ...] = (
-    "https://www.googleapis.com/auth/gmail.readonly",
+GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+"""Gmail scope used for message ingestion."""
+
+GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+"""Gmail scope used only for explicit mark-read label removal."""
+
+GMAIL_SCOPES: tuple[str, ...] = (
+    GMAIL_READONLY_SCOPE,
+    GMAIL_MODIFY_SCOPE,
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid",
 )
-"""Scopes requested by the 1.0.0 ingest pipeline."""
+"""Scopes requested by the 1.0.0 ingest + explicit mark-read pipeline."""
+
+GMAIL_READONLY_SCOPES: tuple[str, ...] = GMAIL_SCOPES
+"""Backward-compatible alias for callers that use the historical constant name."""
+
+_GMAIL_MODIFY_SCOPE_SUFFIX = "/gmail.modify"
+"""Suffix accepted when Google returns normalized Gmail modify scope strings."""
+
+
+def has_gmail_modify_scope(scopes: tuple[str, ...]) -> bool:
+    """Return whether granted scopes include Gmail modify.
+
+    Args:
+        scopes: Raw OAuth scope strings persisted from Google.
+
+    Returns:
+        True when ``gmail.modify`` was granted.
+    """
+    return any(
+        scope == GMAIL_MODIFY_SCOPE or scope.endswith(_GMAIL_MODIFY_SCOPE_SUFFIX)
+        for scope in scopes
+    )
 
 
 class OAuthStartPayload(BaseModel):

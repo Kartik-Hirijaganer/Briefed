@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.api.v1 import api_router
+from app.core.app_config import get_app_config
 from app.core.config import get_settings
 from app.core.logging import configure as configure_logging
 from app.core.security_headers import SecurityHeadersMiddleware
@@ -26,6 +27,7 @@ from app.core.tracing import configure_tracing, instrument_app
 # ``configure_tracing`` and ``configure_sentry`` are all idempotent so a
 # re-import during testing or a SnapStart restore is a no-op.
 _settings = get_settings()
+_app_config = get_app_config()
 configure_tracing(_settings)
 configure_logging(level=_settings.log_level, json_output=_settings.runtime != "local")
 configure_sentry(_settings)

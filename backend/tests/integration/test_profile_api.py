@@ -67,6 +67,7 @@ async def test_get_profile_returns_defaults(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["display_name"] is None
+    assert body["presidio_enabled"] is False
     assert body["schedule_frequency"] == "once_daily"
     assert body["schedule_times_local"] == ["08:00"]
     assert body["theme_preference"] == "system"
@@ -96,6 +97,21 @@ async def test_patch_profile_updates_fields(
     assert body["redaction_aliases"] == ["codename"]
     assert body["presidio_enabled"] is False
     assert body["theme_preference"] == "dark"
+
+
+async def test_patch_profile_rejects_presidio_enable(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """Presidio was removed, so the legacy toggle can only stay false."""
+    user = await _seed_user(api_session)
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/v1/profile/me",
+            cookies={SESSION_COOKIE_NAME: cookie},
+            json={"presidio_enabled": True},
+        )
+    assert response.status_code == 422, response.text
 
 
 async def test_get_schedule_returns_next_run(

@@ -101,9 +101,10 @@ describe('<AccountCard>', () => {
     });
   });
 
-  it('reconnect entry triggers the OAuth flow start', async () => {
+  it('renders revoked accounts with the reconnect vocabulary', async () => {
     const user = userEvent.setup();
-    renderCard({ status: 'needs_reauth' });
+    renderCard({ status: 'revoked' });
+    expect(screen.getByText('Needs reconnect')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /more actions/i }));
     await user.click(screen.getByRole('button', { name: /reconnect account/i }));
     expect(startReconnect).toHaveBeenCalled();

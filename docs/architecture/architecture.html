@@ -356,7 +356,7 @@
           </div>
 
           <h3>The mental model in one paragraph</h3>
-          <p>Think of Briefed as a tiny factory that runs overnight. A <strong>timer</strong> (AWS EventBridge Scheduler) starts the line. A <strong>fan-out</strong> step creates one work order per connected mailbox. That work order flows down a <strong>conveyor belt of queues</strong> (AWS SQS): first <em>ingest</em> the new emails, then <em>classify</em> them, then in parallel <em>summarize</em> the important ones and <em>extract jobs</em> from recruiter mail, plus a periodic <em>unsubscribe</em> hygiene pass. Each station is a small serverless function (AWS Lambda) that shuts off when idle, so the factory costs almost nothing when nothing is happening. The finished briefing lands in a Postgres database, and a React web app (installed like a phone app) shows it to you.</p>
+          <p>Think of Briefed as a tiny factory that runs overnight. A <strong>timer</strong> (AWS EventBridge Scheduler) starts the line. A <strong>fan-out</strong> step creates one work order per connected mailbox. That work order flows down a <strong>conveyor belt of queues</strong> (AWS SQS): first <em>ingest</em> the new emails, then <em>classify</em> them, then in parallel <em>summarize</em> the important ones and run a periodic <em>unsubscribe</em> hygiene pass. Each station is a small serverless function (AWS Lambda) that shuts off when idle, so the factory costs almost nothing when nothing is happening. The finished briefing lands in a Postgres database, and a React web app (installed like a phone app) shows it to you.</p>
 
           <div class="callout note">
             <div class="t">📌 Why this shape?</div>
@@ -375,15 +375,15 @@
             <li><strong>The timer ticks — every 15 minutes.</strong> EventBridge Scheduler triggers the <em>fan-out</em> Lambda on a fixed 15-minute cadence. The cadence is constant; <em>who actually runs</em> is decided next. (You pick once-daily or twice-daily with specific <code>HH:MM</code> slots; those live on your profile.)</li>
             <li><strong>Fan-out decides who is due.</strong> A cheap SQL filter shortlists candidate users, then a Python predicate (<code>app.core.scheduling.is_due</code>) authoritatively re-checks each one — handling timezone, DST, a "ran in the last hour" debounce, and stale locks. For each due user it takes a per-user idempotency lock (<code>users.current_run_id</code>) so two ticks can't stomp on each other, then drops one "go ingest this mailbox" message onto the <em>ingest</em> queue per active auto-scan account.</li>
             <li><strong>Ingest fetches new mail.</strong> The ingest worker uses the saved <em>sync cursor</em> (Gmail's <code>historyId</code>) to ask Gmail only for what changed since last time. It de-duplicates, splits each message into lightweight metadata + a separately-encrypted body, and saves it. Then it chains the emails onto the <em>classify</em> queue.</li>
-            <li><strong>Classify decides what matters.</strong> For each email, a fast rule engine runs first (cheap, deterministic). If the rules are confident, it stops there. If not, it asks the LLM. The verdict — one of <code>must_read</code>, <code>good_to_read</code>, <code>ignore</code>, <code>waste</code>, <code>newsletter</code>, <code>job_candidate</code>, <code>needs_review</code> — is saved, with the model's reasoning <strong>encrypted</strong>.</li>
-            <li><strong>The line splits.</strong> Emails flagged important go to <em>summarize</em>; newsletters get grouped into tech-news clusters and summarized as a set; emails flagged as job candidates go to <em>jobs</em>, where the LLM pulls out title, company, pay range, location, and a link.</li>
+            <li><strong>Classify decides what matters.</strong> For each email, a fast rule engine runs first (cheap, deterministic). If the rules are confident, it stops there. If not, it asks the LLM. The verdict — one of <code>must_read</code>, <code>good_to_read</code>, or <code>ignore</code> — is saved, with the model's reasoning <strong>encrypted</strong>.</li>
+            <li><strong>The line splits.</strong> Emails flagged important go to <em>summarize</em>; newsletters get grouped into tech-news clusters and summarized as a set.</li>
             <li><strong>Hygiene runs.</strong> Periodically, the <em>unsubscribe</em> worker looks back 30 days per sender, scores how often they email you versus how often you engage, and ranks unsubscribe suggestions.</li>
-            <li><strong>You open the app.</strong> The React PWA calls the API and shows today's digest, the triage buckets, tech news, job matches, and unsubscribe recommendations. Because it's a PWA, the last digest is also readable offline.</li>
+            <li><strong>You open the app.</strong> The React PWA calls the API and shows today's digest, the triage buckets, tech news, and unsubscribe recommendations. Because it's a PWA, the last digest is also readable offline.</li>
           </ol>
 
           <div class="callout ok">
             <div class="t">✅ Idempotent by design</div>
-            <p>Every step is safe to re-run. Gmail fetches are keyed on <code>historyId</code> (re-runs are no-ops), each pipeline message carries a <code>run_id</code>, and rows like classifications and job matches are <em>upserted</em> per email. If a worker crashes, SQS redelivers the message and nothing is corrupted.</p>
+            <p>Every step is safe to re-run. Gmail fetches are keyed on <code>historyId</code> (re-runs are no-ops), each pipeline message carries a <code>run_id</code>, and rows like classifications and summaries are <em>upserted</em> per email. If a worker crashes, SQS redelivers the message and nothing is corrupted.</p>
           </div>
         </div>
       </section>
@@ -411,7 +411,7 @@ flowchart TB
     end
 
     subgraph MSG["Messaging — Amazon SQS"]
-      q["Per-stage queues:<br/>ingest · classify · summarize<br/>jobs · unsubscribe · digest · maintenance"]:::queue
+      q["Per-stage queues:<br/>ingest · classify · summarize<br/>unsubscribe · digest · maintenance"]:::queue
       dlq[["Dead-letter queue<br/>(after 5 failures)"]]:::queue
     end
 
@@ -531,11 +531,9 @@ flowchart LR
     ing -->|"ClassifyMessage<br/>(1 per email)"| cls["🏷️ classify"]:::stage
     cls -->|"SummarizeEmailMessage"| sum["📝 summarize<br/>(per-email)"]:::stage
     cls -->|"TechNewsClusterMessage"| tn["🗞️ tech-news<br/>clusters"]:::stage
-    cls -->|"JobExtractMessage"| job["💼 jobs<br/>(extract + filter)"]:::stage
     acct["connected<br/>accounts"]:::side -. "30-day pass" .-> uns["🧹 unsubscribe<br/>hygiene"]:::stage
     sum --> dig[("digest<br/>ready in DB")]:::out
     tn --> dig
-    job --> dig
     uns --> dig
 
     classDef sched fill:#fef9c3,stroke:#ca8a04,color:#713f12;
@@ -553,10 +551,9 @@ flowchart LR
               <tbody>
                 <tr><td><strong>Fan-out</strong></td><td>—</td><td><code>FanoutMessage</code></td><td>One <code>IngestMessage</code> per active account; sets the per-user run lock.</td></tr>
                 <tr><td><strong>Ingest</strong></td><td><code>ingest</code></td><td><code>IngestMessage</code></td><td>New <code>emails</code> + encrypted <code>email_content_blobs</code>; advances the <code>sync_cursors</code>. Chains to classify.</td></tr>
-                <tr><td><strong>Classify</strong></td><td><code>classify</code></td><td><code>ClassifyMessage</code></td><td>One <code>classifications</code> row (label + score + encrypted reasons). Sets <code>is_newsletter</code> / <code>is_job_candidate</code> flags that route downstream.</td></tr>
+                <tr><td><strong>Classify</strong></td><td><code>classify</code></td><td><code>ClassifyMessage</code></td><td>One <code>classifications</code> row (label + score + encrypted reasons). Sets <code>is_newsletter</code> for downstream newsletter grouping.</td></tr>
                 <tr><td><strong>Summarize (email)</strong></td><td><code>summarize</code></td><td><code>SummarizeEmailMessage</code></td><td>One encrypted <code>summaries</code> row per important email.</td></tr>
                 <tr><td><strong>Tech-news clusters</strong></td><td><code>summarize</code></td><td><code>TechNewsClusterMessage</code></td><td>Groups newsletters into <code>tech_news_clusters</code> + members, one summary per cluster.</td></tr>
-                <tr><td><strong>Jobs</strong></td><td><code>jobs</code></td><td><code>JobExtractMessage</code></td><td>One <code>job_matches</code> row: structured fields + encrypted rationale, evaluated against active <code>job_filters</code>.</td></tr>
                 <tr><td><strong>Unsubscribe</strong></td><td><code>unsubscribe</code></td><td><code>UnsubscribeMessage</code></td><td>Upserts <code>unsubscribe_suggestions</code> from a 30-day per-sender aggregate.</td></tr>
               </tbody>
             </table>
@@ -571,7 +568,7 @@ flowchart LR
               <tbody>
                 <tr><td><strong>Ingest</strong></td><td>If the saved Gmail cursor is stale/rejected, it falls back to a bounded <code>newer_than:14d</code> scan instead of a full history walk. Token-refresh, quota, and provider errors are allowed to bubble so SQS retries the message.</td></tr>
                 <tr><td><strong>Classify</strong></td><td>If the LLM call fails entirely, the email is persisted as <code>needs_review</code> (graceful degradation) rather than dropped. Even on success, a model confidence below <strong>0.55</strong> is forced to <code>needs_review</code> so low-confidence guesses surface for a human instead of mislabeling.</td></tr>
-                <tr><td><strong>Summarize / Jobs</strong></td><td>A missing prompt-version row is retried. LLM/parse failures are handled as service-layer outcomes; a missing source email is treated as a no-op so a deleted email can't wedge the queue.</td></tr>
+                <tr><td><strong>Summarize</strong></td><td>A missing prompt-version row is retried. LLM/parse failures are handled as service-layer outcomes; a missing source email is treated as a no-op so a deleted email can't wedge the queue.</td></tr>
                 <tr><td><strong>Unsubscribe</strong></td><td>If the borderline LLM call fails for one sender, that sender is skipped and the 30-day aggregate continues for the rest. User dismissals are always preserved across re-runs.</td></tr>
                 <tr><td><strong>Any stage</strong></td><td>After 5 failed receives the message redrives to the shared DLQ (14-day retention). The worker reports <em>partial</em> batch failures, so one poison record doesn't force healthy records in the same batch to reprocess.</td></tr>
               </tbody>
@@ -594,9 +591,9 @@ flowchart LR
           <div class="diagram">
             <pre class="mermaid">
 flowchart TB
-    caller["Pipeline stage<br/>(classify / summarize / jobs / unsubscribe)"]:::stage
+    caller["Pipeline stage<br/>(classify / summarize / unsubscribe)"]:::stage
     prompt["Prompt registry<br/>(name, version) → bundle"]:::comp
-    redact["Redaction chain<br/>identity → regex → Presidio"]:::sec
+    redact["Redaction chain<br/>identity → regex"]:::sec
     client["LLMClient<br/>retries · circuit breaker · cost cap · logging"]:::core
     provider["OpenRouterProvider<br/>(implements LLMProvider)"]:::comp
 
@@ -635,7 +632,7 @@ flowchart TB
           </div>
 
           <h3>Prompts are versioned artifacts, not strings</h3>
-          <p>Prompts live in <code>packages/prompts/</code> as versioned bundles with JSON Schemas, and are referenced by <code>(name, version)</code> — e.g. <code>("triage", 1)</code>, <code>("summarize_relevant", 1)</code>, <code>("job_extract", 1)</code>, <code>("newsletter_group", 1)</code>, <code>("unsubscribe_borderline", 1)</code>. At process start the <code>PromptRegistry</code> loads them into the <code>prompt_versions</code> table, which every audit row foreign-keys to. You never paste a prompt into business logic.</p>
+          <p>Prompts live in <code>packages/prompts/</code> as versioned bundles with JSON Schemas, and are referenced by <code>(name, version)</code> — e.g. <code>("triage", 2)</code>, <code>("summarize_relevant", 1)</code>, <code>("category_digest", 1)</code>, <code>("newsletter_group", 1)</code>, <code>("unsubscribe_borderline", 1)</code>. At process start the <code>PromptRegistry</code> loads them into the <code>prompt_versions</code> table, which every audit row foreign-keys to. You never paste a prompt into business logic.</p>
         </div>
       </section>
 
@@ -774,7 +771,6 @@ sequenceDiagram
 erDiagram
     users ||--o{ connected_accounts : owns
     users ||--o{ rubric_rules : "defines"
-    users ||--o{ job_filters : "defines"
     users ||--o{ tech_news_clusters : "owns"
     users ||--o{ digest_runs : "triggers"
     users ||--o| user_preferences : "has"
@@ -786,7 +782,6 @@ erDiagram
 
     emails ||--o| email_content_blobs : "body 1:1"
     emails ||--o| classifications : "verdict 1:1"
-    emails ||--o| job_matches : "extract 1:1"
     emails ||--o| summaries : "summary 0..1"
     emails ||--o{ tech_news_cluster_members : "member of"
     emails ||--o{ prompt_call_log : "audited by"
@@ -796,7 +791,6 @@ erDiagram
 
     prompt_versions ||--o{ classifications : "produced"
     prompt_versions ||--o{ summaries : "produced"
-    prompt_versions ||--o{ job_matches : "produced"
     prompt_versions ||--o{ unsubscribe_suggestions : "produced"
     prompt_versions ||--o{ prompt_call_log : "logged for"
 
@@ -893,20 +887,6 @@ erDiagram
       uuid id PK
       jsonb match
       string cluster_key
-    }
-    job_matches {
-      uuid id PK
-      uuid email_id FK "UK"
-      text title
-      text company
-      bytea match_reason_ct "encrypted"
-      bool passed_filter
-    }
-    job_filters {
-      uuid id PK
-      uuid user_id FK
-      string name
-      jsonb predicate
     }
     unsubscribe_suggestions {
       uuid id PK
@@ -1060,14 +1040,14 @@ erDiagram
             <tbody>
               <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
               <tr class="col-name"><td><code>email_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → emails</td><td></td></tr>
-              <tr class="col-name"><td><code>label</code></td><td>VARCHAR(24)</td><td><code>must_read</code> / <code>good_to_read</code> / <code>ignore</code> / <code>waste</code> / <code>newsletter</code> / <code>job_candidate</code> / <code>needs_review</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>label</code></td><td>VARCHAR(24)</td><td><code>must_read</code> / <code>good_to_read</code> / <code>ignore</code> (CHECK).</td></tr>
               <tr class="col-name"><td><code>score</code></td><td>NUMERIC(4,3)</td><td>Confidence in [0,1] (CHECK).</td></tr>
               <tr class="col-name"><td><code>rubric_version</code></td><td>INTEGER</td><td>Rule-set version that produced the row.</td></tr>
               <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td>Null when rules short-circuited (no LLM).</td></tr>
               <tr class="col-name"><td><code>decision_source</code></td><td>VARCHAR(8)</td><td><code>rule</code> / <code>model</code> / <code>hybrid</code> (CHECK).</td></tr>
               <tr class="col-name"><td><code>model</code></td><td>VARCHAR(64)</td><td>Model id (e.g. <code>gemini-2.0-flash</code>).</td></tr>
               <tr class="col-name"><td><code>tokens_in</code> / <code>tokens_out</code></td><td>INTEGER</td><td>Billed tokens (0 when rule-only).</td></tr>
-              <tr class="col-name"><td><code>is_newsletter</code> / <code>is_job_candidate</code></td><td>BOOLEAN</td><td>Routing flags for downstream stages.</td></tr>
+              <tr class="col-name"><td><code>is_newsletter</code></td><td>BOOLEAN</td><td>Routing flag for downstream newsletter grouping.</td></tr>
               <tr class="col-name"><td><code>reasons_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted JSON rationale.</td></tr>
               <tr class="col-name"><td><code>reasons_dek_wrapped</code></td><td>BYTEA</td><td>Reserved (packed envelope already carries the DEK).</td></tr>
             </tbody>
@@ -1185,44 +1165,7 @@ erDiagram
           </table></div>
 
           <!-- GROUP F -->
-          <h3>F · Jobs</h3>
-
-          <h4><code>job_matches</code> — structured job extraction (1:1 with email)</h4>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
-            <tbody>
-              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
-              <tr class="col-name"><td><code>email_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → emails</td><td>Re-extraction replaces the row.</td></tr>
-              <tr class="col-name"><td><code>title</code> / <code>company</code></td><td>TEXT</td><td>Plaintext (so the filter predicate can run without KMS).</td></tr>
-              <tr class="col-name"><td><code>location</code></td><td>TEXT</td><td>Free-text or null.</td></tr>
-              <tr class="col-name"><td><code>remote</code></td><td>BOOLEAN</td><td>Tri-state (null = ambiguous).</td></tr>
-              <tr class="col-name"><td><code>comp_min</code> / <code>comp_max</code></td><td>INTEGER</td><td>Salary range (CHECK: min ≤ max, currency required if set).</td></tr>
-              <tr class="col-name"><td><code>currency</code></td><td>VARCHAR(3)</td><td>ISO-4217.</td></tr>
-              <tr class="col-name"><td><code>comp_phrase</code></td><td>TEXT</td><td>Verbatim quoted salary phrase (audit guard).</td></tr>
-              <tr class="col-name"><td><code>seniority</code></td><td>VARCHAR(16)</td><td>Normalized tier.</td></tr>
-              <tr class="col-name"><td><code>source_url</code></td><td>TEXT</td><td>Apply URL, tracking stripped.</td></tr>
-              <tr class="col-name"><td><code>match_score</code></td><td>NUMERIC(4,3)</td><td>[0,1] (CHECK).</td></tr>
-              <tr class="col-name"><td><code>filter_version</code> / <code>passed_filter</code></td><td>INTEGER / BOOLEAN</td><td>Filter version stamped at write; pass/fail. Indexed.</td></tr>
-              <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td></td></tr>
-              <tr class="col-name"><td><code>match_reason_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted rationale paragraph.</td></tr>
-            </tbody>
-          </table></div>
-
-          <h4><code>job_filters</code> — configurable filter predicates</h4>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
-            <tbody>
-              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
-              <tr class="col-name"><td><code>user_id</code> <span class="pill fk">FK</span></td><td>UUID → users</td><td>Indexed on (user_id, active).</td></tr>
-              <tr class="col-name"><td><code>name</code></td><td>VARCHAR(64)</td><td>Unique per user.</td></tr>
-              <tr class="col-name"><td><code>predicate</code></td><td>JSONB</td><td><code>min_comp</code>, <code>max_comp</code>, <code>currency</code>, <code>remote_required</code>, <code>location_any/none</code>, <code>title_keywords_any/none</code>, <code>seniority_in</code>.</td></tr>
-              <tr class="col-name"><td><code>version</code></td><td>INTEGER</td><td>Bumped on each mutation (doesn't retroactively re-label).</td></tr>
-              <tr class="col-name"><td><code>active</code></td><td>BOOLEAN</td><td>Soft-delete switch.</td></tr>
-            </tbody>
-          </table></div>
-
-          <!-- GROUP G -->
-          <h3>G · Inbox hygiene</h3>
+          <h3>F · Inbox hygiene</h3>
 
           <h4><code>unsubscribe_suggestions</code> — ranked per-sender recommendation</h4>
           <div class="tablewrap"><table>
@@ -1336,18 +1279,6 @@ erDiagram
             </tbody>
           </table></div>
 
-          <h3>Jobs &amp; filters</h3>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
-            <tbody>
-              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/jobs</code></td><td>List curated job matches.</td></tr>
-              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/job-filters</code></td><td>List job filters.</td></tr>
-              <tr><td><span class="m post">POST</span></td><td><code>/api/v1/job-filters</code></td><td>Create a filter.</td></tr>
-              <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/job-filters/{filter_id}</code></td><td>Replace a filter.</td></tr>
-              <tr><td><span class="m delete">DELETE</span></td><td><code>/api/v1/job-filters/{filter_id}</code></td><td>Delete a filter.</td></tr>
-            </tbody>
-          </table></div>
-
           <h3>Inbox hygiene (unsubscribe)</h3>
           <div class="tablewrap"><table>
             <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
@@ -1391,7 +1322,6 @@ erDiagram
             <tbody>
               <tr><td><code>/</code></td><td>Dashboard (today's digest)</td></tr>
               <tr><td><code>/must-read</code>, <code>/good-to-read</code>, <code>/ignore</code>, <code>/waste</code></td><td>Triage buckets</td></tr>
-              <tr><td><code>/jobs</code></td><td>Job matches</td></tr>
               <tr><td><code>/news</code></td><td>Tech-news digest</td></tr>
               <tr><td><code>/unsubscribe</code></td><td>Unsubscribe recommendations</td></tr>
               <tr><td><code>/history</code>, <code>/history/:runId</code></td><td>Run history + detail</td></tr>
@@ -1425,7 +1355,7 @@ erDiagram
                 <tr><td><code>session_signing_key</code></td><td>HMAC key for the session + OAuth-state cookies. <strong>Required.</strong></td><td>SSM / env</td></tr>
                 <tr><td><code>BRIEFED_TOKEN_WRAP_KEY_ALIAS</code></td><td>KMS alias for OAuth-token envelope encryption.</td><td>Terraform KMS module</td></tr>
                 <tr><td><code>BRIEFED_CONTENT_KEY_ALIAS</code></td><td>KMS alias for content / rationale envelope encryption.</td><td>Terraform KMS module</td></tr>
-                <tr><td><code>BRIEFED_*_QUEUE_URL</code></td><td>Per-stage SQS URLs used to chain stages (classify, summarize, jobs, unsubscribe, ingest).</td><td>Terraform SQS module</td></tr>
+                <tr><td><code>BRIEFED_*_QUEUE_URL</code></td><td>Per-stage SQS URLs used to chain stages (classify, summarize, unsubscribe, ingest).</td><td>Terraform SQS module</td></tr>
                 <tr><td><code>BRIEFED_RAW_EMAIL_BUCKET</code> / <code>BRIEFED_STORE_RAW_MIME</code></td><td>Optional raw-MIME S3 storage (off in dev).</td><td>Terraform S3 module / env</td></tr>
                 <tr><td><code>BRIEFED_DAILY_LLM_USD_CAP</code></td><td>Hard per-UTC-day LLM spend cap; trips a global breaker (ADR 0009).</td><td>Env / SSM</td></tr>
                 <tr><td><code>BRIEFED_MANUAL_RUN_DAILY_CAP</code></td><td>Per-user manual-trigger cap (rolling 24h), default 10.</td><td>Env</td></tr>
@@ -1495,10 +1425,10 @@ erDiagram
                 <tr><td>Auth / sessions</td><td><code>backend/app/api/session.py</code>, <code>backend/app/api/v1/oauth.py</code>, <code>backend/app/api/deps.py</code></td></tr>
                 <tr><td>Lambda handlers</td><td><code>backend/app/lambda_api.py</code>, <code>backend/app/lambda_worker.py</code></td></tr>
                 <tr><td>Pipeline messages &amp; workers</td><td><code>backend/app/workers/messages.py</code>, <code>backend/app/workers/handlers/*.py</code></td></tr>
-                <tr><td>Pipeline services</td><td><code>backend/app/services/{ingestion,classification,summarization,jobs,unsubscribe}/</code></td></tr>
+                <tr><td>Pipeline services</td><td><code>backend/app/services/{ingestion,classification,summarization,unsubscribe}/</code></td></tr>
                 <tr><td>Scheduling predicate</td><td><code>backend/app/core/scheduling.py</code>, <code>backend/app/workers/handlers/fanout.py</code></td></tr>
                 <tr><td>LLM client, catalog &amp; providers</td><td><code>backend/app/llm/client.py</code>, <code>catalog.py</code>, <code>providers/openrouter.py</code>; prompts in <code>packages/prompts/</code></td></tr>
-                <tr><td>Prompt redaction</td><td><code>backend/app/llm/redaction/</code> (identity → regex → presidio)</td></tr>
+                <tr><td>Prompt redaction</td><td><code>backend/app/llm/redaction/</code> (identity → regex)</td></tr>
                 <tr><td>Data model &amp; migrations</td><td><code>backend/app/db/models.py</code>, <code>backend/app/db/session.py</code>, <code>backend/alembic/versions/*.py</code></td></tr>
                 <tr><td>Encryption helpers</td><td><code>backend/app/core/security.py</code> (tokens), <code>backend/app/core/content_crypto.py</code> (content)</td></tr>
                 <tr><td>Config &amp; secrets</td><td><code>backend/app/core/config.py</code>, <code>backend/app/integrations/ssm_secrets.py</code>, <code>.env.example</code></td></tr>
@@ -1604,7 +1534,7 @@ erDiagram
               <tr><td><code>is_due</code> predicate</td><td>The Python check (<code>app.core.scheduling</code>) that decides whether a user's schedule is due on a given 15-minute tick — timezone, DST, debounce, and stale-lock aware.</td></tr>
               <tr><td>OpenRouter</td><td>A single API that routes prompts to multiple LLM providers (here: Gemini Flash, Claude Haiku 4.5).</td></tr>
               <tr><td>Rubric</td><td>The set of user rules that classify emails before (or instead of) an LLM call.</td></tr>
-              <tr><td>Classification label</td><td>One of must_read, good_to_read, ignore, waste, newsletter, job_candidate, needs_review.</td></tr>
+              <tr><td>Classification label</td><td>One of must_read, good_to_read, ignore.</td></tr>
               <tr><td>Envelope encryption</td><td>Encrypt data with a one-time data key (DEK), then encrypt the DEK with a KMS master key.</td></tr>
               <tr><td>CMK</td><td>Customer-Managed Key in AWS KMS — Briefed uses two (token-wrap and content-encrypt).</td></tr>
               <tr><td>Encryption context</td><td>Extra key/value data (here, <code>user_id</code>) bound into every KMS call; a mismatch is rejected.</td></tr>
