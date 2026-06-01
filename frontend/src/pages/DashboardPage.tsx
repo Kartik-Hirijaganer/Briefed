@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { CircleHelp, Inbox } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -18,9 +18,10 @@ import {
   type BadgeTone,
 } from '@briefed/ui';
 
-import { api, unwrap } from '../api/client';
+import { api, ApiError, unwrap } from '../api/client';
 import type { Schemas } from '../api/types';
 import { SCAN_NOW_EVENT, ScanNowButton } from '../features/dashboard/ScanNowButton';
+import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
 import { useFreshnessState } from '../hooks/useFreshnessState';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -63,6 +64,7 @@ interface OptimisticMarkReadContext {
 export default function DashboardPage(): JSX.Element {
   const online = useOnlineStatus();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set<string>());
   const activeBucket = parseBucket(searchParams.get('bucket'));
@@ -148,6 +150,7 @@ export default function DashboardPage(): JSX.Element {
   const selectedCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
   const hasNextPage = offset + EMAIL_LIMIT < totalEmails;
+  const reconnectReturnTo = `${location.pathname}${location.search}${location.hash}` || '/';
 
   useEffect(() => {
     setSelectedIds(new Set<string>());
@@ -227,7 +230,12 @@ export default function DashboardPage(): JSX.Element {
         />
       ) : digest ? (
         <>
-          <DigestSummary digest={digest} activeBucket={activeBucket} onSelectBucket={setBucket} />
+          <DigestSummary
+            digest={digest}
+            activeBucket={activeBucket}
+            activeTotal={emailsQuery.data?.total}
+            onSelectBucket={setBucket}
+          />
           <EmailTable
             activeBucket={activeBucket}
             allVisibleSelected={allVisibleSelected}
@@ -248,7 +256,7 @@ export default function DashboardPage(): JSX.Element {
             total={totalEmails}
             onMarkSelectedRead={markSelectedRead}
           />
-          <MarkReadStatus mutation={markRead} />
+          <MarkReadStatus mutation={markRead} reconnectReturnTo={reconnectReturnTo} />
         </>
       ) : null}
     </section>
@@ -300,6 +308,7 @@ function DigestSkeleton(): JSX.Element {
 interface DigestSummaryProps {
   readonly digest: Schemas['DigestToday'];
   readonly activeBucket: Bucket | null;
+  readonly activeTotal?: number | undefined;
   readonly onSelectBucket: (bucket: Bucket | null) => void;
 }
 
@@ -310,9 +319,12 @@ interface DigestSummaryProps {
  * @returns The rendered digest summary region.
  */
 function DigestSummary(props: DigestSummaryProps): JSX.Element {
-  const { digest, activeBucket, onSelectBucket } = props;
+  const { digest, activeBucket, activeTotal, onSelectBucket } = props;
   const summaries = digest.category_summaries;
-  const allCount = digest.counts.must_read + digest.counts.good_to_read + digest.counts.ignore;
+  const allCount =
+    activeBucket === null && activeTotal !== undefined
+      ? activeTotal
+      : digest.counts.must_read + digest.counts.good_to_read + digest.counts.ignore;
 
   return (
     <div className="flex flex-col gap-4">
@@ -336,7 +348,12 @@ function DigestSummary(props: DigestSummaryProps): JSX.Element {
             key={bucket}
             active={activeBucket === bucket}
             label={BUCKET_META[bucket].label}
-            value={digest.counts[bucket]}
+            value={bucketCountForDisplay({
+              bucket,
+              counts: digest.counts,
+              activeBucket,
+              activeTotal,
+            })}
             tone={bucket === 'must_read' ? 'accent' : 'neutral'}
             onClick={() => onSelectBucket(bucket)}
           />
@@ -351,6 +368,26 @@ function DigestSummary(props: DigestSummaryProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+interface BucketCountDisplayOptions {
+  readonly bucket: Bucket;
+  readonly counts: Schemas['DigestToday']['counts'];
+  readonly activeBucket: Bucket | null;
+  readonly activeTotal?: number | undefined;
+}
+
+/**
+ * Return the KPI count for a bucket, preferring the loaded table total
+ * for the currently selected bucket.
+ *
+ * @param options - Count reconciliation inputs.
+ * @returns The count to render in the KPI card.
+ */
+function bucketCountForDisplay(options: BucketCountDisplayOptions): number {
+  const { bucket, counts, activeBucket, activeTotal } = options;
+  if (bucket === activeBucket && activeTotal !== undefined) return activeTotal;
+  return counts[bucket];
 }
 
 interface CategorySummaryCardProps {
@@ -771,6 +808,7 @@ interface MarkReadStatusProps {
     MarkReadVariables,
     OptimisticMarkReadContext
   >;
+  readonly reconnectReturnTo: string;
 }
 
 /**
@@ -780,7 +818,23 @@ interface MarkReadStatusProps {
  * @returns The rendered status region.
  */
 function MarkReadStatus(props: MarkReadStatusProps): JSX.Element | null {
-  const { mutation } = props;
+  const { mutation, reconnectReturnTo } = props;
+  const reconnect = useAddGmailFlow({ link: true, returnTo: reconnectReturnTo });
+  const errorEnvelope = mutation.error ? apiErrorEnvelope(mutation.error) : null;
+  if (errorEnvelope?.code === 'gmail_reauthorization_required') {
+    return (
+      <Alert tone="warn" title="Reconnect Gmail to mark mail read">
+        <div className="flex flex-col gap-3">
+          <p>{errorEnvelope.message}</p>
+          <div>
+            <Button variant="secondary" size="sm" onClick={reconnect.start}>
+              Reconnect Gmail
+            </Button>
+          </div>
+        </div>
+      </Alert>
+    );
+  }
   if (mutation.isError) {
     return (
       <Alert tone="danger" title="Could not mark mail read">
@@ -807,6 +861,35 @@ function MarkReadStatus(props: MarkReadStatusProps): JSX.Element | null {
     );
   }
   return null;
+}
+
+/**
+ * Extract an Aegis API error envelope from an API error instance.
+ *
+ * @param error - Mutation error raised by `unwrap`.
+ * @returns The typed envelope, or `null` for non-API errors.
+ */
+function apiErrorEnvelope(error: Error): Schemas['ErrorEnvelope'] | null {
+  if (!(error instanceof ApiError)) return null;
+  if (typeof error.detail !== 'object' || error.detail === null) return null;
+  const detail = error.detail as Record<string, unknown>;
+  if (
+    typeof detail.code !== 'string' ||
+    typeof detail.message !== 'string' ||
+    typeof detail.requestId !== 'string'
+  ) {
+    return null;
+  }
+  const details =
+    typeof detail.details === 'object' && detail.details !== null
+      ? (detail.details as Record<string, unknown>)
+      : {};
+  return {
+    code: detail.code,
+    message: detail.message,
+    details,
+    requestId: detail.requestId,
+  };
 }
 
 /**
