@@ -27,7 +27,7 @@ TypeScript · Vite · PWA · AWS Lambda + SnapStart · CloudFront + AWS WAF · T
 │   ├── contracts/      OpenAPI source of truth + provider types
 │   ├── prompts/        Versioned LLM prompt bundles + JSON Schemas
 │   ├── config/         Runtime YAML config, LLM catalog, seeds, schemas
-│   └── ui/             Design tokens + reusable React primitives
+│   └── ui/             Design tokens + reusable React primitives + lucide-react icons
 ├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
 │                       AWS WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
@@ -91,6 +91,8 @@ calls the same targets — there is one source of truth.
 | `make dev`           | Run backend + frontend with hot-reload (Postgres via docker-compose).  |
 | `make test`          | Run pytest + vitest and print a unified summary.                       |
 | `make lint`          | Ruff + mypy + ESLint + Prettier check.                                 |
+| `make lint-tokens`   | Fail if raw hex / `rgb()` colors appear outside `tokens.css` (theme guard). |
+| `make dead-check`    | Find unused code (vulture for Python; knip for the frontend).          |
 | `make coverage`      | Enforce the 80% line-coverage floor (plan §20.1).                      |
 | `make docs`          | Regenerate `packages/contracts/openapi.json` + frontend TS client.     |
 | `make e2e`           | Playwright e2e (sets `PLAYWRIGHT=1`).                                  |
@@ -137,8 +139,10 @@ operator playbook + the rehearsal we run before every cut.
 
 ## Documentation
 
-- [DESIGN.md](DESIGN.md) — canonical design system. Read before any UI
-  change; tokens, typography, motion, contrast numbers all live here.
+- [DESIGN.md](DESIGN.md) — canonical design system: a single fixed Notion
+  theme (dark desktop sidebar, light main; no dark mode, no theme toggle).
+  Read before any UI change; tokens, typography, motion, contrast numbers
+  all live here.
 - [docs/adr/](docs/adr/) — architecture decision records.
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
 - [docs/operations/](docs/operations/) — runbook, alarms, restore +

@@ -1588,6 +1588,16 @@
               }
             }
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1605,7 +1615,7 @@
           "profile"
         ],
         "summary": "Update the caller's profile",
-        "description": "Apply a partial profile update.\n\nArgs:\n    payload: Validated patch body.\n    user_id: Authenticated caller, injected by :func:`current_user_id`.\n    session: DB session.\n\nReturns:\n    The fresh profile row after the update.",
+        "description": "Apply a partial profile update.\n\nArgs:\n    payload: Validated patch body.\n    request: Incoming request, used for error correlation.\n    user_id: Authenticated caller, injected by :func:`current_user_id`.\n    session: DB session.\n\nReturns:\n    The fresh profile row after the update.",
         "operationId": "patch_profile_api_v1_profile_me_patch",
         "parameters": [
           {
@@ -1645,6 +1655,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -1695,6 +1715,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -1754,15 +1784,25 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -3093,16 +3133,6 @@
             "title": "Presidio Enabled",
             "default": false
           },
-          "theme_preference": {
-            "type": "string",
-            "enum": [
-              "system",
-              "light",
-              "dark"
-            ],
-            "title": "Theme Preference",
-            "default": "system"
-          },
           "schedule_frequency": {
             "type": "string",
             "enum": [
@@ -3131,7 +3161,7 @@
         },
         "type": "object",
         "title": "UserProfileOut",
-        "description": "Current user's profile (Track C \u2014 Phase II.3).\n\nAttributes:\n    display_name: Optional display name (consumed by IdentityScrubber).\n    email_aliases: Extra email addresses to scrub from prompts.\n    redaction_aliases: Free-form strings to scrub from prompts.\n    presidio_enabled: Legacy toggle retained for compatibility.\n        Presidio was removed; only identity + regex scrubbers run.\n    theme_preference: Server-side mirror of the user's UI theme.\n    schedule_frequency: Cadence \u2014 ``once_daily`` / ``twice_daily`` /\n        ``disabled``.\n    schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.\n    schedule_timezone: IANA timezone name."
+        "description": "Current user's profile (Track C \u2014 Phase II.3).\n\nAttributes:\n    display_name: Optional display name (consumed by IdentityScrubber).\n    email_aliases: Extra email addresses to scrub from prompts.\n    redaction_aliases: Free-form strings to scrub from prompts.\n    presidio_enabled: Legacy toggle retained for compatibility.\n        Presidio was removed; only identity + regex scrubbers run.\n    schedule_frequency: Cadence \u2014 ``once_daily`` / ``twice_daily`` /\n        ``disabled``.\n    schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.\n    schedule_timezone: IANA timezone name."
       },
       "UserProfilePatchRequest": {
         "properties": {
@@ -3186,22 +3216,6 @@
               }
             ],
             "title": "Presidio Enabled"
-          },
-          "theme_preference": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "system",
-                  "light",
-                  "dark"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Theme Preference"
           }
         },
         "additionalProperties": false,

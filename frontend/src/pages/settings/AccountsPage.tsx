@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Mail } from 'lucide-react';
 
 import { Button, EmptyState, ErrorState, Skeleton } from '@briefed/ui';
 
@@ -69,7 +70,7 @@ export default function AccountsPage(): JSX.Element {
         </ul>
       ) : (
         <EmptyState
-          icon="mail"
+          icon={Mail}
           title="No Gmail accounts yet"
           description="Connect your first inbox. Briefed requests read-only Gmail access and never sends, archives, or unsubscribes on your behalf."
           cta={

@@ -20,7 +20,7 @@ const TABS: readonly SettingsTab[] = [
 export default function SettingsLayout(): JSX.Element {
   return (
     <section className="mx-auto flex w-full max-w-[var(--container-settings)] flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="font-display text-2xl font-semibold tracking-tight">Settings</h1>
       <nav aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-border">
         {TABS.map((tab) => (
           <NavLink

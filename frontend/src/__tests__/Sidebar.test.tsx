@@ -28,6 +28,6 @@ describe('<Sidebar>', () => {
       </MemoryRouter>,
     );
     const active = screen.getByRole('link', { name: /history/i });
-    expect(active.className).toMatch(/text-accent/);
+    expect(active.className).toMatch(/bg-sidebar-active/);
   });
 });

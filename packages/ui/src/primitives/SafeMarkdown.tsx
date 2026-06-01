@@ -51,7 +51,13 @@ export function SafeMarkdown(props: SafeMarkdownProps): JSX.Element {
         skipHtml
         components={{
           a: ({ href, children, ...rest }) => (
-            <a {...rest} href={href} target="_blank" rel="noopener noreferrer">
+            <a
+              {...rest}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-link underline-offset-4 hover:underline"
+            >
               {children}
             </a>
           ),
