@@ -151,6 +151,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip }
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
       - uses: actions/setup-node@v4
         if: needs.detect.outputs.frontend-ready == 'true'
         with:
@@ -161,10 +163,17 @@ jobs:
       - if: needs.detect.outputs.frontend-ready == 'true'
         run: npm ci
 
-      - name: pip-audit
-        # --skip-editable so the local briefed-backend package isn't flagged
-        # as missing from PyPI. Real vulnerabilities in deps still fail.
-        run: pip-audit --skip-editable
+      - name: pip-audit (runtime dependency tree)
+        # Audit the locked *runtime* dependency tree (what ships in the Lambda
+        # artifact), not the ambient CI environment. Build/installer tooling
+        # (pip, setuptools, pip-audit's own deps) is dev-only, is never
+        # deployed, and routinely carries advisories we cannot pin — auditing
+        # the environment caused false CI failures (e.g. CVE-2026-3219 in pip
+        # itself). Vulnerabilities in our shipped dependencies still fail here.
+        run: |
+          uv export --frozen --no-dev --no-emit-project --no-hashes \
+            --format requirements-txt -o /tmp/runtime-requirements.txt
+          pip-audit --requirement /tmp/runtime-requirements.txt --no-deps
 
       # Phase 8: Python SAST. Config lives in pyproject.toml [tool.bandit].
       - name: bandit (Python SAST)
@@ -185,9 +194,12 @@ jobs:
           skip-dirs: "node_modules,.venv,build,dist,frontend/node_modules"
 
       # Phase 8: frontend dependency audit. Soft-fail until lockfile lands.
-      - name: npm audit
+      - name: npm audit (production deps)
         if: needs.detect.outputs.frontend-ready == 'true'
-        run: npm --workspace frontend audit --audit-level=high
+        # --omit=dev: gate on what ships to the browser. The Vite/Workbox build
+        # toolchain (workbox-build, rollup plugins, ws) is dev-only and not in
+        # the bundled artifact; its advisories shouldn't fail the release gate.
+        run: npm --workspace frontend audit --omit=dev --audit-level=high
 
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
