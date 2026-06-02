@@ -55,7 +55,7 @@ export function Sheet(props: SheetProps): JSX.Element | null {
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-        className="w-full max-w-md rounded-t-[var(--radius-lg)] bg-bg p-6 shadow-xl"
+        className="w-full max-w-md rounded-t-[var(--radius-lg)] bg-bg-surface p-6 shadow-[var(--shadow-3)]"
       >
         <h2 id={titleId} className="text-base font-semibold text-fg">
           {title}

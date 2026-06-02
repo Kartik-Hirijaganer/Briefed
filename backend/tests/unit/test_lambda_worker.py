@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import uuid
+from types import TracebackType
 from typing import Any
+
+import pytest
 
 from app.lambda_worker import (
     _build_redaction_chain_for_user,
+    _handle_ingest_record,
     fanout_handler,
     sqs_dispatcher,
 )
 from app.lambda_worker import _SqsEvent as SqsEvent
-from app.llm.redaction import IdentityScrubber, PresidioSanitizer
+from app.llm.redaction import IdentityScrubber, RegexSanitizer
+from app.services.ingestion.pipeline import IngestStats
+from app.workers.messages import IngestMessage
 
 
 def test_sqs_dispatcher_empty_batch_reports_no_failures() -> None:
@@ -57,6 +63,83 @@ def test_fanout_handler_returns_zero_when_queue_url_unset(
     assert fanout_handler({}, None) == {"accounts_enqueued": 0}
 
 
+async def test_handle_ingest_record_requeues_downstream_backlog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ingest requeues already-classified rows even when no new mail arrives."""
+    user_id = uuid.uuid4()
+    account_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    fake_session = _FakeSession()
+    sqs = _FakeSqs()
+    sqs_creations = 0
+    calls: list[tuple[str, str]] = []
+
+    async def _handle_ingest(*_args: Any, **_kwargs: Any) -> IngestStats:
+        return IngestStats(
+            new=0,
+            duplicates=3,
+            divergent=0,
+            raw_uploaded=0,
+            cursor_stale=False,
+        )
+
+    async def _enqueue_classify(**kwargs: Any) -> int:
+        calls.append(("classify", kwargs["queue_url"]))
+        return 1
+
+    async def _enqueue_summary(**kwargs: Any) -> tuple[int, int]:
+        calls.append(("summary", kwargs["queue_url"]))
+        return 2, 1
+
+    async def _mark_run_running(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def _maybe_finalize_run(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setenv("BRIEFED_TOKEN_WRAP_KEY_ALIAS", "alias/token")
+    monkeypatch.setenv("BRIEFED_CONTENT_KEY_ALIAS", "alias/content")
+    monkeypatch.setenv("BRIEFED_CLASSIFY_QUEUE_URL", "https://sqs.example/classify")
+    monkeypatch.setenv("BRIEFED_SUMMARIZE_QUEUE_URL", "https://sqs.example/summarize")
+
+    def _kms_client() -> object:
+        return object()
+
+    monkeypatch.setattr("app.lambda_worker._kms_client", _kms_client)
+
+    def _sqs_client() -> _FakeSqs:
+        nonlocal sqs_creations
+        sqs_creations += 1
+        return sqs
+
+    monkeypatch.setattr("app.lambda_worker._sqs_client", _sqs_client)
+    monkeypatch.setattr(
+        "app.db.session.get_sessionmaker",
+        lambda: _FakeSessionmaker(fake_session),
+    )
+    monkeypatch.setattr("app.workers.handlers.ingest.handle_ingest", _handle_ingest)
+    monkeypatch.setattr(
+        "app.services.classification.dispatch.enqueue_unclassified_for_account",
+        _enqueue_classify,
+    )
+    monkeypatch.setattr(
+        "app.services.summarization.enqueue_unsummarized_for_run",
+        _enqueue_summary,
+    )
+    monkeypatch.setattr("app.services.runs.mark_run_running", _mark_run_running)
+    monkeypatch.setattr("app.services.runs.maybe_finalize_run", _maybe_finalize_run)
+
+    message = IngestMessage(user_id=user_id, account_id=account_id, run_id=run_id)
+    await _handle_ingest_record({"body": message.model_dump_json()})
+
+    assert calls == [
+        ("summary", "https://sqs.example/summarize"),
+    ]
+    assert sqs_creations == 1
+    assert fake_session.committed is True
+
+
 class _StubUser:
     """Minimal stand-in for :class:`app.db.models.User`."""
 
@@ -88,6 +171,54 @@ class _StubSession:
         return self._user
 
 
+class _FakeSqs:
+    """Fake SQS factory result used to verify lazy client creation."""
+
+    def __init__(self) -> None:
+        self.created = 1
+
+
+class _FakeSession:
+    """Async session stand-in with a visible commit marker."""
+
+    def __init__(self) -> None:
+        self.committed = False
+
+    async def commit(self) -> None:
+        """Record the commit call."""
+        self.committed = True
+
+
+class _FakeSessionContext:
+    """Context manager returned by the fake sessionmaker."""
+
+    def __init__(self, session: _FakeSession) -> None:
+        self._session = session
+
+    async def __aenter__(self) -> _FakeSession:
+        """Return the fake session."""
+        return self._session
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Mirror AsyncSession context manager exit."""
+
+
+class _FakeSessionmaker:
+    """Callable async context factory matching SQLAlchemy's sessionmaker."""
+
+    def __init__(self, session: _FakeSession) -> None:
+        self._session = session
+
+    def __call__(self) -> _FakeSessionContext:
+        """Return a new fake context for the same session."""
+        return _FakeSessionContext(self._session)
+
+
 async def test_build_redaction_chain_for_user_uses_profile_fields() -> None:
     """Track B Phase 7 — chain reads from the user-profile row."""
     user = _StubUser(
@@ -99,9 +230,9 @@ async def test_build_redaction_chain_for_user_uses_profile_fields() -> None:
     )
     session = _StubSession(user)
     chain = await _build_redaction_chain_for_user(session, uuid.uuid4())
-    # Identity scrubber present; Presidio skipped per profile flag.
+    # Identity scrubber present; regex remains the fallback sanitizer.
     assert any(isinstance(s, IdentityScrubber) for s in chain.sanitizers)
-    assert all(not isinstance(s, PresidioSanitizer) for s in chain.sanitizers)
+    assert any(isinstance(s, RegexSanitizer) for s in chain.sanitizers)
     redacted = chain.sanitize(
         "From me@example.com / alias@example.com — signed Nickname",
     )

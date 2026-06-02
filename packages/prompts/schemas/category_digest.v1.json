@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://briefed.sh/schemas/category_digest.v1.json",
+  "title": "CategoryDigestSummary",
+  "description": "Structured output produced by category_digest/v1. The digest is built only after a run's category-specific per-email summaries are complete.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["narrative", "confidence"],
+  "properties": {
+    "narrative": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 800
+    },
+    "groups": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "bullets": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "item_refs": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16
+            }
+          }
+        }
+      },
+      "default": []
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

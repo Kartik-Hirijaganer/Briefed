@@ -8,16 +8,17 @@ thin: selectors live here, pipeline writes stay with their existing repos.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.api.deps import current_user_id, db_session
+from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
 from app.core.rate_limit import enforce_manual_run
@@ -25,6 +26,7 @@ from app.db.models import (
     Classification,
     ConnectedAccount,
     DigestRun,
+    DigestRunEmail,
     Email,
     PromptCallLog,
     Summary,
@@ -35,6 +37,8 @@ from app.db.models import (
 )
 from app.schemas.emails import EmailBucket, EmailRowOut
 from app.schemas.frontend import (
+    CategoryDigestGroupOut,
+    CategoryDigestOut,
     DigestCounts,
     DigestTodayResponse,
     ManualRunRequest,
@@ -48,8 +52,10 @@ from app.schemas.frontend import (
     UserPreferencesOut,
 )
 from app.services.classification.repository import ClassificationsRepo
+from app.services.email_labels import unread_email_filter
+from app.services.runs import maybe_finalize_run, stamp_run_membership
 from app.services.summarization.repository import SummariesRepo
-from app.workers.messages import IngestMessage
+from app.workers.messages import ClassifyMessage, IngestMessage
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,11 +65,15 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 router = APIRouter(tags=["frontend"])
+_APP_CONFIG = get_app_config()
 
-_BUCKETS: tuple[EmailBucket, ...] = ("must_read", "good_to_read", "ignore", "waste")
+_BUCKETS: tuple[EmailBucket, ...] = cast(
+    tuple[EmailBucket, ...],
+    _APP_CONFIG.taxonomy.user_facing_buckets,
+)
 """Primary user-facing triage buckets."""
 
-_PREVIEW_LIMIT = 5
+_PREVIEW_LIMIT = _APP_CONFIG.api.dashboard_preview_limit
 """Dashboard preview size."""
 
 _VERSION_FILE = (
@@ -146,7 +156,7 @@ async def start_manual_run(
     user_id: UUID = Depends(current_user_id),
     session: AsyncSession = Depends(db_session),
 ) -> ManualRunResponse:
-    """Create a digest run and enqueue one ingest message per selected account.
+    """Create a digest run and enqueue incremental or reclassification work.
 
     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
     per user per rolling 24h window; the limiter raises ``429`` with a
@@ -170,6 +180,7 @@ async def start_manual_run(
             "classified": 0,
             "summarized": 0,
             "new_must_read": 0,
+            "account_ids": [str(account.id) for account in accounts],
         },
         cost_cents=0,
     )
@@ -179,7 +190,28 @@ async def start_manual_run(
     # still acquire the per-user idempotency lock so a worker that
     # crashes mid-run cannot fan out twice on the next EventBridge tick.
     await _acquire_user_lock(session=session, user_id=user_id, run_id=run.id, now=now)
-    _enqueue_ingest_messages(run_id=run.id, user_id=user_id, accounts=accounts)
+    if payload.mode == "incremental":
+        _enqueue_ingest_messages(run_id=run.id, user_id=user_id, accounts=accounts)
+    else:
+        targets = await _reclassify_targets(
+            session=session,
+            user_id=user_id,
+            accounts=accounts,
+            window_days=payload.window_days or _APP_CONFIG.scan.lookback_days,
+            include_user_overrides=payload.include_user_overrides,
+        )
+        await stamp_run_membership(
+            session=session,
+            run_id=run.id,
+            email_ids=(email_id for email_id, _account_id in targets),
+        )
+        _enqueue_reclassify_messages(
+            run_id=run.id,
+            user_id=user_id,
+            targets=targets,
+        )
+        if not targets:
+            await maybe_finalize_run(session=session, user_id=user_id, run_id=run.id)
     return ManualRunResponse(run_id=run.id, accounts_queued=len(accounts))
 
 
@@ -271,6 +303,14 @@ async def digest_today(
         )
     ).scalar_one_or_none()
     cost_cents = await _cost_cents_today(session=session, user_id=user_id)
+    run_id = last_run.id if last_run is not None else None
+    rule_decided = await _rule_decided_count(session=session, user_id=user_id, run_id=run_id)
+    category_summaries = await _category_summaries(
+        session=session,
+        user_id=user_id,
+        settings=settings,
+        run_id=run_id,
+    )
     preview = await _email_rows(
         session=session,
         user_id=user_id,
@@ -284,6 +324,8 @@ async def digest_today(
         generated_at=generated_at,
         cost_cents_today=cost_cents,
         counts=counts,
+        rule_decided=rule_decided,
+        category_summaries=category_summaries,
         must_read_preview=preview,
         last_successful_run_at=generated_at,
     )
@@ -398,9 +440,8 @@ def _enqueue_ingest_messages(
     queue_url = os.environ.get("BRIEFED_INGEST_QUEUE_URL")
     if not queue_url:
         return
-    import boto3  # type: ignore[import-untyped]
 
-    sqs = cast("SqsSender", boto3.client("sqs"))
+    sqs = _sqs_client()
     for account in accounts:
         message = IngestMessage(
             user_id=user_id,
@@ -409,6 +450,98 @@ def _enqueue_ingest_messages(
             store_raw_mime=False,
         )
         sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
+
+
+def _sqs_client() -> SqsSender:
+    """Return a boto3 SQS client without importing boto3 at module load."""
+    import boto3  # type: ignore[import-untyped]
+
+    return cast("SqsSender", boto3.client("sqs"))
+
+
+async def _reclassify_targets(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    accounts: list[ConnectedAccount],
+    window_days: int,
+    include_user_overrides: bool,
+) -> tuple[tuple[UUID, UUID], ...]:
+    """Return recent email/account pairs targeted by a reclassification run.
+
+    Args:
+        session: Active database session.
+        user_id: Authenticated caller.
+        accounts: Active accounts selected for the run.
+        window_days: Number of trailing days to include.
+        include_user_overrides: Whether ``model='user_override'`` rows may
+            be overwritten by the new classification pass.
+
+    Returns:
+        Tuple of ``(email_id, account_id)`` pairs ordered newest-first.
+    """
+    account_ids = tuple(account.id for account in accounts)
+    if not account_ids:
+        return ()
+
+    cutoff = utcnow() - timedelta(days=window_days)
+    stmt = (
+        select(Email.id, Email.account_id)
+        .join(ConnectedAccount, ConnectedAccount.id == Email.account_id)
+        .outerjoin(Classification, Classification.email_id == Email.id)
+        .where(
+            ConnectedAccount.user_id == user_id,
+            Email.account_id.in_(account_ids),
+            Email.internal_date >= cutoff,
+        )
+        .order_by(Email.internal_date.desc())
+    )
+    if not include_user_overrides:
+        stmt = stmt.where(
+            or_(
+                Classification.id.is_(None),
+                Classification.model != "user_override",
+            ),
+        )
+
+    rows = (await session.execute(stmt)).all()
+    return tuple((email_id, account_id) for email_id, account_id in rows)
+
+
+def _enqueue_reclassify_messages(
+    *,
+    run_id: UUID,
+    user_id: UUID,
+    targets: tuple[tuple[UUID, UUID], ...],
+) -> int:
+    """Best-effort enqueue reclassification messages for run members.
+
+    Args:
+        run_id: Digest-run id stamped onto every message.
+        user_id: Authenticated caller.
+        targets: ``(email_id, account_id)`` pairs selected for reclassification.
+
+    Returns:
+        Number of SQS messages sent.
+    """
+    import os
+
+    queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL")
+    if not queue_url:
+        return 0
+
+    sqs = _sqs_client()
+    sent = 0
+    for email_id, account_id in targets:
+        message = ClassifyMessage(
+            user_id=user_id,
+            account_id=account_id,
+            email_id=email_id,
+            run_id=run_id,
+        )
+        sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
+        sent += 1
+    return sent
 
 
 async def _load_owned_run(
@@ -472,6 +605,7 @@ async def _digest_counts(
             .where(
                 ConnectedAccount.user_id == user_id,
                 Classification.label.in_(_BUCKETS),
+                unread_email_filter(session),
             )
             .group_by(Classification.label),
         )
@@ -491,7 +625,7 @@ async def _cost_cents_today(
     """Return prompt spend since UTC midnight rounded to cents."""
     now = datetime.now(tz=UTC)
     start = datetime(now.year, now.month, now.day, tzinfo=UTC)
-    value = (
+    email_value = (
         await session.execute(
             select(func.coalesce(func.sum(PromptCallLog.cost_usd), 0))
             .join(Email, Email.id == PromptCallLog.email_id)
@@ -502,8 +636,94 @@ async def _cost_cents_today(
             ),
         )
     ).scalar_one()
-    cents = Decimal(str(value)) * Decimal("100")
+    run_value = (
+        await session.execute(
+            select(func.coalesce(func.sum(PromptCallLog.cost_usd), 0))
+            .join(DigestRun, DigestRun.id == PromptCallLog.run_id)
+            .where(
+                DigestRun.user_id == user_id,
+                PromptCallLog.email_id.is_(None),
+                PromptCallLog.created_at >= start,
+            ),
+        )
+    ).scalar_one()
+    cents = (Decimal(str(email_value)) + Decimal(str(run_value))) * Decimal("100")
     return max(int(cents.quantize(Decimal("1"))), 0)
+
+
+async def _rule_decided_count(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    run_id: UUID | None,
+) -> int:
+    """Return latest-run classifications decided by rules."""
+    if run_id is None:
+        return 0
+    return int(
+        (
+            await session.execute(
+                select(func.count(Classification.id))
+                .join(DigestRunEmail, DigestRunEmail.email_id == Classification.email_id)
+                .join(Email, Email.id == Classification.email_id)
+                .join(ConnectedAccount, ConnectedAccount.id == Email.account_id)
+                .where(
+                    DigestRunEmail.run_id == run_id,
+                    ConnectedAccount.user_id == user_id,
+                    Classification.decision_source == "rule",
+                    unread_email_filter(session),
+                ),
+            )
+        ).scalar_one()
+        or 0,
+    )
+
+
+async def _category_summaries(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    settings: Settings,
+    run_id: UUID | None,
+) -> tuple[CategoryDigestOut, ...]:
+    """Return decrypted category digests for the latest complete run."""
+    if run_id is None:
+        return ()
+    rows = (
+        (
+            await session.execute(
+                select(Summary).where(
+                    Summary.kind == "category_digest",
+                    Summary.run_id == run_id,
+                ),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    repo = _summaries_repo(settings)
+    order = {"must_read": 0, "good_to_read": 1}
+    summaries: list[CategoryDigestOut] = []
+    for row in sorted(rows, key=lambda item: order.get(str(item.category), 99)):
+        if row.category not in order:
+            continue
+        groups = tuple(
+            CategoryDigestGroupOut(
+                label=group.label,
+                bullets=group.bullets,
+                item_refs=group.item_refs,
+            )
+            for group in repo.decrypt_category_groups(row=row, user_id=user_id)
+        )
+        summaries.append(
+            CategoryDigestOut(
+                category=cast(Literal["must_read", "good_to_read"], row.category),
+                narrative=repo.decrypt_category_narrative(row=row, user_id=user_id),
+                groups=groups,
+                confidence=float(row.confidence),
+            ),
+        )
+    return tuple(summaries)
 
 
 async def _email_rows(
@@ -521,7 +741,7 @@ async def _email_rows(
         .join(ConnectedAccount, ConnectedAccount.id == Email.account_id)
         .join(Classification, Classification.email_id == Email.id)
         .outerjoin(Summary, Summary.email_id == Email.id)
-        .where(ConnectedAccount.user_id == user_id)
+        .where(ConnectedAccount.user_id == user_id, unread_email_filter(session))
         .order_by(Email.internal_date.desc())
         .limit(limit)
     )
@@ -547,6 +767,7 @@ async def _email_rows(
                 received_at=email.internal_date,
                 bucket=cast(EmailBucket, classification.label),
                 confidence=float(classification.score),
+                needs_review=classification.needs_review,
                 decision_source=_decision_source(classification.decision_source),
                 reasons=_reason_strings(
                     classification_repo.decrypt_reasons(

@@ -11,18 +11,22 @@ import base64
 import json
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
 from app.api.session import OAUTH_STATE_COOKIE_NAME, sign_cookie
-from app.api.v1.oauth import _build_token_cipher
+from app.api.v1.oauth import _build_token_cipher, _get_or_create_user
 from app.core.config import Settings, get_settings
+from app.core.errors import AuthError
 from app.core.security import EncryptionContext, EnvelopeCipher
+from app.db.models import RubricRule
 from app.main import app
 from app.services.gmail import oauth as oauth_module
 
@@ -48,6 +52,28 @@ class _FakeKms:
     ) -> dict[str, Any]:
         assert CiphertextBlob.startswith(b"K:")
         return {"Plaintext": CiphertextBlob[2:]}
+
+
+class _FailingKms:
+    """KMS stub that fails encrypt calls."""
+
+    def encrypt(
+        self,
+        *,
+        KeyId: str,
+        Plaintext: bytes,
+        EncryptionContext: dict[str, str],
+    ) -> dict[str, Any]:
+        raise RuntimeError("missing key")
+
+    def decrypt(
+        self,
+        *,
+        CiphertextBlob: bytes,
+        EncryptionContext: dict[str, str],
+        KeyId: str | None = None,
+    ) -> dict[str, Any]:
+        raise AssertionError("decrypt should not be called")
 
 
 class _FakeTokenExchange:
@@ -93,6 +119,40 @@ def _b64(payload: dict[str, Any]) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+def _test_settings(*, public_base_url: str | None = None) -> Settings:
+    """Build the test settings used by OAuth route tests.
+
+    Args:
+        public_base_url: Optional public app origin for callback generation.
+
+    Returns:
+        Settings with stable fake credentials and signing keys.
+    """
+    return Settings(
+        env="test",
+        runtime="local",
+        log_level="info",
+        session_signing_key="test-key",
+        google_oauth_client_id="cid",
+        google_oauth_client_secret="csec",
+        token_wrap_key_alias="alias/test",
+        public_base_url=public_base_url,
+    )
+
+
+def _redirect_uri_from_location(location: str) -> str:
+    """Extract the Google OAuth ``redirect_uri`` query parameter.
+
+    Args:
+        location: Google authorization URL from the OAuth start response.
+
+    Returns:
+        Decoded ``redirect_uri`` value.
+    """
+    values = parse_qs(urlparse(location).query)["redirect_uri"]
+    return values[0]
+
+
 @pytest_asyncio.fixture()
 async def wired_app(
     test_engine: AsyncEngine,
@@ -110,15 +170,7 @@ async def wired_app(
                 raise
 
     def _settings() -> Settings:
-        return Settings(
-            env="test",
-            runtime="local",
-            log_level="info",
-            session_signing_key="test-key",
-            google_oauth_client_id="cid",
-            google_oauth_client_secret="csec",
-            token_wrap_key_alias="alias/test",
-        )
+        return _test_settings()
 
     # Replace the KMS builder so the router never touches boto3.
     monkeypatch.setattr(
@@ -154,6 +206,34 @@ def test_oauth_start_redirects_to_google_and_sets_state_cookie(
     assert OAUTH_STATE_COOKIE_NAME in response.cookies
 
 
+def test_oauth_start_uses_public_base_url_for_callback(wired_app: TestClient) -> None:
+    app.dependency_overrides[get_settings] = lambda: _test_settings(
+        public_base_url="https://app.example.test",
+    )
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (302, 307)
+    assert _redirect_uri_from_location(response.headers["location"]) == (
+        "https://app.example.test/api/v1/oauth/gmail/callback"
+    )
+
+
+def test_oauth_start_uses_forwarded_host_for_callback(wired_app: TestClient) -> None:
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        headers={"x-forwarded-host": "app.example.test", "x-forwarded-proto": "https"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (302, 307)
+    assert _redirect_uri_from_location(response.headers["location"]) == (
+        "https://app.example.test/api/v1/oauth/gmail/callback"
+    )
+
+
 def test_oauth_callback_persists_account_and_sets_session_cookie(
     wired_app: TestClient,
 ) -> None:
@@ -182,6 +262,68 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
     assert payload["accounts"][0]["email"] == "user@example.com"
 
 
+async def test_get_or_create_user_seeds_default_rubric_rules(
+    test_engine: AsyncEngine,
+) -> None:
+    """First-time OAuth user provisioning inserts the default rubric rows."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        user = await _get_or_create_user(session, email="seeded@example.com")
+        rows = (
+            (
+                await session.execute(
+                    select(RubricRule)
+                    .where(RubricRule.user_id == user.id)
+                    .order_by(RubricRule.priority.desc()),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [row.name for row in rows] == [
+            "Gmail important",
+            "Security alerts",
+            "Receipts and invoices",
+            "Newsletters",
+        ]
+
+        same_user = await _get_or_create_user(session, email="seeded@example.com")
+        repeat_rows = (
+            (
+                await session.execute(
+                    select(RubricRule).where(RubricRule.user_id == user.id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert same_user.id == user.id
+    assert len(repeat_rows) == len(rows)
+
+
+def test_oauth_callback_redirects_to_login_on_access_denied(wired_app: TestClient) -> None:
+    """User-denied consent (Google ``error``, no ``code``) bounces to /login, not a 422."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"error": "access_denied", "state": "STATE-123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == "/login?auth_error=access_denied"
+
+
+def test_oauth_callback_redirects_to_login_on_missing_code(wired_app: TestClient) -> None:
+    """A callback with neither ``code`` nor ``error`` is malformed → /login, not a 422."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"state": "STATE-123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == "/login?auth_error=invalid_request"
+
+
 def test_oauth_callback_rejects_state_mismatch(wired_app: TestClient) -> None:
     cookie_value = sign_cookie(
         {"state": "A", "code_verifier": "V" * 50, "return_to": None},
@@ -203,6 +345,57 @@ def test_oauth_callback_rejects_missing_cookie(wired_app: TestClient) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 400
+
+
+def test_oauth_callback_maps_token_exchange_auth_error(
+    wired_app: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid / reused Google codes return 400 instead of a raw 500."""
+
+    async def _reject_exchange(**_: object) -> oauth_module.OAuthTokenBundle:
+        raise AuthError("Google rejected token exchange: invalid_grant")
+
+    monkeypatch.setattr("app.api.v1.oauth.exchange_code", _reject_exchange)
+    cookie_value = sign_cookie(
+        {"state": "STATE-123", "code_verifier": "V" * 50, "return_to": None},
+        secret="test-key",
+    )
+    wired_app.cookies.set(OAUTH_STATE_COOKIE_NAME, cookie_value)
+
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "used-code", "state": "STATE-123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert "invalid_grant" in response.text
+
+
+def test_oauth_callback_maps_token_encryption_error(
+    wired_app: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Local KMS / alias failures return 503 instead of a raw 500."""
+    monkeypatch.setattr(
+        "app.api.v1.oauth._build_token_cipher",
+        lambda settings: EnvelopeCipher(key_id="alias/test", client=_FailingKms()),
+    )
+    cookie_value = sign_cookie(
+        {"state": "STATE-123", "code_verifier": "V" * 50, "return_to": None},
+        secret="test-key",
+    )
+    wired_app.cookies.set(OAUTH_STATE_COOKIE_NAME, cookie_value)
+
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "xyz", "state": "STATE-123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "token encryption unavailable"
 
 
 def test_build_token_cipher_rejects_missing_alias() -> None:

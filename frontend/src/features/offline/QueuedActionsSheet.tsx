@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 
 import { Badge, Button, Sheet } from '@briefed/ui';
 
@@ -45,9 +46,9 @@ export function QueuedActionsSheet(): JSX.Element | null {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-[88px] right-4 z-40 flex min-h-[44px] items-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm font-medium text-fg shadow-lg md:bottom-4"
+        className="fixed bottom-[88px] right-4 z-40 flex min-h-[44px] items-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm font-medium text-fg shadow-[var(--shadow-2)] md:bottom-4"
       >
-        <span aria-hidden="true">↻</span>
+        <RefreshCw aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
         <span>{pendingMutations.length} queued</span>
       </button>
       <Sheet open={open} onClose={() => setOpen(false)} title="Queued actions">

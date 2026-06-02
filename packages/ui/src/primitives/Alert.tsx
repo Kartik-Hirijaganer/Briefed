@@ -20,10 +20,10 @@ export interface AlertProps {
 }
 
 const TONE_CLASS: Record<AlertTone, string> = {
-  info: 'border-accent/40 bg-accent/5 text-accent',
-  success: 'border-success/40 bg-success/5 text-success',
-  warn: 'border-warn/40 bg-warn/5 text-warn',
-  danger: 'border-danger/40 bg-danger/5 text-danger',
+  info: 'border-accent/40 bg-accent/10 text-fg',
+  success: 'border-success/40 bg-success/10 text-fg',
+  warn: 'border-warn/40 bg-warn/10 text-fg',
+  danger: 'border-danger/40 bg-danger/10 text-fg',
 };
 
 /**

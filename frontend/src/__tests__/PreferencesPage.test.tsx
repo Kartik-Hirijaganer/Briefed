@@ -35,25 +35,45 @@ const basePrefs = {
   retention_policy_json: { raw: 30 },
 };
 
+const baseProfile = {
+  display_name: null,
+  email_aliases: [],
+  redaction_aliases: [],
+  presidio_enabled: false,
+  schedule_frequency: 'once_daily',
+  schedule_times_local: ['08:00'],
+  schedule_timezone: 'UTC',
+};
+
+const mockPreferenceReads = (): void => {
+  apiMock.GET.mockImplementation((path: string) => {
+    if (path === '/api/v1/preferences') return Promise.resolve({ data: basePrefs });
+    if (path === '/api/v1/profile/me') return Promise.resolve({ data: baseProfile });
+    return Promise.resolve({ data: {} });
+  });
+};
+
 describe('<PreferencesPage>', () => {
   beforeEach(() => {
     apiMock.GET.mockReset();
     apiMock.PATCH.mockReset();
     enqueueMutation.mockReset();
+    window.localStorage.clear();
   });
 
-  it('renders all three toggles with the current values', async () => {
-    apiMock.GET.mockResolvedValue({ data: basePrefs });
+  it('renders all three preference toggles with current values', async () => {
+    mockPreferenceReads();
     renderPage();
     await waitFor(() =>
       expect(screen.getByLabelText(/automatic daily scans/i)).toBeInTheDocument(),
     );
     expect(screen.getByLabelText(/redact pii/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/enable secure offline mode/i)).toBeInTheDocument();
+    expect(apiMock.GET).not.toHaveBeenCalledWith('/api/v1/profile/me');
   });
 
   it('PATCHes the preferences endpoint when a toggle flips', async () => {
-    apiMock.GET.mockResolvedValue({ data: basePrefs });
+    mockPreferenceReads();
     apiMock.PATCH.mockResolvedValue({ data: { ...basePrefs, redact_pii: true } });
     const user = userEvent.setup();
     renderPage();
@@ -66,7 +86,12 @@ describe('<PreferencesPage>', () => {
   });
 
   it('renders the error state on a failed fetch', async () => {
-    apiMock.GET.mockResolvedValue({ error: { detail: 'prefs outage' }, response: { status: 500 } });
+    apiMock.GET.mockImplementation((path: string) => {
+      if (path === '/api/v1/preferences') {
+        return Promise.resolve({ error: { detail: 'prefs outage' }, response: { status: 500 } });
+      }
+      return Promise.resolve({ data: baseProfile });
+    });
     renderPage();
     await waitFor(() =>
       expect(screen.getByText(/could not load preferences/i)).toBeInTheDocument(),

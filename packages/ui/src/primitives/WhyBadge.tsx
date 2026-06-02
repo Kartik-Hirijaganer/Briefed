@@ -44,14 +44,14 @@ export function WhyBadge(props: WhyBadgeProps): JSX.Element {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-label="Why is this email here?"
-        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] rounded-full"
+        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
       >
         <Badge tone="accent">Why?</Badge>
       </button>
       {open ? (
         <div
           role="dialog"
-          className="absolute right-0 top-6 z-10 w-72 rounded-[var(--radius-md)] border border-border bg-bg p-3 text-xs shadow-lg"
+          className="absolute right-0 top-6 z-10 w-72 rounded-[var(--radius-md)] border border-border bg-bg-surface p-3 text-xs shadow-[var(--shadow-2)]"
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="font-semibold text-fg">Classification</span>

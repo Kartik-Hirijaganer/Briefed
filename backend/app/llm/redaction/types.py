@@ -39,9 +39,8 @@ class Sanitizer(Protocol):
     """Structural protocol every sanitizer implements.
 
     A sanitizer is a pure function from ``str -> RedactionResult``. No
-    network I/O, no DB access. Construction is allowed to load heavy
-    artefacts (Presidio NER models) so module-level instantiation can
-    amortise the cost.
+    network I/O, no DB access. Construction is allowed to precompile
+    local matchers so module-level instantiation can amortise the cost.
     """
 
     def sanitize(self, text: str) -> RedactionResult:

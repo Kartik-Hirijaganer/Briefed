@@ -22,16 +22,20 @@ import pytest
 from app.db.models import (
     Classification,
     ConnectedAccount,
+    DigestRun,
     Email,
     Summary,
     User,
 )
+from app.services.runs import stamp_run_membership
 from app.services.summarization import (
     enqueue_summary_for_email,
+    enqueue_tech_news_cluster_for_account,
     enqueue_unsummarized_for_run,
     parse_summarize_body,
 )
 from app.workers.messages import (
+    CategoryDigestMessage,
     SummarizeEmailMessage,
     TechNewsClusterMessage,
 )
@@ -66,7 +70,7 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
         ("good_to_read", True),
         ("good_to_read", True),
         ("ignore", False),
-        ("waste", False),
+        ("ignore", False),
     ]
     for idx, (label, is_newsletter) in enumerate(classifications):
         email = Email(
@@ -79,7 +83,7 @@ async def _seed(session) -> tuple[User, ConnectedAccount, list[Email]]:
             cc_addrs=[],
             subject=f"subject-{idx}",
             snippet="",
-            labels=[],
+            labels=["UNREAD"],
             content_hash=hashlib.sha256(f"m-{idx}".encode()).digest(),
         )
         session.add(email)
@@ -147,6 +151,95 @@ async def test_enqueue_skips_already_summarized(test_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_enqueue_unsummarized_for_run_uses_membership(test_session) -> None:
+    """Run-scoped summary dispatch ignores non-member account rows."""
+    user, account, emails = await _seed(test_session)
+    run = DigestRun(
+        user_id=user.id,
+        status="queued",
+        trigger_type="manual",
+        started_at=datetime.now(tz=UTC),
+        stats={"account_ids": [str(account.id)]},
+        cost_cents=0,
+    )
+    test_session.add(run)
+    await test_session.flush()
+    await stamp_run_membership(session=test_session, run_id=run.id, email_ids=(emails[1].id,))
+    sqs = _FakeSqs()
+
+    per_email, cluster = await enqueue_unsummarized_for_run(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=run.id,
+    )
+
+    assert per_email == 1
+    assert cluster == 0
+    body = json.loads(sqs.messages[0]["Body"])
+    assert body["email_id"] == str(emails[1].id)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_cluster_for_newsletters_with_existing_email_summaries(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    for email in emails[2:4]:
+        test_session.add(
+            Summary(
+                kind="email",
+                email_id=email.id,
+                cluster_id=None,
+                prompt_version_id=None,
+                model="gemini-1.5-flash",
+                tokens_in=0,
+                tokens_out=0,
+                body_md_ct=b"\x00",
+                entities_ct=None,
+                cache_hit=False,
+                confidence=Decimal("0.0"),
+                batch_id=None,
+            ),
+        )
+    await test_session.flush()
+    sqs = _FakeSqs()
+
+    per_email, cluster = await enqueue_unsummarized_for_run(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+    )
+
+    assert per_email == 1
+    assert cluster == 1
+    kinds = [json.loads(m["Body"])["kind"] for m in sqs.messages]
+    assert kinds == ["summarize_email", "tech_news_cluster"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_tech_news_cluster_requires_newsletter_trigger(test_session) -> None:
+    user, account, emails = await _seed(test_session)
+    sqs = _FakeSqs()
+
+    enqueued = await enqueue_tech_news_cluster_for_account(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        queue_url="https://sqs.example/test",
+        sqs=sqs,
+        run_id=None,
+        trigger_email_id=emails[1].id,
+    )
+
+    assert enqueued == 0
+    assert sqs.messages == []
+
+
+@pytest.mark.asyncio
 async def test_enqueue_summary_for_email_targets_single_eligible_row(test_session) -> None:
     user, account, emails = await _seed(test_session)
     sqs = _FakeSqs()
@@ -207,11 +300,17 @@ async def test_parse_summarize_body_discriminates() -> None:
         user_id=uuid.uuid4(),
         email_ids=(uuid.uuid4(), uuid.uuid4()),
     )
+    category_msg = CategoryDigestMessage(
+        run_id=uuid.uuid4(),
+        category="must_read",
+    )
 
     parsed_email = parse_summarize_body(per_email_msg.model_dump_json())
     parsed_cluster = parse_summarize_body(cluster_msg.model_dump_json())
+    parsed_category = parse_summarize_body(category_msg.model_dump_json())
     assert isinstance(parsed_email, SummarizeEmailMessage)
     assert isinstance(parsed_cluster, TechNewsClusterMessage)
+    assert isinstance(parsed_category, CategoryDigestMessage)
 
 
 @pytest.mark.asyncio

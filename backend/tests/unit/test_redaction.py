@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-from typing import Any
-
 import pytest
 
 from app.llm.redaction import (
@@ -13,7 +10,6 @@ from app.llm.redaction import (
     SanitizerChain,
     build_default_chain,
 )
-from app.llm.redaction.presidio import PresidioSanitizer
 from app.llm.redaction.types import RedactionResult, Sanitizer
 
 # ----------------------------------------------------------------------
@@ -124,95 +120,6 @@ def test_identity_missing_text_returns_empty() -> None:
 
 
 # ----------------------------------------------------------------------
-# PresidioSanitizer (Phase 3) — stubbed analyzer + anonymizer
-# ----------------------------------------------------------------------
-
-
-class _FakeMatch:
-    def __init__(self, *, entity_type: str, start: int, end: int) -> None:
-        self.entity_type = entity_type
-        self.start = start
-        self.end = end
-
-
-class _FakeAnalyzer:
-    def __init__(self, results: list[_FakeMatch]) -> None:
-        self._results = results
-        self.calls = 0
-
-    def analyze(
-        self,
-        text: str,
-        language: str,
-        entities: list[str] | None = None,
-    ) -> list[Any]:
-        self.calls += 1
-        return list(self._results)
-
-
-class _FakeAnonymizer:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def anonymize(
-        self,
-        text: str,
-        analyzer_results: list[Any],
-        operators: dict[str, Any] | None = None,
-    ) -> Any:
-        self.calls += 1
-        return None
-
-
-def test_presidio_sanitizer_replaces_matches_right_to_left() -> None:
-    text = "Kartik writes to me@example.com"
-    email_start = text.index("me@example.com")
-    email_end = email_start + len("me@example.com")
-    analyzer = _FakeAnalyzer(
-        [
-            _FakeMatch(entity_type="PERSON", start=0, end=6),
-            _FakeMatch(
-                entity_type="EMAIL_ADDRESS",
-                start=email_start,
-                end=email_end,
-            ),
-        ],
-    )
-    anonymizer = _FakeAnonymizer()
-    sanitizer = PresidioSanitizer(analyzer=analyzer, anonymizer=anonymizer)
-    result = sanitizer.sanitize(text)
-    assert "<PERSON_0>" in result.text
-    assert "<EMAIL_ADDRESS_0>" in result.text
-    assert result.counts_by_kind == {"PERSON": 1, "EMAIL_ADDRESS": 1}
-    assert "Kartik" not in result.text
-    assert "me@example.com" not in result.text
-    assert analyzer.calls == 1
-    assert anonymizer.calls == 1
-
-
-def test_presidio_sanitizer_no_results_returns_input() -> None:
-    sanitizer = PresidioSanitizer(
-        analyzer=_FakeAnalyzer([]),
-        anonymizer=_FakeAnonymizer(),
-    )
-    result = sanitizer.sanitize("nothing to redact")
-    assert result.text == "nothing to redact"
-    assert result.counts_by_kind == {}
-
-
-@pytest.mark.skipif(
-    os.environ.get("PRESIDIO_LIVE") != "1",
-    reason="requires real Presidio model load",
-)
-def test_presidio_sanitizer_live_load() -> None:  # pragma: no cover — opt-in
-    sanitizer = PresidioSanitizer()
-    result = sanitizer.sanitize("Alice mailed bob@example.com from Paris")
-    # Coverage of the real model output is intentionally loose; the
-    # smoke test is that *something* came back.
-    assert "Alice" not in result.text or "bob@example.com" not in result.text
-
-
-# ----------------------------------------------------------------------
 # SanitizerChain (Phase 4)
 # ----------------------------------------------------------------------
 
@@ -270,12 +177,18 @@ def test_chain_merge_later_wins_on_collision() -> None:
 # ----------------------------------------------------------------------
 
 
-def test_build_default_chain_disables_presidio() -> None:
+def test_build_default_chain_uses_identity_and_regex() -> None:
     chain = build_default_chain(
         user_email="me@example.com",
         presidio_enabled=False,
     )
-    assert all(not isinstance(s, PresidioSanitizer) for s in chain.sanitizers)
+    assert any(isinstance(s, IdentityScrubber) for s in chain.sanitizers)
+    assert any(isinstance(s, RegexSanitizer) for s in chain.sanitizers)
+
+
+def test_build_default_chain_rejects_presidio() -> None:
+    with pytest.raises(RuntimeError, match="Presidio redaction was removed"):
+        build_default_chain(presidio_enabled=True)
 
 
 def test_build_default_chain_skips_identity_when_no_envs() -> None:

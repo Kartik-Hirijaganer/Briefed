@@ -20,13 +20,9 @@ vi.mock('../hooks/useAddGmailFlow', () => ({
 vi.mock('../hooks/useBreakpoint', () => ({ useBreakpoint: () => 'lg' }));
 
 vi.mock('../features/settings/AccountCard', () => ({
-  AccountCard: ({ account }: { account: { id: string; gmail_address: string } }) => (
-    <div data-testid={`account-${account.id}`}>{account.gmail_address}</div>
+  AccountCard: ({ account }: { account: { id: string; email: string } }) => (
+    <div data-testid={`account-${account.id}`}>{account.email}</div>
   ),
-}));
-
-vi.mock('../features/settings/ProfileSettings', () => ({
-  ProfileSettings: () => <div data-testid="profile-settings" />,
 }));
 
 vi.mock('../components/AppVersion', () => ({
@@ -51,15 +47,14 @@ describe('<AccountsPage>', () => {
     apiMock.GET.mockResolvedValue({
       data: {
         accounts: [
-          { id: 'a1', gmail_address: 'one@example.com' },
-          { id: 'a2', gmail_address: 'two@example.com' },
+          { id: 'a1', email: 'one@example.com' },
+          { id: 'a2', email: 'two@example.com' },
         ],
       },
     });
     renderPage();
     await waitFor(() => expect(screen.getByTestId('account-a1')).toBeInTheDocument());
     expect(screen.getByTestId('account-a2')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-settings')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add gmail account/i })).toBeInTheDocument();
   });
 

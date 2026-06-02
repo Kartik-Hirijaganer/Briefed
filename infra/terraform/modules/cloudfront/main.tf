@@ -40,6 +40,12 @@ variable "acm_certificate_arn" {
   default     = null
 }
 
+variable "web_acl_arn" {
+  description = "Optional AWS WAFv2 web ACL ARN to associate with the CloudFront distribution."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
@@ -53,6 +59,14 @@ locals {
 resource "aws_cloudfront_origin_access_control" "pwa" {
   name                              = "${var.name}-oac"
   origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_origin_access_control" "lambda" {
+  name                              = "${var.name}-lambda-oac"
+  description                       = "Signs CloudFront -> API Lambda Function URL requests (SigV4)."
+  origin_access_control_origin_type = "lambda"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
@@ -117,6 +131,7 @@ resource "aws_cloudfront_distribution" "this" {
   comment             = var.name
   aliases             = var.aliases
   default_root_object = "index.html"
+  web_acl_id          = var.web_acl_arn
 
   # SPA fallback — when the PWA is hit at a deep route on a hard
   # refresh (e.g. /settings/accounts), S3 returns 403/404 because
@@ -142,8 +157,9 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   origin {
-    origin_id   = local.lambda_origin_id
-    domain_name = var.lambda_function_url_host
+    origin_id                = local.lambda_origin_id
+    domain_name              = var.lambda_function_url_host
+    origin_access_control_id = aws_cloudfront_origin_access_control.lambda.id
     custom_origin_config {
       http_port              = 80
       https_port             = 443

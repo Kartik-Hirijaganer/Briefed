@@ -28,7 +28,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from app.core.clock import utcnow
+from app.core.errors import CryptoError
 from app.core.logging import get_logger
 from app.db.models import Classification, Email, EmailContentBlob, PromptCallLog, Summary
 from app.llm.client import LLMClient, LLMClientError, PromptCallRecord, render_prompt
@@ -121,7 +125,11 @@ async def summarize_email(
     Raises:
         LookupError: When the target email row has vanished.
     """
-    email_row = await session.get(Email, inputs.email_id)
+    email_row = (
+        await session.execute(
+            select(Email).options(selectinload(Email.body)).where(Email.id == inputs.email_id),
+        )
+    ).scalar_one_or_none()
     if email_row is None:
         raise LookupError(f"email {inputs.email_id} not found")
 
@@ -260,8 +268,6 @@ async def _load_classification(
     email_id: UUID,
 ) -> Classification | None:
     """Fetch the classification row for ``email_id`` if any."""
-    from sqlalchemy import select  # noqa: PLC0415 — keep module import light
-
     return (
         (
             await session.execute(
@@ -279,8 +285,6 @@ async def _has_email_summary(
     email_id: UUID,
 ) -> bool:
     """Return True when a per-email summary already exists."""
-    from sqlalchemy import select  # noqa: PLC0415 — keep module import light
-
     existing = await session.execute(
         select(Summary.id).where(
             Summary.kind == "email",
@@ -298,7 +302,15 @@ def _excerpt_for(
 ) -> str:
     """Return the best plaintext excerpt for the prompt."""
     blob: EmailContentBlob | None = row.body
-    excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    try:
+        excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    except CryptoError as exc:
+        logger.warning(
+            "summarize.excerpt_decrypt_failed",
+            email_id=str(row.id),
+            error=str(exc),
+        )
+        excerpt = ""
     if excerpt:
         return excerpt
     return row.snippet or ""

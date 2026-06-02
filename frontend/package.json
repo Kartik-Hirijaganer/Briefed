@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "codegen": "openapi-typescript ../packages/contracts/openapi.json -o src/api/schema.d.ts",
-    "dead-check": "knip"
+    "dead-check": "knip --directory .."
   },
   "dependencies": {
     "@briefed/contracts": "1.0.0",
@@ -27,6 +27,7 @@
     "@tanstack/react-query-persist-client": "^5.99.2",
     "dexie": "^4.4.2",
     "framer-motion": "^11.11.0",
+    "lucide-react": "^0.460.0",
     "openapi-fetch": "^0.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

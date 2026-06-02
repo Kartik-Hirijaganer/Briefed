@@ -21,7 +21,7 @@ export default function PreferencesPage(): JSX.Element {
     queryFn: async () => unwrap(await api.GET('/api/v1/preferences')),
   });
 
-  const patch = useMutation({
+  const patchPreferences = useMutation({
     mutationFn: async (body: Schemas['PreferencesPatchRequest']) => {
       if (!online) {
         await enqueueMutation({ type: 'preferences_patch', body });
@@ -38,7 +38,6 @@ export default function PreferencesPage(): JSX.Element {
       if (online) void client.invalidateQueries({ queryKey: ['preferences'] });
     },
   });
-
   if (preferencesQuery.isPending) return <Skeleton shape="block" />;
   if (preferencesQuery.isError) {
     return (
@@ -54,7 +53,7 @@ export default function PreferencesPage(): JSX.Element {
   if (!prefs) return <Skeleton shape="block" />;
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card className="flex flex-col gap-3">
         <Field
           label="Automatic daily scans"
@@ -62,7 +61,7 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.auto_execution_enabled}
-            onCheckedChange={(next) => patch.mutate({ auto_execution_enabled: next })}
+            onCheckedChange={(next) => patchPreferences.mutate({ auto_execution_enabled: next })}
             ariaLabel="Automatic daily scans"
           />
         </Field>
@@ -74,7 +73,7 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.redact_pii}
-            onCheckedChange={(next) => patch.mutate({ redact_pii: next })}
+            onCheckedChange={(next) => patchPreferences.mutate({ redact_pii: next })}
             ariaLabel="Redact PII before sending to the LLM"
           />
         </Field>
@@ -86,7 +85,7 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.secure_offline_mode}
-            onCheckedChange={(next) => patch.mutate({ secure_offline_mode: next })}
+            onCheckedChange={(next) => patchPreferences.mutate({ secure_offline_mode: next })}
             ariaLabel="Enable secure offline mode"
           />
         </Field>

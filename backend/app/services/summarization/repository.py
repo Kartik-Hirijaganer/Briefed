@@ -11,6 +11,7 @@ summaries go through :meth:`SummariesRepo.upsert_tech_news_cluster`.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -22,6 +23,7 @@ from app.core.content_crypto import content_context
 from app.core.logging import get_logger
 from app.core.security import EncryptedBlob
 from app.db.models import Summary
+from app.llm.schemas import CategoryDigestCategory, CategoryDigestGroup
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +44,12 @@ _CLUSTER_BODY_PURPOSE = "summaries_body_md_cluster"
 
 _CLUSTER_ENTITIES_PURPOSE = "summaries_entities_cluster"
 """Encryption-context purpose for cluster ``summaries.entities``."""
+
+_CATEGORY_BODY_PURPOSE = "summaries_body_md_category"
+"""Encryption-context purpose for category digest ``summaries.body_md``."""
+
+_CATEGORY_GROUPS_PURPOSE = "summaries_entities_category"
+"""Encryption-context purpose for category digest group payloads."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +113,37 @@ class SummaryTechNewsWrite:
     confidence: Decimal
     cache_hit: bool
     batch_id: str | None
+
+
+@dataclass(frozen=True)
+class SummaryCategoryDigestWrite:
+    """Payload for persisting a run/category digest summary.
+
+    Attributes:
+        run_id: Digest run this category digest belongs to.
+        category: Triage category being summarized.
+        user_id: Owner.
+        prompt_version_id: FK into :class:`app.db.models.PromptVersion`.
+        model: Provider-scoped model identifier.
+        tokens_in: Tokens billed on input.
+        tokens_out: Tokens billed on output.
+        narrative: Plaintext category rollup.
+        groups: Thematic source-backed groups.
+        confidence: Calibrated ``[0, 1]``.
+        cache_hit: Whether the provider reported any cache-read tokens.
+    """
+
+    run_id: UUID
+    category: CategoryDigestCategory
+    user_id: UUID
+    prompt_version_id: UUID | None
+    model: str
+    tokens_in: int
+    tokens_out: int
+    narrative: str
+    groups: tuple[CategoryDigestGroup, ...]
+    confidence: Decimal
+    cache_hit: bool
 
 
 class SummariesRepo:
@@ -241,6 +280,69 @@ class SummariesRepo:
         await session.flush()
         return existing
 
+    async def upsert_category_digest(
+        self,
+        session: AsyncSession,
+        payload: SummaryCategoryDigestWrite,
+    ) -> Summary:
+        """Insert or replace the run/category ``summaries`` row.
+
+        Args:
+            session: Active async session (caller owns commit).
+            payload: :class:`SummaryCategoryDigestWrite` with plaintext
+                fields.
+
+        Returns:
+            The attached :class:`Summary` ORM row.
+        """
+        existing = (
+            (
+                await session.execute(
+                    select(Summary).where(
+                        Summary.kind == "category_digest",
+                        Summary.run_id == payload.run_id,
+                        Summary.category == payload.category,
+                    ),
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if existing is None:
+            existing = Summary(
+                kind="category_digest",
+                email_id=None,
+                cluster_id=None,
+                run_id=payload.run_id,
+                category=payload.category,
+            )
+            session.add(existing)
+
+        existing.prompt_version_id = payload.prompt_version_id
+        existing.model = payload.model
+        existing.tokens_in = payload.tokens_in
+        existing.tokens_out = payload.tokens_out
+        existing.cache_hit = payload.cache_hit
+        existing.confidence = payload.confidence
+        existing.batch_id = None
+
+        row_id = _category_row_id(run_id=payload.run_id, category=payload.category)
+        existing.body_md_ct = self._encrypt_text(
+            plaintext=payload.narrative,
+            row_id=row_id,
+            user_id=str(payload.user_id),
+            purpose=_CATEGORY_BODY_PURPOSE,
+        )
+        existing.entities_ct = self._encrypt_json(
+            payload=[group.model_dump(mode="json") for group in payload.groups],
+            row_id=row_id,
+            user_id=str(payload.user_id),
+            purpose=_CATEGORY_GROUPS_PURPOSE,
+        )
+
+        await session.flush()
+        return existing
+
     def decrypt_email_body(self, *, row: Summary, user_id: UUID) -> str:
         """Reverse :meth:`_encrypt_text` for a per-email summary.
 
@@ -332,6 +434,54 @@ class SummariesRepo:
             raise ValueError("sources must decode to a JSON array")
         return tuple(str(item) for item in decoded)
 
+    def decrypt_category_narrative(self, *, row: Summary, user_id: UUID) -> str:
+        """Decrypt the category digest narrative.
+
+        Args:
+            row: ORM row with ``kind='category_digest'``.
+            user_id: Owner for context binding.
+
+        Returns:
+            Plaintext category narrative.
+        """
+        if row.kind != "category_digest" or row.run_id is None or row.category is None:
+            raise ValueError("expected category digest summary row")
+        return self._decrypt_text(
+            ciphertext=bytes(row.body_md_ct),
+            row_id=_category_row_id(run_id=row.run_id, category=row.category),
+            user_id=str(user_id),
+            purpose=_CATEGORY_BODY_PURPOSE,
+        )
+
+    def decrypt_category_groups(
+        self,
+        *,
+        row: Summary,
+        user_id: UUID,
+    ) -> tuple[CategoryDigestGroup, ...]:
+        """Decrypt the category digest group payload.
+
+        Args:
+            row: ORM row with ``kind='category_digest'``.
+            user_id: Owner for context binding.
+
+        Returns:
+            Validated category digest groups.
+        """
+        if row.kind != "category_digest" or row.run_id is None or row.category is None:
+            raise ValueError("expected category digest summary row")
+        if row.entities_ct is None:
+            return ()
+        decoded = self._decrypt_json(
+            ciphertext=bytes(row.entities_ct),
+            row_id=_category_row_id(run_id=row.run_id, category=row.category),
+            user_id=str(user_id),
+            purpose=_CATEGORY_GROUPS_PURPOSE,
+        )
+        if not isinstance(decoded, list):
+            raise ValueError("category groups must decode to a JSON array")
+        return tuple(CategoryDigestGroup.model_validate(item) for item in decoded)
+
     def _encrypt_text(
         self,
         *,
@@ -378,7 +528,7 @@ class SummariesRepo:
     def _encrypt_json(
         self,
         *,
-        payload: list[str],
+        payload: Sequence[object],
         row_id: str,
         user_id: str,
         purpose: str,
@@ -418,4 +568,14 @@ class SummariesRepo:
         return json.loads(plaintext.decode("utf-8"))
 
 
-__all__ = ["SummariesRepo", "SummaryEmailWrite", "SummaryTechNewsWrite"]
+def _category_row_id(*, run_id: UUID, category: str) -> str:
+    """Return the stable encryption-context row id for category digests."""
+    return f"{run_id}:{category}"
+
+
+__all__ = [
+    "SummariesRepo",
+    "SummaryCategoryDigestWrite",
+    "SummaryEmailWrite",
+    "SummaryTechNewsWrite",
+]

@@ -182,6 +182,7 @@ async def test_summarize_email_happy_path(test_session) -> None:
     test_session.add(user)
     await test_session.flush()
     _account, email = await _seed_email(test_session, user)
+    test_session.expire(email, ["body"])
     registered, prompt_version_id = await _registered_prompt(test_session)
 
     llm = LLMClient(

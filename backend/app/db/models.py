@@ -15,9 +15,6 @@ Phase 2 tables (plan §14 Phase 2 + §20.10): ``classifications``,
 Phase 3 tables (plan §14 Phase 3 + §20.10): ``summaries``,
 ``known_newsletters``, ``tech_news_clusters``.
 
-Phase 4 tables (plan §14 Phase 4 + §20.10): ``job_matches`` (with
-envelope-encrypted ``match_reason_ct``) + ``job_filters``.
-
 Phase 5 tables (plan §14 Phase 5 + §7 unsubscribe recommender):
 ``unsubscribe_suggestions``.
 
@@ -45,6 +42,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -92,9 +90,6 @@ class TimestampMixin:
 _SCHEDULE_FREQUENCY_CHOICES = ("once_daily", "twice_daily", "disabled")
 """Allowed values for ``users.schedule_frequency`` (Track C — Phase II.1)."""
 
-_THEME_PREFERENCE_CHOICES = ("system", "light", "dark")
-"""Allowed values for ``users.theme_preference`` (Track C — Phase II.1)."""
-
 
 class User(Base, TimestampMixin):
     """Account owner (plan §8 ``users`` table + Track C extensions).
@@ -104,7 +99,7 @@ class User(Base, TimestampMixin):
         email: Owner email — unique, case-insensitive.
         display_name: Optional display name; consumed by the Track B
             IdentityScrubber when present.
-        tz: IANA timezone string (defaults to UTC).
+        tz: IANA timezone string (defaults to America/New_York).
         status: Lifecycle state (one of ``_USER_STATUS_CHOICES``).
         last_login_at: UTC timestamp of the most recent login.
         email_aliases: Extra email addresses to scrub from prompts.
@@ -114,10 +109,9 @@ class User(Base, TimestampMixin):
         schedule_times_local: ``HH:MM`` local-time slots. ``len()``
             must match :attr:`schedule_frequency` (DB CHECK on PG).
         schedule_timezone: IANA timezone the local times resolve in.
-        presidio_enabled: Whether the redaction chain runs Presidio
-            ahead of regex / alias scrubbing.
-        theme_preference: Server-side mirror of the user's UI theme
-            override (``system`` / ``light`` / ``dark``).
+        presidio_enabled: Legacy profile toggle retained for API
+            compatibility. Presidio itself was removed in Phase 2 of
+            the daily-triage revamp; only identity + regex scrubbers run.
         last_run_finished_at: Schedule cursor — clears the per-user
             "ran in the last hour" lockout.
         current_run_id: Idempotency lock; set when fanout enqueues
@@ -136,16 +130,12 @@ class User(Base, TimestampMixin):
             "schedule_frequency IN ('once_daily','twice_daily','disabled')",
             name="ck_users_schedule_frequency",
         ),
-        CheckConstraint(
-            "theme_preference IN ('system','light','dark')",
-            name="ck_users_theme_preference",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
     email: Mapped[str] = mapped_column(citext_column(320), nullable=False, unique=True)
     display_name: Mapped[str | None] = mapped_column(String(255))
-    tz: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    tz: Mapped[str] = mapped_column(String(64), nullable=False, default="America/New_York")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_aliases: Mapped[list[str]] = mapped_column(
@@ -171,14 +161,9 @@ class User(Base, TimestampMixin):
     schedule_timezone: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
-        default="UTC",
+        default="America/New_York",
     )
-    presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    theme_preference: Mapped[str] = mapped_column(
-        String(16),
-        nullable=False,
-        default="system",
-    )
+    presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_run_id: Mapped[str | None] = mapped_column(Text)
     current_run_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -434,10 +419,6 @@ _CLASSIFICATION_LABELS = (
     "must_read",
     "good_to_read",
     "ignore",
-    "waste",
-    "newsletter",
-    "job_candidate",
-    "needs_review",
 )
 """Allowed triage labels persisted on ``classifications.label``."""
 
@@ -472,8 +453,7 @@ class Classification(Base, TimestampMixin):
         tokens_out: Output tokens billed.
         is_newsletter: Independent newsletter flag used by downstream
             tech-news routing.
-        is_job_candidate: Independent jobs flag used by downstream job
-            extraction.
+        needs_review: True when confidence is low or every provider failed.
         reasons_ct: Envelope ciphertext over the JSON reasons payload.
         reasons_dek_wrapped: Kept as ``None`` — the packed envelope blob
             already carries the wrapped DEK. Column reserved for a future
@@ -483,10 +463,7 @@ class Classification(Base, TimestampMixin):
     __tablename__ = "classifications"
     __table_args__ = (
         CheckConstraint(
-            "label IN ("
-            "'must_read','good_to_read','ignore','waste',"
-            "'newsletter','job_candidate','needs_review'"
-            ")",
+            "label IN ('must_read','good_to_read','ignore')",
             name="ck_classifications_label",
         ),
         CheckConstraint(
@@ -516,7 +493,7 @@ class Classification(Base, TimestampMixin):
     tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_newsletter: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_job_candidate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    needs_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reasons_ct: Mapped[bytes | None] = mapped_column(LargeBinary)
     reasons_dek_wrapped: Mapped[bytes | None] = mapped_column(LargeBinary)
 
@@ -530,6 +507,7 @@ class RubricRule(Base, TimestampMixin):
 
     Attributes:
         id: Primary key.
+        name: Human-readable rule label for the settings UI.
         user_id: Owner (rules are scoped per user).
         priority: Higher wins on conflicts. Defaults to 0.
         match: Predicate JSON. Supports ``from_domain``, ``from_email``,
@@ -546,6 +524,7 @@ class RubricRule(Base, TimestampMixin):
     __table_args__ = (Index("ix_rubric_rules_user_priority", "user_id", "priority"),)
 
     id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, default="Untitled rule")
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -657,25 +636,28 @@ class PromptCallLog(Base, TimestampMixin):
     redaction_summary: Mapped[Any | None] = mapped_column(json_column())
 
 
-_SUMMARY_KIND_CHOICES = ("email", "tech_news_cluster")
+_SUMMARY_KIND_CHOICES = ("email", "tech_news_cluster", "category_digest")
 """Allowed values for ``summaries.kind`` (plan §8)."""
 
 
 class Summary(Base, TimestampMixin):
-    """Per-email or per-cluster summary (plan §8, §14 Phase 3, §20.10).
+    """Per-email, per-cluster, or per-category summary.
 
     ``body_md_ct`` and ``entities_ct`` are envelope ciphertexts — the
     plaintext ``body_md`` + entity list never hit disk. Cluster rows
     carry ``email_id=NULL`` and a ``cluster_id`` FK into
-    :class:`TechNewsCluster`.
+    :class:`TechNewsCluster`. Category digest rows carry both target FKs
+    as ``NULL`` and are keyed by ``run_id`` + ``category``.
 
     Attributes:
         id: Primary key.
-        kind: ``email`` or ``tech_news_cluster``.
+        kind: ``email``, ``tech_news_cluster``, or ``category_digest``.
         email_id: Target email for ``kind='email'``; ``None`` for
             cluster summaries.
         cluster_id: Target cluster for ``kind='tech_news_cluster'``;
             ``None`` otherwise.
+        run_id: Digest-run scope for ``kind='category_digest'``.
+        category: Triage category for ``kind='category_digest'``.
         prompt_version_id: FK into :class:`PromptVersion`.
         model: Provider-scoped model identifier.
         tokens_in: Input tokens billed.
@@ -692,12 +674,14 @@ class Summary(Base, TimestampMixin):
     __tablename__ = "summaries"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('email','tech_news_cluster')",
+            "kind IN ('email','tech_news_cluster','category_digest')",
             name="ck_summaries_kind",
         ),
         CheckConstraint(
             "(kind = 'email' AND email_id IS NOT NULL AND cluster_id IS NULL)"
-            " OR (kind = 'tech_news_cluster' AND cluster_id IS NOT NULL AND email_id IS NULL)",
+            " OR (kind = 'tech_news_cluster' AND cluster_id IS NOT NULL AND email_id IS NULL)"
+            " OR (kind = 'category_digest' AND email_id IS NULL AND cluster_id IS NULL"
+            " AND run_id IS NOT NULL AND category IS NOT NULL)",
             name="ck_summaries_kind_target",
         ),
         CheckConstraint(
@@ -707,6 +691,14 @@ class Summary(Base, TimestampMixin):
         UniqueConstraint("email_id", name="uq_summaries_email_id"),
         UniqueConstraint("cluster_id", name="uq_summaries_cluster_id"),
         Index("ix_summaries_kind_created_at", "kind", "created_at"),
+        Index(
+            "uq_summaries_run_category",
+            "run_id",
+            "category",
+            unique=True,
+            postgresql_where=text("kind = 'category_digest'"),
+            sqlite_where=text("kind = 'category_digest'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
@@ -717,6 +709,10 @@ class Summary(Base, TimestampMixin):
     cluster_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("tech_news_clusters.id", ondelete="CASCADE"),
     )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("digest_runs.id", ondelete="CASCADE"),
+    )
+    category: Mapped[str | None] = mapped_column(String(24))
     prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("prompt_versions.id", ondelete="SET NULL"),
     )
@@ -838,147 +834,6 @@ class KnownNewsletter(Base, TimestampMixin):
     maintainer: Mapped[str] = mapped_column(String(64), nullable=False, default="seed")
 
 
-class JobMatch(Base, TimestampMixin):
-    """Structured job extraction (plan §8, §14 Phase 4, §20.10).
-
-    ``match_reason_ct`` holds the envelope-encrypted rationale; the
-    plaintext never hits disk. Metadata (``title``, ``company``,
-    ``comp_min``/``max``, ``seniority``) stays plaintext so the JSONB
-    predicate in :mod:`app.services.jobs.predicate` can evaluate against
-    it without a round-trip through KMS — filtering is a per-request
-    hot path and decrypt-per-evaluate would swamp cost at scale.
-
-    One row per source email (``email_id`` is ``UNIQUE``). Re-extraction
-    replaces the row in place so ``filter_version`` reflects the most
-    recent rule set.
-
-    Attributes:
-        id: Primary key.
-        email_id: Source email (1:1).
-        title: Role title.
-        company: Hiring company / firm.
-        location: Free-text location or ``None``.
-        remote: Tri-state remote flag; ``None`` when ambiguous.
-        comp_min: Inclusive lower bound of the salary range.
-        comp_max: Inclusive upper bound of the salary range.
-        currency: ISO-4217 code for ``comp_min``/``max``.
-        comp_phrase: Verbatim phrase the LLM quoted the salary from;
-            kept for audit + the regex corroboration guard.
-        seniority: Normalized tier string (``senior``/``staff`` etc.).
-        source_url: Apply / posting URL, tracking params stripped.
-        match_score: Calibrated ``[0, 1]`` — mirrors the LLM confidence.
-        filter_version: ``job_filters.version`` that produced
-            :attr:`passed_filter`. ``0`` means "no filter set".
-        passed_filter: ``True`` when the row satisfied every active
-            filter for the user at write time.
-        prompt_version_id: FK into :class:`PromptVersion`; ``None`` when
-            the row was hand-imported.
-        model: Provider-scoped model identifier.
-        tokens_in: Input tokens billed.
-        tokens_out: Output tokens billed.
-        match_reason_ct: Envelope ciphertext over the plaintext
-            ``match_reason`` paragraph.
-        match_reason_dek_wrapped: Reserved for a future split-storage
-            layout; always ``None`` today.
-    """
-
-    __tablename__ = "job_matches"
-    __table_args__ = (
-        CheckConstraint(
-            "match_score >= 0 AND match_score <= 1",
-            name="ck_job_matches_match_score_range",
-        ),
-        CheckConstraint(
-            "(comp_min IS NULL AND comp_max IS NULL)"
-            " OR (comp_min IS NOT NULL AND currency IS NOT NULL)"
-            " OR (comp_max IS NOT NULL AND currency IS NOT NULL)",
-            name="ck_job_matches_currency_required",
-        ),
-        CheckConstraint(
-            "comp_min IS NULL OR comp_max IS NULL OR comp_min <= comp_max",
-            name="ck_job_matches_comp_range_order",
-        ),
-        Index(
-            "ix_job_matches_passed_filter",
-            "passed_filter",
-            "created_at",
-        ),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
-    email_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("emails.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    company: Mapped[str] = mapped_column(Text, nullable=False)
-    location: Mapped[str | None] = mapped_column(Text)
-    remote: Mapped[bool | None] = mapped_column(Boolean)
-    comp_min: Mapped[int | None] = mapped_column(Integer)
-    comp_max: Mapped[int | None] = mapped_column(Integer)
-    currency: Mapped[str | None] = mapped_column(String(3))
-    comp_phrase: Mapped[str | None] = mapped_column(Text)
-    seniority: Mapped[str | None] = mapped_column(String(16))
-    source_url: Mapped[str | None] = mapped_column(Text)
-    match_score: Mapped[Decimal] = mapped_column(
-        Numeric(4, 3),
-        nullable=False,
-        default=Decimal("0.000"),
-    )
-    filter_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    passed_filter: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
-    )
-    model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    match_reason_ct: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    match_reason_dek_wrapped: Mapped[bytes | None] = mapped_column(LargeBinary)
-
-
-class JobFilter(Base, TimestampMixin):
-    """Configurable job-filter predicate (plan §8, §14 Phase 4).
-
-    Each row is one named filter for one user. The predicate is a JSONB
-    document consumed by :mod:`app.services.jobs.predicate`; supported
-    operators include ``min_comp``, ``max_comp``, ``currency``,
-    ``remote_required``, ``location_any``, ``location_none``,
-    ``title_keywords_any``, ``title_keywords_none``, and
-    ``seniority_in``.
-
-    ``version`` increments on every mutation. New ``job_matches`` writes
-    stamp the current version onto :attr:`JobMatch.filter_version` so a
-    filter change does not retroactively re-label historical rows.
-
-    Attributes:
-        id: Primary key.
-        user_id: Owner.
-        name: Human-readable label (``"remote-staff-roles"``).
-        predicate: JSONB document with the filter clauses.
-        version: Bumped on each mutation.
-        active: Soft-delete switch; the predicate engine skips inactive
-            filters.
-    """
-
-    __tablename__ = "job_filters"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_job_filters_user_name"),
-        Index("ix_job_filters_user_active", "user_id", "active"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
-    predicate: Mapped[Any] = mapped_column(json_column(), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
-
 class UnsubscribeSuggestion(Base, TimestampMixin):
     """Ranked unsubscribe recommendation per sender (plan §8, §14 Phase 5).
 
@@ -1005,8 +860,8 @@ class UnsubscribeSuggestion(Base, TimestampMixin):
         frequency_30d: Count of emails received from this sender in
             the last 30 days.
         engagement_score: Ratio of classifications labelled
-            ``must_read`` / ``good_to_read`` / ``job_candidate`` over
-            the total classified count. ``[0, 1]``; lower = more
+            ``must_read`` / ``good_to_read`` over the total classified
+            count. ``[0, 1]``; lower = more
             disengaged = better unsubscribe candidate.
         waste_rate: Ratio of classifications labelled ``waste`` /
             ``ignore`` over total. ``[0, 1]``; higher = better
@@ -1115,7 +970,7 @@ class UnsubscribeSuggestion(Base, TimestampMixin):
 
 
 class KnownWasteSender(Base, TimestampMixin):
-    """Curated list of senders the rule engine short-circuits to ``waste``.
+    """Curated list of senders the rule engine short-circuits to ``ignore``.
 
     Plan §8 ``known_waste_senders`` — the rule engine consults this list
     before touching the user's own rubric, so new seed entries don't
@@ -1203,6 +1058,31 @@ class DigestRun(Base, TimestampMixin):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class DigestRunEmail(Base):
+    """Explicit membership edge between a digest run and source emails.
+
+    Phase 3 of the daily-triage revamp uses this table as the run
+    boundary. Finalization and reclassification never infer membership
+    from timestamps because reclassifying existing mail is a valid run.
+
+    Attributes:
+        run_id: Owning digest run.
+        email_id: Email included in that run's processing set.
+    """
+
+    __tablename__ = "digest_run_emails"
+    __table_args__ = (Index("ix_digest_run_emails_email", "email_id"),)
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("digest_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    email_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("emails.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class ReleaseMetadata(Base):
     """One row per deploy (plan §8 ``release_metadata``, §19.7 enrichments).
 
@@ -1257,10 +1137,9 @@ __all__ = [
     "Classification",
     "ConnectedAccount",
     "DigestRun",
+    "DigestRunEmail",
     "Email",
     "EmailContentBlob",
-    "JobFilter",
-    "JobMatch",
     "KnownNewsletter",
     "KnownWasteSender",
     "OAuthToken",

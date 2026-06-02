@@ -11,7 +11,6 @@ REQUIRED_FULL_COVERAGE = (
     "backend/app/services/gmail/parser.py",
     "backend/app/services/ingestion/dedup.py",
     "backend/app/llm/client.py",
-    "backend/app/services/jobs/predicate.py",
 )
 
 

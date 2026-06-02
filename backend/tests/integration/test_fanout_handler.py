@@ -9,9 +9,10 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ConnectedAccount, User
+from app.db.models import ConnectedAccount, DigestRun, User
 from app.workers.handlers.fanout import FanoutDeps, parse_ingest_body, run_fanout
 from app.workers.messages import IngestMessage
 
@@ -54,7 +55,7 @@ async def _seed(session: AsyncSession, *, count: int = 3) -> list[ConnectedAccou
 async def test_fanout_enqueues_only_auto_scan_accounts(
     test_session: AsyncSession,
 ) -> None:
-    await _seed(test_session)
+    accounts = await _seed(test_session)
     sqs = _FakeSqs()
     deps = FanoutDeps(
         session=test_session,
@@ -71,6 +72,13 @@ async def test_fanout_enqueues_only_auto_scan_accounts(
         enqueued = await run_fanout(deps=deps)
     assert enqueued == 2
     assert len(sqs.sent) == 2
+    runs = (await test_session.execute(select(DigestRun))).scalars().all()
+    assert len(runs) == 1
+    assert runs[0].trigger_type == "scheduled"
+    assert runs[0].status == "queued"
+    assert runs[0].stats["account_ids"] == [str(accounts[0].id), str(accounts[2].id)]
+    payload = parse_ingest_body(sqs.sent[0]["MessageBody"])
+    assert payload.run_id == runs[0].id
 
 
 async def test_parse_ingest_body_roundtrips() -> None:
