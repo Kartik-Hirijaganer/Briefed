@@ -32,7 +32,7 @@ from app.core.errors import AuthError, ProviderError
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 """Google OAuth authorize endpoint."""
 
-TOKEN_URL = "https://oauth2.googleapis.com/token"
+TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105 - public OAuth endpoint URL
 """Google OAuth token-exchange endpoint."""
 
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"

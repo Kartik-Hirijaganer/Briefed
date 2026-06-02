@@ -609,7 +609,7 @@ class LLMClient:
         """
         base = self._config.base_backoff_seconds * (2**attempt)
         capped = min(base, self._config.max_backoff_seconds)
-        return random.uniform(0, capped)
+        return random.uniform(0, capped)  # nosec B311 - retry jitter, not crypto
 
 
 def _reidentify_payload(
