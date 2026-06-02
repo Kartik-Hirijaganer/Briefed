@@ -236,4 +236,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs — using an agentic development workflow. The plan, the 13 ADRs, and the execution logs all live under [`.claude/`](.claude/) and [`docs/adr/`](docs/adr/), so the full decision trail is auditable end to end.</sub>
+<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 13 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>

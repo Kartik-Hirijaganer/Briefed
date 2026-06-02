@@ -25,7 +25,8 @@ dependencies = [
     # Persistence — SQLAlchemy + asyncpg over Supabase pooler (§19.15)
     # psycopg2-binary is the sync driver Alembic uses for ``make migrate``;
     # the runtime app uses asyncpg, but Alembic's online runner is sync.
-    "sqlalchemy>=2.0",
+    # [asyncio] pins greenlet, which SQLAlchemy's async engine requires.
+    "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
     "alembic>=1.13",

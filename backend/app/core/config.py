@@ -40,7 +40,7 @@ Runtime = Literal["local", "lambda-api", "lambda-worker", "lambda-fanout"]
 _SSM_FIELD_MAP: dict[str, str] = {
     "openrouter_api_key": "openrouter_api_key",
     "google_oauth_client_id": "google_oauth_client_id",
-    "google_oauth_client_secret": "google_oauth_client_secret",
+    "google_oauth_client_secret": "google_oauth_client_secret",  # nosec B105 - SSM mapping key
     "session_signing_key": "session_signing_key",
     "supabase_url": "supabase_url",
     "supabase_service_key": "supabase_service_key",

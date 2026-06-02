@@ -98,18 +98,27 @@ export interface paths {
          * Google OAuth callback — exchange code, persist account
          * @description Handle the Google consent-screen redirect.
          *
+         *     Google redirects here with either ``code`` (success) or ``error`` (the
+         *     user cancelled / denied consent — RFC 6749 §4.1.2.1). Both success
+         *     parameters are optional so a denial never fails request validation with
+         *     a raw 422; the error path bounces to the login page instead.
+         *
          *     Args:
          *         request: FastAPI request.
-         *         code: Authorization code from Google.
-         *         state: State parameter Google echoed back.
+         *         code: Authorization code from Google, present on success.
+         *         state: State parameter Google echoed back, present on success.
+         *         error: OAuth error code (e.g. ``access_denied``) on user denial.
          *         oauth_state_cookie: Pre-authorize cookie set by :func:`start`.
          *         settings: Cached :class:`Settings`.
          *
          *     Returns:
-         *         A 302 redirect back to the UI (``return_to`` or ``/``).
+         *         A 302 redirect back to the UI (``return_to`` or ``/``) on success,
+         *         or to ``/login`` carrying an ``auth_error`` code on denial / a
+         *         malformed callback.
          *
          *     Raises:
-         *         HTTPException: 400 when the state mismatch / cookie missing.
+         *         HTTPException: 400 on state mismatch / missing cookie; 503 when
+         *             server OAuth configuration is missing.
          */
         get: operations["gmail_oauth_callback_api_v1_oauth_gmail_callback_get"];
         put?: never;
@@ -1661,7 +1670,7 @@ export interface components {
             schedule_times_local: string[];
             /**
              * Schedule Timezone
-             * @default UTC
+             * @default America/New_York
              */
             schedule_timezone: string;
         };
@@ -1818,9 +1827,10 @@ export interface operations {
     };
     gmail_oauth_callback_api_v1_oauth_gmail_callback_get: {
         parameters: {
-            query: {
-                code: string;
-                state: string;
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
             };
             header?: never;
             path?: never;
