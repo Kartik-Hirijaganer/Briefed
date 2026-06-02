@@ -67,7 +67,7 @@ export function Dialog(props: DialogProps): JSX.Element | null {
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         pace="base"
-        className="w-full max-w-md rounded-[var(--radius-lg)] bg-bg p-6 shadow-xl"
+        className="w-full max-w-md rounded-[var(--radius-lg)] bg-bg-surface p-6 shadow-[var(--shadow-3)]"
       >
         <h2 id={titleId} className="text-lg font-semibold text-fg">
           {title}

@@ -8,16 +8,19 @@ appears in the list.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import timedelta
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
+from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
-from app.db.models import ConnectedAccount, User
+from app.db.models import ConnectedAccount, Email, OAuthToken, SyncCursor, User
 from app.main import app
 
 
@@ -118,3 +121,149 @@ async def test_delete_account_scoped_to_owner(
             cookies={SESSION_COOKIE_NAME: cookie},
         )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_disconnect_account_revokes_local_access_and_keeps_row(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    async with api_session() as session:
+        user = User(email="owner@x.com", tz="UTC", status="active")
+        session.add(user)
+        await session.flush()
+        account = ConnectedAccount(
+            user_id=user.id,
+            provider="gmail",
+            email="owner@x.com",
+            status="active",
+        )
+        session.add(account)
+        await session.flush()
+        session.add_all(
+            [
+                OAuthToken(
+                    account_id=account.id,
+                    access_token_ct=b"access",
+                    refresh_token_ct=b"refresh",
+                    scope=["https://www.googleapis.com/auth/gmail.readonly"],
+                    expires_at=utcnow() + timedelta(hours=1),
+                ),
+                SyncCursor(
+                    account_id=account.id,
+                    history_id=123,
+                    last_full_sync_at=utcnow(),
+                    last_incremental_at=utcnow(),
+                    stale=False,
+                ),
+                Email(
+                    account_id=account.id,
+                    gmail_message_id="m1",
+                    thread_id="t1",
+                    internal_date=utcnow(),
+                    from_addr="sender@example.com",
+                    subject="Hello",
+                    snippet="Snippet",
+                    content_hash=b"hash",
+                ),
+            ],
+        )
+        await session.commit()
+        user_id, account_id = user.id, account.id
+
+    cookie = sign_cookie({"user_id": str(user_id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/accounts/{account_id}/disconnect",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "revoked"
+    assert payload["auto_scan_enabled"] is False
+    assert payload["last_sync_at"] is None
+    assert payload["emails_ingested_24h"] == 0
+
+    async with api_session() as session:
+        account = await session.get(ConnectedAccount, account_id)
+        assert account is not None
+        assert account.status == "revoked"
+        assert account.auto_scan_enabled is False
+        assert await session.get(SyncCursor, account_id) is None
+        tokens = (
+            await session.execute(select(OAuthToken).where(OAuthToken.account_id == account_id))
+        ).scalars()
+        emails = (
+            await session.execute(select(Email).where(Email.account_id == account_id))
+        ).scalars()
+        assert tokens.first() is None
+        assert emails.first() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_account_requires_disconnect_first(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    async with api_session() as session:
+        user = User(email="owner@x.com", tz="UTC", status="active")
+        session.add(user)
+        await session.flush()
+        account = ConnectedAccount(
+            user_id=user.id,
+            provider="gmail",
+            email="owner@x.com",
+            status="active",
+        )
+        session.add(account)
+        await session.commit()
+        user_id, account_id = user.id, account.id
+
+    cookie = sign_cookie({"user_id": str(user_id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.delete(
+            f"/api/v1/accounts/{account_id}",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_account_removes_revoked_account(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    async with api_session() as session:
+        user = User(email="owner@x.com", tz="UTC", status="active")
+        session.add(user)
+        await session.flush()
+        account = ConnectedAccount(
+            user_id=user.id,
+            provider="gmail",
+            email="owner@x.com",
+            status="revoked",
+        )
+        session.add(account)
+        await session.commit()
+        user_id, account_id = user.id, account.id
+
+    cookie = sign_cookie({"user_id": str(user_id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.delete(
+            f"/api/v1/accounts/{account_id}",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+    assert response.status_code == 204
+
+    async with api_session() as session:
+        assert await session.get(ConnectedAccount, account_id) is None
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_browser_session_cookies(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 204
+    assert response.headers["clear-site-data"] == '"cache", "cookies", "storage"'
+    cookies = response.headers.get_list("set-cookie")
+    assert any(f"{SESSION_COOKIE_NAME}=" in cookie and "Max-Age=0" in cookie for cookie in cookies)
+    assert any("briefed_oauth_state=" in cookie and "Max-Age=0" in cookie for cookie in cookies)

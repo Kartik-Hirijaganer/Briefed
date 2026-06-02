@@ -18,12 +18,12 @@ export function AppShell(): JSX.Element {
   return (
     <div className="flex min-h-[100dvh] flex-col md:flex-row">
       <Sidebar />
-      <main className="flex min-w-0 flex-1 flex-col pb-[76px] md:pb-0">
-        <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8">
+      <main className="flex min-w-0 flex-1 flex-col bg-bg-canvas pb-[76px] md:pb-0">
+        <div className="mx-auto w-full max-w-[var(--container-wide)] px-4 py-8 md:px-8">
           <OfflineBanners />
           <Outlet />
         </div>
-        <footer className="mx-auto w-full max-w-5xl px-4 pb-6 text-right md:px-8">
+        <footer className="mx-auto w-full max-w-[var(--container-wide)] px-4 pb-6 text-right md:px-8">
           <AppVersion />
         </footer>
       </main>

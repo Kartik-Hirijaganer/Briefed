@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
+from app.core.app_config import get_app_config
 from app.core.config import get_settings
 from app.core.logging import configure as configure_logging
 from app.core.logging import get_logger
@@ -29,6 +30,7 @@ from app.core.tracing import configure_tracing
 # handler runs. All four calls are idempotent — repeated imports during
 # tests are cheap, and SnapStart restores skip the work entirely.
 _settings = get_settings()
+_app_config = get_app_config()
 configure_tracing(_settings)
 configure_logging(level=_settings.log_level, json_output=_settings.runtime != "local")
 configure_sentry(_settings)
@@ -40,6 +42,8 @@ if TYPE_CHECKING:  # pragma: no cover
     from app.core.security import KmsClient
     from app.services.classification.dispatch import SqsSender
     from app.services.ingestion.storage import ObjectStore
+    from app.services.runs import CategoryDigestSender
+    from app.workers.messages import CategoryDigestMessage
 
 
 class _SqsRecord(TypedDict, total=False):
@@ -150,6 +154,16 @@ def _s3_client() -> ObjectStore:
     return cast("ObjectStore", boto3.client("s3"))
 
 
+def _category_digest_sender(*, queue_url: str, sqs: SqsSender) -> CategoryDigestSender:
+    """Return a sender that places category digests on the summarize queue."""
+
+    def _send(message: CategoryDigestMessage) -> None:
+        """Send one category digest message."""
+        sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
+
+    return _send
+
+
 def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
     """Dispatch an SQS batch to the appropriate per-stage handler.
 
@@ -157,9 +171,7 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
     Lambda can back every queue. Phases 1-5 wire ``ingest`` to
     :func:`app.workers.handlers.ingest.handle_ingest`, ``classify`` to
     :func:`app.workers.handlers.classify.handle_classify`, ``summarize``
-    to :mod:`app.workers.handlers.summarize`, ``jobs`` to
-    :func:`app.workers.handlers.jobs.handle_job_extract`, and
-    ``unsubscribe`` to
+    to :mod:`app.workers.handlers.summarize`, and ``unsubscribe`` to
     :func:`app.workers.handlers.unsubscribe.handle_unsubscribe`. Later
     phases add ``digest`` / ``maintenance``.
 
@@ -197,8 +209,6 @@ def sqs_dispatcher(event: _SqsEvent, _context: Any) -> _PartialBatchResponse:
                         await _handle_classify_record(record)
                     elif stage == "summarize":
                         await _handle_summarize_record(record)
-                    elif stage == "jobs":
-                        await _handle_jobs_record(record)
                     elif stage == "unsubscribe":
                         await _handle_unsubscribe_record(record)
                     else:
@@ -235,6 +245,8 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
     from app.services.classification.dispatch import enqueue_unclassified_for_account
     from app.services.gmail.client import GmailClient
     from app.services.gmail.provider import GmailProvider
+    from app.services.runs import mark_run_running, maybe_finalize_run
+    from app.services.summarization import enqueue_unsummarized_for_run
     from app.workers.handlers.fanout import parse_ingest_body
     from app.workers.handlers.ingest import IngestDeps, handle_ingest
 
@@ -247,6 +259,7 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
 
     classify_queue_url = os.environ.get("BRIEFED_CLASSIFY_QUEUE_URL", "")
+    summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
     raw_bucket = os.environ.get("BRIEFED_RAW_EMAIL_BUCKET", "")
     if message.store_raw_mime and not raw_bucket:
         raise RuntimeError("BRIEFED_RAW_EMAIL_BUCKET unset while raw MIME storage is enabled")
@@ -268,17 +281,40 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                 oauth_client_secret=_settings.google_oauth_client_secret,
                 http_client=http,
             )
+            await mark_run_running(session, message.run_id)
             stats = await handle_ingest(message, deps=deps)
-            if stats.new and classify_queue_url:
-                sqs = _sqs_client()
+            sqs_client: SqsSender | None = None
+            if (stats.new or stats.email_ids) and classify_queue_url:
+                sqs_client = _sqs_client()
                 await enqueue_unclassified_for_account(
                     session=session,
                     user_id=message.user_id,
                     account_id=message.account_id,
                     queue_url=classify_queue_url,
-                    sqs=sqs,
+                    sqs=sqs_client,
                     run_id=message.run_id,
                 )
+            if summarize_queue_url:
+                if sqs_client is None:
+                    sqs_client = _sqs_client()
+                await enqueue_unsummarized_for_run(
+                    session=session,
+                    user_id=message.user_id,
+                    account_id=message.account_id,
+                    queue_url=summarize_queue_url,
+                    sqs=sqs_client,
+                    run_id=message.run_id,
+                )
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+                category_digest_sender=(
+                    _category_digest_sender(queue_url=summarize_queue_url, sqs=sqs_client)
+                    if summarize_queue_url and sqs_client is not None
+                    else None
+                ),
+            )
             await session.commit()
 
 
@@ -287,8 +323,8 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
 
     After the classification lands, enqueue only this email's eligible
     downstream work. The dispatch helpers require the target row to
-    still lack a summary/job-match row, so SQS retries do not rescan the
-    whole account or fan out duplicate LLM work.
+    still lack a summary row, so SQS retries do not rescan the whole
+    account or fan out duplicate LLM work.
 
     Args:
         record: Raw SQS record from the event envelope.
@@ -302,9 +338,12 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     from app.llm.factory import build_llm_client
     from app.services.classification.dispatch import parse_classify_body
     from app.services.classification.repository import ClassificationsRepo
-    from app.services.jobs.dispatch import enqueue_job_extract_for_email
     from app.services.prompts.registry import PromptRegistry
-    from app.services.summarization import enqueue_summary_for_email
+    from app.services.runs import mark_run_running, maybe_finalize_run
+    from app.services.summarization import (
+        enqueue_summary_for_email,
+        enqueue_tech_news_cluster_for_account,
+    )
     from app.services.unsubscribe.dispatch import enqueue_hygiene_run_for_account
     from app.workers.handlers.classify import ClassifyDeps, handle_classify
 
@@ -313,7 +352,6 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
     summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
-    jobs_queue_url = os.environ.get("BRIEFED_JOBS_QUEUE_URL", "")
     unsubscribe_queue_url = os.environ.get("BRIEFED_UNSUBSCRIBE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
@@ -333,6 +371,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                 repo=ClassificationsRepo(cipher=cipher),
                 content_cipher=cipher,
             )
+            await mark_run_running(session, message.run_id)
             await handle_classify(message, deps=deps)
             sqs_client = _sqs_client()
             if summarize_queue_url:
@@ -345,15 +384,14 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
-            if jobs_queue_url:
-                await enqueue_job_extract_for_email(
+                await enqueue_tech_news_cluster_for_account(
                     session=session,
                     user_id=message.user_id,
                     account_id=message.account_id,
-                    email_id=message.email_id,
-                    queue_url=jobs_queue_url,
+                    queue_url=summarize_queue_url,
                     sqs=sqs_client,
                     run_id=message.run_id,
+                    trigger_email_id=message.email_id,
                 )
             if unsubscribe_queue_url:
                 # The hygiene aggregate runs over the trailing 30 days,
@@ -370,6 +408,16 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+                category_digest_sender=(
+                    _category_digest_sender(queue_url=summarize_queue_url, sqs=sqs_client)
+                    if summarize_queue_url
+                    else None
+                ),
+            )
             await session.commit()
 
 
@@ -387,29 +435,44 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
     import httpx
 
     from app.core.security import EnvelopeCipher
+    from app.db.models import DigestRun
     from app.db.session import get_sessionmaker
     from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.summarization import SummariesRepo, parse_summarize_body
     from app.workers.handlers.summarize import (
         SummarizeDeps,
+        handle_category_digest,
         handle_summarize_email,
         handle_tech_news_cluster,
     )
-    from app.workers.messages import SummarizeEmailMessage
+    from app.workers.messages import CategoryDigestMessage, SummarizeEmailMessage
 
     message = parse_summarize_body(record.get("body", "{}"))
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
+    summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
         async with get_sessionmaker()() as session:
+            if isinstance(message, CategoryDigestMessage):
+                run = await session.get(DigestRun, message.run_id)
+                if run is None:
+                    logger.warning(
+                        "summarize.category.run_missing",
+                        run_id=str(message.run_id),
+                    )
+                    return
+                user_id = run.user_id
+            else:
+                user_id = message.user_id
             llm = build_llm_client(
                 settings=_settings,
                 http_client=http,
-                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
+                sanitizer=await _build_redaction_chain_for_user(session, user_id),
             )
             registry = PromptRegistry.load()
             await registry.sync_to_db(session)
@@ -420,57 +483,31 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
                 repo=SummariesRepo(cipher=cipher),
                 content_cipher=cipher,
             )
+
+            async def _build_category_digest(
+                category_message: CategoryDigestMessage,
+            ) -> None:
+                """Build one category digest inline for local/test runs."""
+                await handle_category_digest(category_message, deps=deps, user_id=user_id)
+
+            await mark_run_running(session, message.run_id)
             if isinstance(message, SummarizeEmailMessage):
                 await handle_summarize_email(message, deps=deps)
+            elif isinstance(message, CategoryDigestMessage):
+                await handle_category_digest(message, deps=deps, user_id=user_id)
             else:
                 await handle_tech_news_cluster(message, deps=deps)
-            await session.commit()
-
-
-async def _handle_jobs_record(record: _SqsRecord) -> None:
-    """Decode + dispatch one jobs-queue record (plan §14 Phase 4).
-
-    Wires the LLM client + content cipher + prompt registry into the
-    job-extract handler. The handler upserts a single ``job_matches`` row
-    keyed by ``email_id`` and writes one ``prompt_call_log`` row.
-
-    Args:
-        record: Raw SQS record from the event envelope.
-    """
-    import os
-
-    import httpx
-
-    from app.core.security import EnvelopeCipher
-    from app.db.session import get_sessionmaker
-    from app.llm.factory import build_llm_client
-    from app.services.jobs import JobMatchesRepo, parse_job_extract_body
-    from app.services.prompts.registry import PromptRegistry
-    from app.workers.handlers.jobs import JobExtractDeps, handle_job_extract
-
-    message = parse_job_extract_body(record.get("body", "{}"))
-    content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
-    if not content_alias:
-        raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
-
-    async with httpx.AsyncClient() as http:
-        cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
-        async with get_sessionmaker()() as session:
-            llm = build_llm_client(
-                settings=_settings,
-                http_client=http,
-                sanitizer=await _build_redaction_chain_for_user(session, message.user_id),
-            )
-            registry = PromptRegistry.load()
-            await registry.sync_to_db(session)
-            deps = JobExtractDeps(
+            await maybe_finalize_run(
                 session=session,
-                llm=llm,
-                registry=registry,
-                repo=JobMatchesRepo(cipher=cipher),
-                content_cipher=cipher,
+                user_id=user_id,
+                run_id=message.run_id,
+                category_digest_sender=(
+                    _category_digest_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
+                    if summarize_queue_url
+                    else None
+                ),
+                category_digest_builder=None if summarize_queue_url else _build_category_digest,
             )
-            await handle_job_extract(message, deps=deps)
             await session.commit()
 
 
@@ -493,6 +530,7 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
     from app.db.session import get_sessionmaker
     from app.llm.factory import build_llm_client
     from app.services.prompts.registry import PromptRegistry
+    from app.services.runs import mark_run_running, maybe_finalize_run
     from app.services.unsubscribe import (
         UnsubscribeSuggestionsRepo,
         parse_unsubscribe_body,
@@ -506,6 +544,7 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
     content_alias = os.environ.get("BRIEFED_CONTENT_KEY_ALIAS", "")
     if not content_alias:
         raise RuntimeError("BRIEFED_CONTENT_KEY_ALIAS unset")
+    summarize_queue_url = os.environ.get("BRIEFED_SUMMARIZE_QUEUE_URL", "")
 
     async with httpx.AsyncClient() as http:
         cipher = EnvelopeCipher(key_id=content_alias, client=_kms_client())
@@ -523,7 +562,18 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
                 registry=registry,
                 repo=UnsubscribeSuggestionsRepo(cipher=cipher),
             )
+            await mark_run_running(session, message.run_id)
             await handle_unsubscribe(message, deps=deps)
+            await maybe_finalize_run(
+                session=session,
+                user_id=message.user_id,
+                run_id=message.run_id,
+                category_digest_sender=(
+                    _category_digest_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
+                    if summarize_queue_url
+                    else None
+                ),
+            )
             await session.commit()
 
 

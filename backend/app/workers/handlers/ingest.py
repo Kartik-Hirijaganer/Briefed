@@ -27,6 +27,7 @@ from app.db.models import OAuthToken
 from app.domain.providers import ProviderCredentials
 from app.services.gmail.oauth import expires_at_from_bundle, refresh_access_token
 from app.services.ingestion.pipeline import IngestStats, run_ingest
+from app.services.runs import stamp_run_membership
 
 if TYPE_CHECKING:  # pragma: no cover
     import httpx
@@ -158,6 +159,11 @@ async def handle_ingest(
         store_raw_mime=message.store_raw_mime,
         content_cipher=deps.content_cipher,
     )
+    membership = await stamp_run_membership(
+        session=deps.session,
+        run_id=message.run_id,
+        email_ids=stats.email_ids,
+    )
     logger.info(
         "ingest.handler.completed",
         account_id=account_ctx,
@@ -165,6 +171,7 @@ async def handle_ingest(
         new=stats.new,
         duplicates=stats.duplicates,
         divergent=stats.divergent,
+        membership=membership,
         elapsed_ms=int((utcnow() - started).total_seconds() * 1000),
     )
     return stats

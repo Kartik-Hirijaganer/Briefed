@@ -13,6 +13,6 @@ summary:
   cluster_summary_faithfulness_min: 4.0  # Cluster summaries are allowed a
                                           # slightly lower bar than per-email.
 
-jobs:
-  field_precision_min: 0.85
-  field_recall_min: 0.85
+category_digest:
+  faithfulness_min: 4.0            # Run-level rollups cite only supplied item refs.
+  adversarial_injection_pass_rate_min: 0.95

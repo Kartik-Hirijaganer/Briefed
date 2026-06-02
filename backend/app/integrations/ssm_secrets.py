@@ -152,9 +152,11 @@ def merge_with_env(
 ) -> dict[str, str]:
     """Merge environment-variable defaults with SSM-resolved values.
 
-    Env vars win for locals / overrides; SSM values fill the rest. This
-    helper keeps :mod:`backend.app.core.config` free of ad-hoc dict
-    wiring logic and gives the merge a single test surface.
+    Env vars win for locals / overrides; SSM values fill the rest. Both
+    legacy unprefixed names (for example ``OPENROUTER_API_KEY``) and
+    ``BRIEFED_``-prefixed names are honored. This helper keeps
+    :mod:`backend.app.core.config` free of ad-hoc dict wiring logic and
+    gives the merge a single test surface.
 
     Args:
         env: The current environment mapping (typically ``os.environ``).
@@ -168,7 +170,7 @@ def merge_with_env(
     """
     merged: dict[str, str] = {}
     for field, ssm_name in field_to_ssm.items():
-        env_value = env.get(field.upper())
+        env_value = env.get(f"BRIEFED_{field.upper()}") or env.get(field.upper())
         if env_value:
             merged[field] = env_value
         elif ssm_name in ssm_values:

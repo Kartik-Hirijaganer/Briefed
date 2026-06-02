@@ -29,8 +29,10 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.clock import utcnow
+from app.core.errors import CryptoError
 from app.core.logging import get_logger
 from app.db.models import (
     Email,
@@ -324,7 +326,7 @@ async def _load_emails(
     email_ids: tuple[UUID, ...],
 ) -> list[Email]:
     """Fetch email rows preserving insertion order."""
-    stmt = select(Email).where(Email.id.in_(email_ids))
+    stmt = select(Email).options(selectinload(Email.body)).where(Email.id.in_(email_ids))
     fetched: Iterable[Email] = (await session.execute(stmt)).scalars().all()
     by_id: dict[UUID, Email] = {row.id: row for row in fetched}
     return [by_id[email_id] for email_id in email_ids if email_id in by_id]
@@ -429,7 +431,15 @@ def _excerpt_for(
 ) -> str:
     """Return the best plaintext excerpt for the clustering prompt."""
     blob: EmailContentBlob | None = row.body
-    excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    try:
+        excerpt = decrypt_excerpt(blob, user_id=user_id, cipher=cipher)
+    except CryptoError as exc:
+        logger.warning(
+            "tech_news.excerpt_decrypt_failed",
+            email_id=str(row.id),
+            error=str(exc),
+        )
+        excerpt = ""
     if excerpt:
         return excerpt
     return row.snippet or ""

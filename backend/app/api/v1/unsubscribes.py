@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.api.deps import current_user_id, db_session
+from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
 from app.db.models import ConnectedAccount, UnsubscribeSuggestion
@@ -52,11 +53,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 unsubscribes_router = APIRouter(prefix="/unsubscribes", tags=["unsubscribes"])
 hygiene_router = APIRouter(prefix="/hygiene", tags=["hygiene"])
+_APP_CONFIG = get_app_config()
 
-_TOP_DOMAIN_CAP = 10
+_TOP_DOMAIN_CAP = _APP_CONFIG.api.top_domain_cap
 """Plan §14 Phase 5 — dashboard card shows at most 10 top domains."""
 
-_RECOMMENDATION_CONFIDENCE_MIN = Decimal("0.800")
+_RECOMMENDATION_CONFIDENCE_MIN = _APP_CONFIG.api.unsubscribe_recommendation_confidence_min
 """Policy gate: low-confidence model veto rows are audit rows, not recommendations."""
 
 

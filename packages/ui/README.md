@@ -12,7 +12,6 @@ ui/
 ├── package.json
 ├── tsconfig.json
 ├── src/
-│   ├── tokens.css              # CSS custom properties — colors, radii, motion
 │   ├── index.ts                # barrel export for primitives
 │   └── primitives/
 │       └── Motion.tsx          # <Motion> helper honoring prefers-reduced-motion
@@ -29,5 +28,6 @@ Phase 0 ships tokens + a stub `<Motion>` helper. The full primitive set
 - **All motion goes through `<Motion>`** (plan §20.1 amendment of §19.16) —
   raw `motion.div` imports from `framer-motion` outside this package fail
   the lint step.
-- Tokens are CSS variables, not TS constants, so Storybook + Playwright
-  can exercise light/dark/reduced-motion themes without rebuilding.
+- Design tokens live in `frontend/src/styles/tokens.css` — a single fixed
+  Notion theme (see the repo-root `DESIGN.md`). This package ships
+  primitives only and no longer carries its own token sheet.

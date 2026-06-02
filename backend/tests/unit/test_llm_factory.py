@@ -21,6 +21,7 @@ def _settings(monkeypatch: pytest.MonkeyPatch, **env_overrides: str | None) -> S
     base: dict[str, str | None] = {
         "BRIEFED_RUNTIME": "local",
         "BRIEFED_ENV": "local",
+        "BRIEFED_OPENROUTER_API_KEY": "or-key",
         "OPENROUTER_API_KEY": "or-key",
         "BRIEFED_DAILY_LLM_USD_CAP": None,
         "BRIEFED_SSM_PREFIX": None,
@@ -50,7 +51,11 @@ async def test_factory_builds_catalog_chain(
 async def test_factory_requires_openrouter_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = _settings(monkeypatch, OPENROUTER_API_KEY=None)
+    settings = _settings(
+        monkeypatch,
+        BRIEFED_OPENROUTER_API_KEY="",
+        OPENROUTER_API_KEY="",
+    )
     async with httpx.AsyncClient() as http:
         with pytest.raises(ValueError, match="openrouter_api_key"):
             build_llm_client(settings=settings, http_client=http)

@@ -34,11 +34,12 @@ COPY backend ./backend
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
-# ---- Prompt bundles ----------------------------------------------------------
-# ``packages/prompts/`` holds the versioned prompt files
-# (plan §19.2 monorepo layout). Copy into the Lambda task root so the
-# prompt registry can open them without an S3 round-trip.
+# ---- Runtime bundles ---------------------------------------------------------
+# ``packages/prompts/`` holds the versioned prompt files and
+# ``packages/config/`` holds runtime catalogs. Copy both into the Lambda
+# task root so registry/catalog loaders can open them without an S3 round-trip.
 COPY packages/prompts ${LAMBDA_TASK_ROOT}/packages/prompts
+COPY packages/config ${LAMBDA_TASK_ROOT}/packages/config
 
 # ---- Runtime env --------------------------------------------------------------
 ENV BRIEFED_RUNTIME=lambda-api \

@@ -13,16 +13,20 @@ export interface Schemas {
   ConnectedAccount: Components['ConnectedAccountOut'];
   AccountsListResponse: Components['AccountsListResponse'];
   AccountPatchRequest: Components['ConnectedAccountPatchRequest'];
+  UserProfile: Components['UserProfileOut'];
+  UserProfilePatchRequest: Components['UserProfilePatchRequest'];
   UserPreferences: Components['UserPreferencesOut'];
   PreferencesPatchRequest: Components['PreferencesPatchRequest'];
+  UserSchedule: Components['UserScheduleOut'];
+  UserSchedulePatchRequest: Components['UserSchedulePatchRequest'];
   ManualRunRequest: Components['ManualRunRequest'];
   ManualRunResponse: Components['ManualRunResponse'];
   RunStatus: Components['RunStatusResponse'];
   EmailRow: Components['EmailRowOut'];
   EmailBucketPatchRequest: Components['EmailBucketPatchRequest'];
   EmailsListResponse: Components['EmailsListResponse'];
-  JobMatch: Components['JobMatchOut'];
-  JobsListResponse: Components['JobMatchesListResponse'];
+  ErrorEnvelope: Components['ErrorEnvelope'];
+  MarkReadResponse: Components['MarkReadResponse'];
   UnsubscribeSuggestion: Components['UnsubscribeSuggestionOut'];
   UnsubscribesListResponse: Components['UnsubscribeSuggestionsListResponse'];
   HygieneStats: Components['HygieneStatsResponse'];
@@ -30,8 +34,7 @@ export interface Schemas {
   NewsDigestResponse: Components['NewsDigestResponse'];
   DigestToday: Components['DigestTodayResponse'];
   RubricRule: Components['RubricRuleOut'];
+  RubricRuleInput: Components['RubricRuleIn'];
   RubricListResponse: Components['RubricRulesListResponse'];
-  JobFilter: Components['JobFilterOut'];
-  JobFiltersListResponse: Components['JobFiltersListResponse'];
   RunsListResponse: Components['RunsListResponse'];
 }

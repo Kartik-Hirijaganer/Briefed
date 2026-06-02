@@ -10,7 +10,7 @@ import pytest
 
 from app.db.models import KnownWasteSender, RubricRule
 from app.domain.providers import EmailAddress, EmailMessage, UnsubscribeInfo
-from app.services.classification.rubric import RuleEngine
+from app.services.classification.rubric import RuleEngine, default_rubric_seed
 
 
 def _email(
@@ -79,13 +79,50 @@ def test_known_waste_seed_always_wins() -> None:
     engine = RuleEngine(user_rules=(user,), seed_waste=(seed,))
     result = engine.evaluate(_email(from_email="spam@x.com"))
     assert result is not None
-    assert result.label == "waste"
+    assert result.label == "ignore"
 
 
 def test_from_domain_matches_subdomain() -> None:
     rule = _rule(priority=10, match={"from_domain": "example.com"}, label="newsletter")
     engine = RuleEngine(user_rules=(rule,), seed_waste=())
-    assert engine.evaluate(_email(from_email="news@mail.example.com")) is not None
+    result = engine.evaluate(_email(from_email="news@mail.example.com"))
+    assert result is not None
+    assert result.label == "good_to_read"
+    assert result.is_newsletter is True
+
+
+def test_legacy_waste_label_maps_to_ignore() -> None:
+    rule = _rule(priority=10, match={"from_email": "promo@example.com"}, label="waste")
+    engine = RuleEngine(user_rules=(rule,), seed_waste=())
+    result = engine.evaluate(_email(from_email="promo@example.com"))
+    assert result is not None
+    assert result.label == "ignore"
+
+
+def test_subject_contains_matches_case_insensitive_substring() -> None:
+    rule = _rule(priority=10, match={"subject_contains": "invoice"}, label="ignore")
+    engine = RuleEngine(user_rules=(rule,), seed_waste=())
+    assert engine.evaluate(_email(subject="Your Invoice Is Ready")) is not None
+    assert engine.evaluate(_email(subject="status update")) is None
+
+
+def test_topic_keyword_matches_subject_or_snippet() -> None:
+    rule = _rule(
+        priority=10,
+        match={"topic_keyword": ["security alert", "verification code"]},
+        label="must_read",
+    )
+    engine = RuleEngine(user_rules=(rule,), seed_waste=())
+    assert engine.evaluate(_email(subject="Security alert for your account")) is not None
+    assert engine.evaluate(_email(subject="weekly digest")) is None
+
+
+def test_default_rubric_seed_loads_yaml() -> None:
+    seeds = default_rubric_seed()
+    names = {str(seed["name"]) for seed in seeds}
+
+    assert "Gmail important" in names
+    assert any(seed["match"] == {"subject_contains": "receipt"} for seed in seeds)
 
 
 def test_subject_regex_matches() -> None:

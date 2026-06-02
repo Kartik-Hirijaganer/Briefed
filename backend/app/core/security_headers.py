@@ -1,18 +1,17 @@
 """Security-headers middleware (plan §11, §14 Phase 8, §19.14).
 
-Adds the OWASP-baseline header set to every response so direct hits on
-the Lambda Function URL (during debugging or behind a misconfigured
-CDN) are still hardened. CloudFront is the production default; this
-middleware is the belt-and-braces tier when CloudFront is bypassed.
+Adds the OWASP-baseline header set to every response. In production,
+CloudFront fronts the API Lambda Function URL with OAC + SigV4, so the
+Function URL is not directly callable. This middleware remains
+defense-in-depth for local/uvicorn execution and any non-CloudFront
+runtime path.
 
 CSP rules (kept tight per Phase 8 exit criteria):
 
 * ``default-src 'self'`` — block any cross-origin resource by default.
-* ``script-src 'self' 'sha256-...'`` — Vite emits hashed bundles. The
-  one inline script is the FOUC theme resolver in
-  ``frontend/index.html`` (Track C — Phase I.5); its body is pinned
-  via SHA-256 hash so altering it without bumping the hash blocks
-  the script.
+* ``script-src 'self'`` — Vite emits hashed bundles and there is no
+  inline script. Briefed ships a single fixed theme, so the inline FOUC
+  theme resolver was removed; ``'self'`` alone is sufficient.
 * ``style-src 'self' 'unsafe-inline'`` — Tailwind injects inline style
   blocks for the variable layer; we cannot drop ``'unsafe-inline'``
   without a runtime hash list. Acceptable because we forbid runtime
@@ -25,8 +24,9 @@ CSP rules (kept tight per Phase 8 exit criteria):
   ``X-Frame-Options: DENY``.
 * ``form-action 'self'``, ``base-uri 'self'`` — defense-in-depth.
 
-Tests in ``backend/tests/integration/test_security_headers.py`` assert
-the header set is present on a representative endpoint.
+``test_security_headers_present`` in
+``backend/tests/integration/test_frontend_api.py`` asserts the header
+set is present on a representative endpoint.
 """
 
 from __future__ import annotations
@@ -45,19 +45,10 @@ if TYPE_CHECKING:  # pragma: no cover
 # middleware cannot drift. Dev / Storybook builds widen ``connect-src``
 # via the ``BRIEFED_CSP_RELAX`` toggle wired into Settings later if
 # needed; production stays this strict.
-_FOUC_SCRIPT_HASH = "'sha256-fR2NYStsW2BshKwCzIT9vedLP8WxYCyrqpkonquA9ss='"
-"""SHA-256 of the inline FOUC theme resolver in ``frontend/index.html``.
-
-Pinned via CSP hash so the inline script runs without ``'unsafe-inline'``.
-Edits to the script body must recompute this hash + the matching meta
-CSP token; both are kept in lockstep.
-"""
-
-
 _CSP = "; ".join(
     [
         "default-src 'self'",
-        f"script-src 'self' {_FOUC_SCRIPT_HASH}",
+        "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",

@@ -2,7 +2,7 @@
 
 Phase 2 exit criterion: "tool-use JSON ``extra='forbid'`` rejects extra
 fields." This module confirms
-``packages/prompts/schemas/triage.v1.json`` stays in lock-step with
+``packages/prompts/schemas/triage.v2.json`` stays in lock-step with
 :class:`app.llm.schemas.TriageDecision`.
 """
 
@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from app.llm.schemas import TriageDecision
 
 _SCHEMA_PATH = (
-    Path(__file__).resolve().parents[3] / "packages" / "prompts" / "schemas" / "triage.v1.json"
+    Path(__file__).resolve().parents[3] / "packages" / "prompts" / "schemas" / "triage.v2.json"
 )
 
 

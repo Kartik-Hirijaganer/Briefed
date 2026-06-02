@@ -27,7 +27,7 @@ export function OpenInGmailLink(props: OpenInGmailLinkProps): JSX.Element {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-xs text-accent underline-offset-4 hover:underline"
+      className="text-xs text-link underline-offset-4 hover:underline"
     >
       {label}
     </a>

@@ -67,6 +67,7 @@ def _build_engine(url: str) -> AsyncEngine:
     """
     return create_async_engine(
         url,
+        connect_args={"statement_cache_size": 0},
         poolclass=NullPool,
         pool_pre_ping=True,
         future=True,

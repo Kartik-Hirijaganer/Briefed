@@ -1,11 +1,12 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /**
  * Props for {@link EmptyState}.
  */
 export interface EmptyStateProps {
-  /** Optional icon glyph (e.g. `'mail'`). Renders as a centred emoji today. */
-  readonly icon?: 'mail' | 'inbox' | 'bolt' | 'check' | 'warning';
+  /** Optional lucide icon component, rendered monochrome (inherits `currentColor`). */
+  readonly icon?: LucideIcon;
   /** Heading copy. */
   readonly title: string;
   /** Optional supporting paragraph. */
@@ -14,14 +15,6 @@ export interface EmptyStateProps {
   readonly cta?: ReactNode;
 }
 
-const ICON_GLYPH: Record<NonNullable<EmptyStateProps['icon']>, string> = {
-  mail: '✉️',
-  inbox: '📥',
-  bolt: '⚡',
-  check: '✓',
-  warning: '⚠',
-};
-
 /**
  * Neutral empty-state block used when a list or data view has no content.
  *
@@ -29,16 +22,14 @@ const ICON_GLYPH: Record<NonNullable<EmptyStateProps['icon']>, string> = {
  * @returns The rendered placeholder block.
  */
 export function EmptyState(props: EmptyStateProps): JSX.Element {
-  const { icon, title, description, cta } = props;
+  const { icon: Icon, title, description, cta } = props;
   return (
     <div
       role="status"
       className="flex flex-col items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-border bg-surface p-8 text-center"
     >
-      {icon ? (
-        <span aria-hidden="true" className="text-3xl">
-          {ICON_GLYPH[icon]}
-        </span>
+      {Icon ? (
+        <Icon aria-hidden="true" strokeWidth={1.5} className="h-8 w-8 text-fg-faint" />
       ) : null}
       <h3 className="text-base font-semibold text-fg">{title}</h3>
       {description ? <p className="max-w-sm text-sm text-fg-muted">{description}</p> : null}

@@ -1,9 +1,9 @@
 """Summarize SQS handler (plan §14 Phase 3).
 
-One invocation processes one :class:`SummarizeEmailMessage` or one
-:class:`TechNewsClusterMessage`. The handler is deliberately thin: it
-wires the session, prompt registry, LLM client, and repo, then hands
-off to :mod:`app.services.summarization`.
+One invocation processes one :class:`SummarizeEmailMessage`, one
+:class:`TechNewsClusterMessage`, or one :class:`CategoryDigestMessage`.
+The handler is deliberately thin: it wires the session, prompt registry,
+LLM client, and repo, then hands off to :mod:`app.services.summarization`.
 
 Retry semantics:
 
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -29,12 +30,15 @@ from app.observability.metrics import (
     emit_summarize_email_metric,
 )
 from app.services.summarization import (
+    CategoryDigestInputs,
+    CategoryDigestOutcome,
     ClusterRouter,
     SummariesRepo,
     SummarizeInputs,
     TechNewsInputs,
     cluster_and_summarize,
     load_default_router,
+    summarize_category,
     summarize_email,
 )
 
@@ -46,7 +50,11 @@ if TYPE_CHECKING:  # pragma: no cover
     from app.services.prompts.registry import PromptRegistry
     from app.services.summarization.relevant import SummarizeOutcome
     from app.services.summarization.tech_news import TechNewsOutcome
-    from app.workers.messages import SummarizeEmailMessage, TechNewsClusterMessage
+    from app.workers.messages import (
+        CategoryDigestMessage,
+        SummarizeEmailMessage,
+        TechNewsClusterMessage,
+    )
 
 
 logger = get_logger(__name__)
@@ -198,6 +206,61 @@ async def handle_tech_news_cluster(
     return outcome
 
 
+async def handle_category_digest(
+    message: CategoryDigestMessage,
+    *,
+    deps: SummarizeDeps,
+    user_id: UUID,
+) -> CategoryDigestOutcome:
+    """Process one :class:`CategoryDigestMessage`.
+
+    Args:
+        message: The validated payload.
+        deps: :class:`SummarizeDeps`.
+        user_id: Owner of ``message.run_id``.
+
+    Returns:
+        :class:`CategoryDigestOutcome` for observability.
+
+    Raises:
+        LookupError: When the prompt version row is missing.
+        CategoryDigestNotReadyError: When the run/category set is
+            incomplete and must be retried later.
+    """
+    prompt = deps.registry.get("category_digest", version=1)
+    prompt_row = await _load_prompt_row(
+        session=deps.session,
+        content_hash=prompt.content_hash,
+        message="category_digest v1",
+    )
+
+    started = utcnow()
+    outcome = await summarize_category(
+        CategoryDigestInputs(
+            user_id=user_id,
+            run_id=message.run_id,
+            category=message.category,
+            prompt=prompt,
+            prompt_version_id=prompt_row.id,
+            llm=deps.llm,
+            repo=deps.repo,
+        ),
+        session=deps.session,
+    )
+    logger.info(
+        "summarize.category.handler.completed",
+        run_id=str(outcome.run_id),
+        category=outcome.category,
+        ok=outcome.ok,
+        confidence=outcome.confidence,
+        cache_hit=outcome.cache_hit,
+        fallback_used=outcome.fallback_used,
+        skipped_reason=outcome.skipped_reason,
+        elapsed_ms=int((utcnow() - started).total_seconds() * 1000),
+    )
+    return outcome
+
+
 async def _load_prompt_row(
     *,
     session: AsyncSession,
@@ -233,6 +296,7 @@ async def _load_prompt_row(
 
 __all__ = [
     "SummarizeDeps",
+    "handle_category_digest",
     "handle_summarize_email",
     "handle_tech_news_cluster",
 ]

@@ -12,8 +12,8 @@ hooks below.
 **Briefed 1.0.0 is out — a personal AI email agent that runs a daily
 pipeline on your Gmail inbox.** It classifies every new email into
 must-read / good-to-read / ignore / waste, summarizes what matters,
-extracts job postings into a filterable list, and recommends senders
-to unsubscribe from. It never clicks unsubscribe, archives, or sends
+rolls up newsletter clusters, and recommends senders to unsubscribe
+from. It never clicks unsubscribe, archives, or sends
 on your behalf — recommend-only, by design (ADR 0006). Self-hosted on
 AWS Lambda + SnapStart, ~$8–11/month total to run, MIT-licensed.
 
@@ -30,9 +30,6 @@ Release notes: [`docs/release/v1.0.0.md`](v1.0.0.md)
   *why* a row landed in a bucket.
 - **Tech-news clustering.** Newsletters get summarized as a single
   cluster card, not a wall of repeated snippets.
-- **Job extractor with JSONB filters.** `min_salary_usd`, `location`,
-  `seniority_in`, etc. — applied at extraction time so the dashboard
-  shows post-filter results.
 - **Unsubscribe recommender.** Aggregates 30 days of behavior,
   flags high-volume / low-engagement senders, asks an LLM only on
   borderline cases. No auto-action — you click.
@@ -40,7 +37,7 @@ Release notes: [`docs/release/v1.0.0.md`](v1.0.0.md)
   offline read-through via Dexie + Workbox; mutations queue and
   replay on reconnect.
 - **Two customer-managed KMS CMKs.** OAuth tokens encrypt under one;
-  email summaries / classification reasons / job-match reasons /
+  email summaries / classification reasons / category digests /
   unsubscribe rationales encrypt under another. A Supabase-side leak
   yields metadata only.
 - **Operator-friendly.** Runbooks, alarms, chaos drills, blue/green
@@ -64,8 +61,8 @@ EventBridge Scheduler  ──▶  fan-out Lambda  ──▶  SQS (per stage)
                                                    ▼
                             ┌────────────────  worker Lambdas (SnapStart)
                             │                   │     │     │
-                            │             classify  summarize  jobs
-                            │                   │     │     │
+                            │             classify  summarize
+                            │                   │     │
                             └─────▶  Postgres (Supabase, KMS-encrypted blobs)
                                                    │
                                                    ▼

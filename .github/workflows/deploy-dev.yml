@@ -23,6 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Python deps
+        run: pip install -e ".[dev]"
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -62,10 +76,63 @@ jobs:
           docker push "$IMAGE"
           echo "image_uri=$IMAGE" >> "$GITHUB_OUTPUT"
 
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build frontend (PWA bundle)
+        run: npm --workspace frontend run build
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
+
+      - name: Generate Terraform backend config
+        working-directory: infra/terraform/envs/dev
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "briefed-tf-state-dev-${ACCOUNT_ID}"
+              key            = "dev/terraform.tfstate"
+              region         = "us-east-1"
+              dynamodb_table = "briefed-tf-lock-dev"
+              encrypt        = true
+            }
+          }
+          EOF
+
+      - name: Resolve dev database URL
+        id: db-url
+        env:
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          value="$DEV_DATABASE_URL"
+          if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+            value="$(aws ssm get-parameter \
+              --name /briefed/dev/supabase_db_url \
+              --with-decryption \
+              --query 'Parameter.Value' \
+              --output text)"
+          fi
+          if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+            echo "::error::Dev database URL is unset or still a placeholder."
+            exit 1
+          fi
+          echo "::add-mask::$value"
+          echo "database_url=$value" >> "$GITHUB_OUTPUT"
+
+      - name: Run Alembic migrations against dev
+        # Keep dev aligned with prod: additive migrations run before
+        # Terraform publishes the new Lambda version/alias, so new code
+        # never serves against an older schema.
+        env:
+          BRIEFED_DATABASE_URL: ${{ steps.db-url.outputs.database_url }}
+          BRIEFED_RUNTIME: local
+        run: |
+          alembic -c backend/alembic.ini upgrade head
 
       - name: Terraform apply (dev)
         working-directory: infra/terraform/envs/dev
@@ -90,8 +157,8 @@ jobs:
           set -euo pipefail
           put_secret() {
             local name="$1" value="$2"
-            if [ -z "$value" ]; then
-              echo "skip: $name (no GitHub secret set)"
+            if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]] || [[ "$value" == PLACEHOLDER* ]]; then
+              echo "skip: $name (no GitHub secret set or placeholder value)"
               return
             fi
             aws ssm put-parameter \
@@ -105,7 +172,28 @@ jobs:
           put_secret /briefed/dev/google_oauth_client_secret  "$GOOGLE_OAUTH_CLIENT_SECRET"
           put_secret /briefed/dev/session_signing_key         "$SESSION_SIGNING_KEY"
 
-      - name: Smoke check /health
+      - name: Deploy PWA to S3 + invalidate CloudFront
+        working-directory: infra/terraform/envs/dev
         run: |
-          URL=$(terraform -chdir=infra/terraform/envs/dev output -raw function_url)
-          curl --fail --retry 5 --retry-delay 3 "${URL}health"
+          BUCKET=$(terraform output -raw pwa_bucket)
+          aws s3 sync ../../../../frontend/dist "s3://${BUCKET}" --delete
+          DIST_DOMAIN=$(terraform output -raw cloudfront_domain)
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?DomainName=='${DIST_DOMAIN}'].Id" \
+            --output text)
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+
+      - name: Smoke check live API through CloudFront
+        run: |
+          DOMAIN=$(terraform -chdir=infra/terraform/envs/dev output -raw cloudfront_domain)
+          # custom_error_response rewrites origin 403/404 -> /index.html (200), so `--fail`
+          # alone can PASS on masked HTML. Assert the body is real OpenAPI JSON:
+          curl -fsS --retry 5 --retry-delay 3 "https://${DOMAIN}/openapi.json" \
+            | jq -e '.openapi and .paths' >/dev/null
+          # Exercise a body-bearing write end-to-end (must carry x-amz-content-sha256 — §2/Phase 3).
+          # A masked edge 403 returns text/html; the app returns application/json — assert JSON:
+          ct=$(curl -s -o /dev/null -w '%{content_type}' -X POST \
+            -H 'content-type: application/json' \
+            -H "x-amz-content-sha256: $(printf '{}' | shasum -a 256 | cut -d' ' -f1)" \
+            -d '{}' "https://${DOMAIN}/api/v1/runs")
+          case "$ct" in application/json*) : ;; *) echo "POST masked/blocked at edge (got $ct)"; exit 1 ;; esac

@@ -22,7 +22,7 @@ export function Card(props: CardProps): JSX.Element {
   const { children, flush, className, ...rest } = props;
   const padding = flush ? '' : 'p-4';
   const classes = [
-    'rounded-[var(--radius-md)] border border-border bg-surface text-fg',
+    'rounded-[var(--radius-lg)] border border-border bg-surface text-fg',
     padding,
     className ?? '',
   ]
