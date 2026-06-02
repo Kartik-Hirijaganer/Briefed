@@ -32,8 +32,8 @@ def _load(name: str) -> list[dict[str, object]]:
     "fixture_file",
     [
         "triage_v1_adversarial.jsonl",
+        "triage_v2_adversarial.jsonl",
         "summarize_relevant_v1_adversarial.jsonl",
-        "job_extract_v1_adversarial.jsonl",
     ],
 )
 def test_adversarial_fixtures_well_formed(fixture_file: str) -> None:
@@ -63,13 +63,3 @@ def test_summarize_adversarial_fixtures_target_known_attacks() -> None:
         "fake-system-instruction attack missing"
     )
     assert "Ignore previous instructions" in bodies, "instruction-override attack missing"
-
-
-def test_job_adversarial_fixtures_target_known_attacks() -> None:
-    """Jobs adversarial set covers the Phase 8 attack catalog."""
-    entries = _load("job_extract_v1_adversarial.jsonl")
-    bodies = "\n".join(str(e["vars"]["plain_text_excerpt"]) for e in entries)
-    assert "</untrusted_email>" in bodies, "delimiter break-out attack missing"
-    assert "<prompt>" in bodies or "[SYSTEM_INSTRUCTION]" in bodies, (
-        "fake-system-instruction attack missing"
-    )

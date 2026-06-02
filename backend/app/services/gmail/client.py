@@ -14,6 +14,7 @@ HTTP 429 / 5xx until the decorator's stop-condition fires.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -186,6 +187,65 @@ class GmailClient:
         self._raise_for_status(response)
         return response.json()  # type: ignore[no-any-return]
 
+    async def get_message_labels(
+        self,
+        *,
+        access_token: str,
+        message_id: str,
+    ) -> tuple[str, ...]:
+        """Fetch the current labels for one message.
+
+        Args:
+            access_token: Bearer token.
+            message_id: Gmail message id.
+
+        Returns:
+            Current Gmail ``labelIds`` for the message.
+
+        Raises:
+            GmailApiError: Non-2xx response after retries.
+        """
+        response = await self._get(
+            f"/messages/{message_id}",
+            access_token,
+            {"format": "minimal"},
+        )
+        self._raise_for_status(response)
+        label_ids = response.json().get("labelIds") or ()
+        return tuple(label for label in label_ids if isinstance(label, str))
+
+    async def batch_modify_messages(
+        self,
+        *,
+        access_token: str,
+        message_ids: Sequence[str],
+        remove_label_ids: Sequence[str],
+    ) -> None:
+        """Remove labels from messages with Gmail ``batchModify``.
+
+        Args:
+            access_token: Bearer token with ``gmail.modify``.
+            message_ids: Gmail message ids to mutate.
+            remove_label_ids: Labels to remove. This client method is
+                intentionally restricted to removing only ``UNREAD``.
+
+        Raises:
+            GmailApiError: Non-2xx response after retries.
+            ValueError: If callers attempt any mutation except removing
+                ``UNREAD``.
+        """
+        ids = tuple(dict.fromkeys(message_ids))
+        if not ids:
+            return
+        if tuple(remove_label_ids) != ("UNREAD",):
+            raise ValueError("Gmail batchModify is restricted to removing UNREAD")
+        response = await self._post(
+            "/messages/batchModify",
+            access_token,
+            {"ids": list(ids), "removeLabelIds": ["UNREAD"]},
+        )
+        self._raise_for_status(response)
+
     async def get_profile_history_id(self, *, access_token: str) -> int:
         """Return the mailbox's current ``historyId`` watermark.
 
@@ -233,6 +293,44 @@ class GmailClient:
         response = await self._client.get(
             f"{API_ROOT}{path}",
             params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30.0,
+        )
+        if response.status_code == 429:
+            raise QuotaExceededError("Gmail returned 429 — backing off")
+        if 500 <= response.status_code < 600:
+            raise QuotaExceededError(f"Gmail 5xx: {response.status_code}")
+        return response
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=0.5, max=8.0),
+        retry=retry_if_exception_type(QuotaExceededError),
+    )
+    async def _post(
+        self,
+        path: str,
+        access_token: str,
+        json_body: dict[str, object],
+    ) -> httpx.Response:
+        """Issue a rate-limited POST with a tenacity retry on 429.
+
+        Args:
+            path: API path relative to :data:`API_ROOT`.
+            access_token: Bearer token.
+            json_body: JSON body for Gmail.
+
+        Returns:
+            The :class:`httpx.Response`; the caller inspects status.
+
+        Raises:
+            QuotaExceededError: When Gmail responds 429 or 5xx.
+        """
+        await self._bucket.acquire(1.0)
+        response = await self._client.post(
+            f"{API_ROOT}{path}",
+            json=json_body,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30.0,
         )

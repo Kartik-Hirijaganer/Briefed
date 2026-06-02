@@ -266,12 +266,22 @@ jobs:
             --output text)
           aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
 
-      - name: Smoke check live /health
+      - name: Smoke check live API through CloudFront
         id: smoke
         working-directory: ${{ env.TF_DIR }}
         run: |
-          URL=$(terraform output -raw function_url)
-          curl --fail --retry 5 --retry-delay 3 "${URL}health"
+          DOMAIN=$(terraform output -raw cloudfront_domain)
+          # custom_error_response rewrites origin 403/404 -> /index.html (200), so `--fail`
+          # alone can PASS on masked HTML. Assert the body is real OpenAPI JSON:
+          curl -fsS --retry 5 --retry-delay 3 "https://${DOMAIN}/openapi.json" \
+            | jq -e '.openapi and .paths' >/dev/null
+          # Exercise a body-bearing write end-to-end (must carry x-amz-content-sha256 — §2/Phase 3).
+          # A masked edge 403 returns text/html; the app returns application/json — assert JSON:
+          ct=$(curl -s -o /dev/null -w '%{content_type}' -X POST \
+            -H 'content-type: application/json' \
+            -H "x-amz-content-sha256: $(printf '{}' | shasum -a 256 | cut -d' ' -f1)" \
+            -d '{}' "https://${DOMAIN}/api/v1/runs")
+          case "$ct" in application/json*) : ;; *) echo "POST masked/blocked at edge (got $ct)"; exit 1 ;; esac
 
       - name: Auto-rollback on smoke failure
         if: failure() && steps.smoke.conclusion == 'failure' && steps.pre.outputs.api_version != ''

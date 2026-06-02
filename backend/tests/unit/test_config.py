@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -70,8 +71,30 @@ def test_local_runtime_does_not_hit_ssm(monkeypatch: pytest.MonkeyPatch) -> None
     assert settings.runtime == "local"
 
 
+def test_local_runtime_reads_prefixed_env_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Local settings accept the documented ``BRIEFED_`` env names."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BRIEFED_RUNTIME", "local")
+    monkeypatch.setenv("BRIEFED_ENV", "dev")
+    monkeypatch.setenv("BRIEFED_OPENROUTER_API_KEY", "fake-openrouter-env")
+    monkeypatch.setenv("BRIEFED_DATABASE_URL", "postgresql+asyncpg://x@y/env")
+    monkeypatch.delenv("ENV", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    settings = load_settings()
+
+    assert settings.env == "dev"
+    assert settings.openrouter_api_key == "fake-openrouter-env"
+    assert settings.database_url == "postgresql+asyncpg://x@y/env"
+
+
 def test_lambda_runtime_without_prefix_is_local_shape(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """If ``BRIEFED_SSM_PREFIX`` is unset the Lambda never tries to hydrate.
 
@@ -79,8 +102,11 @@ def test_lambda_runtime_without_prefix_is_local_shape(
     secrets — callers still check ``settings.openrouter_api_key is not None``
     downstream, so local semantics are the safe default.
     """
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
     monkeypatch.delenv("BRIEFED_SSM_PREFIX", raising=False)
+    monkeypatch.delenv("BRIEFED_OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
     settings = load_settings()
     assert settings.ssm_prefix is None
@@ -110,6 +136,26 @@ def test_lambda_runtime_hydrates_from_ssm(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.google_oauth_client_id == "fake-client-id"
     assert settings.google_oauth_client_secret == "fake-client-secret"
     assert settings.database_url == "postgresql+asyncpg://x@y/z"
+
+
+def test_lambda_runtime_prefixed_env_overrides_ssm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Documented local env names still win when Lambda hydration runs."""
+    prefix = "/briefed/dev/"
+    monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
+    monkeypatch.setenv("BRIEFED_SSM_PREFIX", prefix)
+
+    fake = _FakeSsm(_required_ssm_payload(prefix))
+    settings = load_settings(
+        ssm_client=fake,
+        env={
+            "BRIEFED_OPENROUTER_API_KEY": "fake-openrouter-env",
+            "BRIEFED_DATABASE_URL": "postgresql+asyncpg://x@y/env",
+        },
+    )
+
+    assert settings.openrouter_api_key == "fake-openrouter-env"
+    assert settings.database_url == "postgresql+asyncpg://x@y/env"
+    assert settings.session_signing_key == "fake-session"
 
 
 def test_lambda_runtime_rejects_missing_required_parameters(

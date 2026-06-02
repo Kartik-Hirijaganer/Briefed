@@ -1,8 +1,7 @@
-"""Track B Phase 6 — redaction quality eval harness.
+"""Redaction quality eval harness.
 
-Runs ``summarize_relevant_v1`` over a small fixture set three ways
-(raw, regex+identity, full chain) and prints a markdown table that
-pastes into ADR 0010 §"Phase 6 — Quality eval".
+Runs a small fixture set with and without the lightweight redaction
+chain and prints a markdown table for manual review.
 
 The fixture set is intentionally small — five emails covering common
 shapes (newsletter, person-to-person, notification, job alert, calendar
@@ -32,15 +31,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from app.llm.redaction import (
-    IdentityScrubber,
-    PresidioSanitizer,
-    RegexSanitizer,
-    SanitizerChain,
-)
+from app.llm.redaction import IdentityScrubber, RegexSanitizer, SanitizerChain
 from app.llm.redaction.types import RedactionResult, Sanitizer
 
-_Mode = Literal["raw", "regex_identity", "full"]
+_Mode = Literal["raw", "regex_identity"]
 
 
 @dataclass(frozen=True)
@@ -105,8 +99,6 @@ def _build_sanitizer(
     if identities:
         sanitizers.append(IdentityScrubber(identities))
     sanitizers.append(RegexSanitizer())
-    if mode == "full":
-        sanitizers.append(PresidioSanitizer())
     return SanitizerChain(sanitizers)
 
 
@@ -151,21 +143,18 @@ def _format_table(outcomes: list[_Outcome]) -> str:
         rows.setdefault(outcome.kind, {})[outcome.mode] = outcome
 
     lines = [
-        "| Kind | Raw TTFT | Raw total | RI TTFT | RI total | Full TTFT | Full total |",
-        "|------|----------|-----------|---------|----------|-----------|------------|",
+        "| Kind | Raw TTFT | Raw total | RI TTFT | RI total |",
+        "|------|----------|-----------|---------|----------|",
     ]
     for kind, by_mode in rows.items():
         raw = by_mode.get("raw")
         ri = by_mode.get("regex_identity")
-        full = by_mode.get("full")
         lines.append(
             f"| {kind} | "
             f"{raw.ttft_ms if raw else '—'} | "
             f"{raw.total_ms if raw else '—'} | "
             f"{ri.ttft_ms if ri else '—'} | "
-            f"{ri.total_ms if ri else '—'} | "
-            f"{full.ttft_ms if full else '—'} | "
-            f"{full.total_ms if full else '—'} |",
+            f"{ri.total_ms if ri else '—'} |",
         )
     return "\n".join(lines)
 
@@ -180,7 +169,7 @@ async def main_async(
     samples = _load_samples(fixtures)
     outcomes: list[_Outcome] = []
     for sample in samples:
-        for mode in ("raw", "regex_identity", "full"):
+        for mode in ("raw", "regex_identity"):
             outcomes.append(
                 await _run_sample(
                     sample,
@@ -195,7 +184,7 @@ async def main_async(
 def main() -> None:
     """CLI entrypoint."""
     parser = argparse.ArgumentParser(
-        description="Track B Phase 6 redaction quality eval.",
+        description="Redaction quality eval.",
     )
     parser.add_argument(
         "--fixtures",

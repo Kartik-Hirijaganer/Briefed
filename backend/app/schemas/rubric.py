@@ -18,7 +18,9 @@ _ALLOWED_MATCH_KEYS = frozenset(
     {
         "from_domain",
         "from_email",
+        "subject_contains",
         "subject_regex",
+        "topic_keyword",
         "has_label",
         "list_unsubscribe_present",
         "header_equals",
@@ -30,8 +32,6 @@ _ALLOWED_LABELS = frozenset(
         "must_read",
         "good_to_read",
         "ignore",
-        "waste",
-        "needs_review",
     },
 )
 
@@ -41,6 +41,7 @@ class RubricRuleIn(BaseModel):
 
     Attributes:
         priority: Higher wins. Defaults to ``100``.
+        name: Human-readable settings label.
         match: Predicate dict; keys limited to
             :data:`_ALLOWED_MATCH_KEYS`.
         action: Verdict dict; must contain ``label`` ∈
@@ -51,6 +52,7 @@ class RubricRuleIn(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     priority: int = Field(default=100, ge=0, le=100_000)
+    name: str = Field(default="Untitled rule", min_length=1, max_length=120)
     match: dict[str, Any] = Field(..., min_length=1)
     action: dict[str, Any] = Field(...)
     active: bool = Field(default=True)
@@ -78,10 +80,11 @@ class RubricRuleIn(BaseModel):
             raise ValueError("action.confidence must be a number in [0, 1]") from exc
         if not 0.0 <= conf <= 1.0:
             raise ValueError("action.confidence must be in [0, 1]")
-        for flag_name in ("is_newsletter", "is_job_candidate"):
-            flag_value = value.get(flag_name)
-            if flag_value is not None and not isinstance(flag_value, bool):
-                raise ValueError(f"action.{flag_name} must be a boolean when present")
+        flag_value = value.get("is_newsletter")
+        if flag_value is not None and not isinstance(flag_value, bool):
+            raise ValueError("action.is_newsletter must be a boolean when present")
+        if "is_job_candidate" in value:
+            raise ValueError("action.is_job_candidate was removed with the jobs feature")
         return value
 
 
@@ -90,6 +93,7 @@ class RubricRuleOut(BaseModel):
 
     Attributes:
         id: Rule primary key.
+        name: Human-readable settings label.
         priority: Priority plumbed through from the DB row.
         match: Predicate dict.
         action: Verdict dict.
@@ -102,6 +106,7 @@ class RubricRuleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     id: UUID
+    name: str
     priority: int
     match: dict[str, Any]
     action: dict[str, Any]

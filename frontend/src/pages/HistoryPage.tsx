@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Inbox } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -41,7 +42,7 @@ export default function HistoryPage(): JSX.Element {
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Run history</h1>
+          <h1 className="font-display text-xl font-semibold tracking-tight">Run history</h1>
           <FreshnessBadge
             state={freshness.state}
             lastKnownGoodAt={freshness.lastKnownGoodAt ?? undefined}
@@ -62,7 +63,7 @@ export default function HistoryPage(): JSX.Element {
             <li key={run.id}>
               <Link
                 to={`/history/${run.id}`}
-                className="block rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                className="block rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
               >
                 <Card className="flex flex-col gap-2">
                   <div className="flex items-center justify-between gap-3">
@@ -94,7 +95,7 @@ export default function HistoryPage(): JSX.Element {
         </ul>
       ) : (
         <EmptyState
-          icon="inbox"
+          icon={Inbox}
           title="No runs yet"
           description="Auto-scans and manual triggers both land here with their cost breakdown."
         />

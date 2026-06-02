@@ -40,6 +40,12 @@ variable "acm_certificate_arn" {
   default     = null
 }
 
+variable "web_acl_arn" {
+  description = "Optional AWS WAFv2 web ACL ARN to associate with the CloudFront distribution."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
@@ -53,6 +59,14 @@ locals {
 resource "aws_cloudfront_origin_access_control" "pwa" {
   name                              = "${var.name}-oac"
   origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_origin_access_control" "lambda" {
+  name                              = "${var.name}-lambda-oac"
+  description                       = "Signs CloudFront -> API Lambda Function URL requests (SigV4)."
+  origin_access_control_origin_type = "lambda"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
@@ -112,10 +126,29 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 }
 
 resource "aws_cloudfront_distribution" "this" {
-  enabled         = true
-  is_ipv6_enabled = true
-  comment         = var.name
-  aliases         = var.aliases
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = var.name
+  aliases             = var.aliases
+  default_root_object = "index.html"
+  web_acl_id          = var.web_acl_arn
+
+  # SPA fallback — when the PWA is hit at a deep route on a hard
+  # refresh (e.g. /settings/accounts), S3 returns 403/404 because
+  # only the assets directly under the bucket exist. Rewrite both
+  # to /index.html so React Router can take over client-side.
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
 
   origin {
     origin_id                = local.s3_origin_id
@@ -124,8 +157,9 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   origin {
-    origin_id   = local.lambda_origin_id
-    domain_name = var.lambda_function_url_host
+    origin_id                = local.lambda_origin_id
+    domain_name              = var.lambda_function_url_host
+    origin_access_control_id = aws_cloudfront_origin_access_control.lambda.id
     custom_origin_config {
       http_port              = 80
       https_port             = 443

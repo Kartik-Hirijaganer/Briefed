@@ -63,6 +63,19 @@ variable "maximum_batching_window_seconds" {
   default = 2
 }
 
+variable "maximum_concurrency_per_queue" {
+  description = "Maximum concurrent worker invokes per SQS queue. Keeps scans from consuming API capacity."
+  type        = number
+  default     = 2
+
+  validation {
+    condition = (
+      var.maximum_concurrency_per_queue >= 2 && var.maximum_concurrency_per_queue <= 1000
+    )
+    error_message = "maximum_concurrency_per_queue must be between 2 and 1000 for SQS sources."
+  }
+}
+
 variable "env_vars" {
   type    = map(string)
   default = {}
@@ -166,6 +179,10 @@ resource "aws_lambda_event_source_mapping" "stage" {
   batch_size                         = var.batch_size
   maximum_batching_window_in_seconds = var.maximum_batching_window_seconds
   function_response_types            = ["ReportBatchItemFailures"]
+
+  scaling_config {
+    maximum_concurrency = var.maximum_concurrency_per_queue
+  }
 }
 
 output "function_name" {

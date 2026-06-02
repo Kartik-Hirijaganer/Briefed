@@ -20,15 +20,19 @@ TriageCategory = Literal[
     "must_read",
     "good_to_read",
     "ignore",
-    "waste",
-    "needs_review",
 ]
-"""Primary triage-bucket enumeration mirrored from ``triage.v1.json``.
+"""Primary triage-bucket enumeration mirrored from ``triage.v2.json``.
 
-Newsletter and job-candidate detection are independent boolean flags, not
-primary buckets. Downstream routing fans out from those flags while the
-four-way attention label stays stable.
+Newsletter detection is an independent boolean flag, not a primary bucket.
+Low-confidence rows stay in one of these buckets and set
+``Classification.needs_review`` for the UI badge.
 """
+
+CategoryDigestCategory = Literal[
+    "must_read",
+    "good_to_read",
+]
+"""Categories that receive run-level digest rollups."""
 
 
 class TriageDecision(BaseModel):
@@ -39,7 +43,6 @@ class TriageDecision(BaseModel):
         confidence: Calibrated probability in ``[0, 1]``.
         reasons_short: One-sentence rationale; trimmed to 200 chars.
         is_newsletter: Convenience flag — subscribable bulk sender.
-        is_job_candidate: Convenience flag — recruiter / job reach-out.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -48,7 +51,6 @@ class TriageDecision(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
     reasons_short: str = Field(..., max_length=200)
     is_newsletter: bool = Field(default=False)
-    is_job_candidate: bool = Field(default=False)
 
     @field_validator("reasons_short")
     @classmethod
@@ -77,8 +79,7 @@ class EmailSummary(BaseModel):
             empty when the email is purely informational.
         entities: Zero-or-more proper-noun mentions the UI can surface
             as chips (people, orgs, products). Each entry is 1-80 chars.
-        confidence: Calibrated ``[0, 1]`` — values below 0.55 route the
-            row to ``needs_review`` in the pipeline policy gate.
+        confidence: Calibrated ``[0, 1]``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -105,102 +106,85 @@ class EmailSummary(BaseModel):
         return tuple(item.strip() for item in value if item and item.strip())
 
 
-class JobMatch(BaseModel):
-    """Structured extraction of a job posting (plan §6, §14 Phase 4).
-
-    Emitted by ``job_extract/v1.md``. Written — with ``match_reason``
-    envelope-encrypted — to the ``job_matches`` table via
-    :class:`app.services.jobs.repository.JobMatchesRepo`.
-
-    The model refuses extra fields so a hallucinated ``equity`` or
-    ``work_hours`` key cannot slip onto disk. Every numeric salary is
-    required to cite a verbatim ``comp_phrase`` lifted from the body;
-    :func:`app.services.jobs.extractor.corroborate_comp` rejects rows
-    whose phrase does not re-match the source body with a conservative
-    regex.
+class CategoryDigestGroup(BaseModel):
+    """One thematic group inside a category-level digest summary.
 
     Attributes:
-        title: Role title (e.g. "Senior Backend Engineer"). Required.
-        company: Hiring company / recruiting firm. Required.
-        location: Free-text location (city / region / country / empty).
-            ``None`` when absent — never an inferred default like
-            "Remote".
-        remote: Tri-state — ``True`` when the post explicitly says
-            remote is offered, ``False`` when it explicitly says on-site
-            only, ``None`` when the post is ambiguous.
-        comp_min: Inclusive lower bound of the compensation range, in
-            :attr:`currency` units. Omitted if the post does not state a
-            numeric range (we never infer from market rates).
-        comp_max: Inclusive upper bound of the compensation range.
-        currency: ISO-4217 currency code matching :attr:`comp_min` /
-            :attr:`comp_max`. Required when either bound is set.
-        comp_phrase: Verbatim text the LLM copied the salary from
-            (e.g. "$150k-$210k"). Powers the regex corroboration guard.
-        seniority: Optional seniority tier — one of the enum values to
-            keep filter predicates portable.
-        source_url: Apply / posting URL the recipient should open.
-            ``None`` if the email did not include one.
-        match_reason: One-paragraph fit rationale. Encrypted at rest.
-        confidence: Calibrated ``[0, 1]``. Values below 0.7 suppress
-            ``passed_filter=True`` (plan §14 Phase 4 exit criteria).
+        label: Short heading for the group.
+        bullets: Factual bullets synthesized from source email summaries.
+        item_refs: Opaque source item refs supplied in the prompt input.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    title: str = Field(..., min_length=1, max_length=200)
-    company: str = Field(..., min_length=1, max_length=200)
-    location: str | None = Field(default=None, max_length=200)
-    remote: bool | None = Field(default=None)
-    comp_min: int | None = Field(default=None, ge=0, le=10_000_000)
-    comp_max: int | None = Field(default=None, ge=0, le=10_000_000)
-    currency: str | None = Field(default=None, min_length=3, max_length=3)
-    comp_phrase: str | None = Field(default=None, max_length=200)
-    seniority: (
-        Literal[
-            "intern",
-            "junior",
-            "mid",
-            "senior",
-            "staff",
-            "principal",
-            "director",
-            "executive",
-        ]
-        | None
-    ) = Field(default=None)
-    source_url: str | None = Field(default=None, max_length=2048)
-    match_reason: str = Field(..., min_length=1, max_length=600)
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    label: str = Field(..., min_length=1, max_length=80, description="Short group heading.")
+    bullets: tuple[str, ...] = Field(
+        default=(),
+        max_length=5,
+        description="Factual bullets for this group.",
+    )
+    item_refs: tuple[str, ...] = Field(
+        default=(),
+        max_length=20,
+        description="Opaque source refs cited by this group.",
+    )
 
-    @field_validator("title", "company", "match_reason")
+    @field_validator("label")
     @classmethod
-    def _strip_required_text(cls, value: str) -> str:
-        """Strip whitespace; reject empty strings after trimming."""
+    def _strip_label(cls, value: str) -> str:
+        """Trim surrounding whitespace; reject empty labels."""
         stripped = value.strip()
         if not stripped:
-            raise ValueError("required text field must be non-empty")
+            raise ValueError("label must be non-empty")
         return stripped
 
-    @field_validator("location", "comp_phrase", "source_url")
+    @field_validator("bullets", "item_refs")
     @classmethod
-    def _strip_optional_text(cls, value: str | None) -> str | None:
-        """Trim whitespace; turn all-whitespace strings into ``None``."""
-        if value is None:
-            return None
-        stripped = value.strip()
-        return stripped or None
+    def _strip_items(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Drop empty entries and trim surrounding whitespace."""
+        return tuple(item.strip() for item in value if item and item.strip())
 
-    @field_validator("currency")
+
+class CategoryDigestSummary(BaseModel):
+    """Run-level synthesized summary for one triage category.
+
+    Produced by ``category_digest/v1.md`` after a run's classifications
+    and per-email summaries have fully drained. The input is the complete
+    run/category set of per-email TL;DRs and key points.
+
+    Attributes:
+        narrative: Short prose rollup for the category.
+        groups: Thematic source-backed groups.
+        confidence: Calibrated ``[0, 1]``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    narrative: str = Field(
+        ...,
+        min_length=1,
+        max_length=800,
+        description="Short prose rollup for the category.",
+    )
+    groups: tuple[CategoryDigestGroup, ...] = Field(
+        default=(),
+        max_length=8,
+        description="Thematic source-backed groups.",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Calibrated confidence that the digest is faithful.",
+    )
+
+    @field_validator("narrative")
     @classmethod
-    def _uppercase_currency(cls, value: str | None) -> str | None:
-        """Normalize ISO-4217 codes to uppercase."""
-        if value is None:
-            return None
-        stripped = value.strip().upper()
+    def _strip_narrative(cls, value: str) -> str:
+        """Trim surrounding whitespace; reject empty narratives."""
+        stripped = value.strip()
         if not stripped:
-            return None
-        if len(stripped) != 3 or not stripped.isalpha():
-            raise ValueError("currency must be a 3-letter ISO-4217 code")
+            raise ValueError("narrative must be non-empty")
         return stripped
 
 
@@ -309,8 +293,10 @@ class TechNewsClusterSummary(BaseModel):
 
 
 __all__ = [
+    "CategoryDigestCategory",
+    "CategoryDigestGroup",
+    "CategoryDigestSummary",
     "EmailSummary",
-    "JobMatch",
     "TechNewsClusterSummary",
     "TriageCategory",
     "TriageDecision",

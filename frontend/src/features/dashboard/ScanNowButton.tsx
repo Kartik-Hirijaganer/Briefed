@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -48,7 +49,15 @@ export function ScanNowButton(): JSX.Element {
 
   const startRun = useMutation({
     mutationFn: async (): Promise<Schemas['ManualRunResponse']> =>
-      unwrap(await api.POST('/api/v1/runs', { body: { kind: 'manual' } })),
+      unwrap(
+        await api.POST('/api/v1/runs', {
+          body: {
+            kind: 'manual',
+            mode: 'incremental',
+            include_user_overrides: false,
+          },
+        }),
+      ),
     onSuccess: (data) => {
       setActiveRunId(data.run_id);
       setJustFinishedCount(null);
@@ -103,18 +112,19 @@ export function ScanNowButton(): JSX.Element {
       }
       case 'success':
         return isMobile
-          ? `✓ ${justFinishedCount ?? 0} new emails · tap to view`
-          : `✓ Scanned ${justFinishedCount ?? 0} new emails`;
+          ? `${justFinishedCount ?? 0} new emails · tap to view`
+          : `Scanned ${justFinishedCount ?? 0} new emails`;
       case 'error':
-        return '⚠ Retry';
+        return 'Retry';
       default:
-        return '🔄 Scan now';
+        return 'Scan now';
     }
   })();
+  const LabelIcon = mode === 'success' ? Check : mode === 'error' ? TriangleAlert : RefreshCw;
 
   const tooltip = !online ? 'Connect to the internet to scan.' : undefined;
   const handleSuccessTap = (): void => {
-    if (mode === 'success') navigate('/must-read');
+    if (mode === 'success') navigate('/?bucket=must_read');
   };
 
   if (isMobile) {
@@ -135,7 +145,12 @@ export function ScanNowButton(): JSX.Element {
           aria-label="Start a manual scan"
           className="w-full"
         >
-          {label}
+          <LabelIcon
+            aria-hidden="true"
+            className={`h-4 w-4 ${mode === 'running' ? 'animate-spin' : ''}`}
+            strokeWidth={1.75}
+          />
+          <span>{label}</span>
         </Button>
         {mode === 'running' ? (
           <ul className="flex flex-col gap-1 text-xs text-fg-muted">
@@ -172,7 +187,12 @@ export function ScanNowButton(): JSX.Element {
         title={tooltip}
         aria-label="Start a manual scan"
       >
-        {label}
+        <LabelIcon
+          aria-hidden="true"
+          className={`h-4 w-4 ${mode === 'running' ? 'animate-spin' : ''}`}
+          strokeWidth={1.75}
+        />
+        <span>{label}</span>
       </Button>
       {mode === 'error' && startRun.error instanceof Error ? (
         <p role="alert" className="text-xs text-danger">

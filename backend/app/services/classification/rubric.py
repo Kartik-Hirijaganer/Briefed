@@ -6,7 +6,7 @@ dict produces a :class:`RuleDecision`. When no rule matches the caller
 escalates to the LLM.
 
 ``known_waste_senders`` are treated as synthetic *highest-priority*
-rules so new seed entries do not require a user-scoped copy.
+``ignore`` rules so new seed entries do not require a user-scoped copy.
 """
 
 from __future__ import annotations
@@ -14,15 +14,18 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
 from app.core.logging import get_logger
+from app.core.yaml import YamlConfigError, safe_load_yaml_file
 from app.db.models import KnownWasteSender, RubricRule
 
 if TYPE_CHECKING:  # pragma: no cover
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Mapping
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +48,9 @@ _ALLOWED_MATCH_KEYS = frozenset(
     {
         "from_domain",
         "from_email",
+        "subject_contains",
         "subject_regex",
+        "topic_keyword",
         "has_label",
         "list_unsubscribe_present",
         "header_equals",
@@ -55,14 +60,51 @@ _ALLOWED_MATCH_KEYS = frozenset(
 
 
 _LABEL_PRIORITY: dict[str, int] = {
-    "waste": 100,
     "must_read": 60,
     "good_to_read": 50,
     "ignore": 40,
-    "needs_review": 10,
 }
 """Tie-breaker used when two rules match the same email; mirrors the
 prompt contract."""
+
+_DEFAULT_SEED_PATH = (
+    Path(__file__).resolve().parents[4] / "packages" / "config" / "seeds" / "rubric_rules.yml"
+)
+"""Repository-owned default rubric seed path."""
+
+
+class RubricSeedRule(BaseModel):
+    """One default rubric rule loaded from YAML.
+
+    ``match`` and ``action`` intentionally retain JSON ``Any`` leaves
+    because rule-specific validators coerce and validate each supported
+    predicate/action key at the engine boundary.
+
+    Attributes:
+        name: Human-readable rule name.
+        priority: Rule priority; higher wins.
+        match: Predicate dict consumed by :class:`RuleEngine`.
+        action: Classification action dict consumed by :class:`RuleEngine`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=120, description="Rule display name.")
+    priority: int = Field(..., ge=0, le=100_000, description="Rule priority.")
+    match: dict[str, Any] = Field(..., min_length=1, description="Rule match predicate.")
+    action: dict[str, Any] = Field(..., description="Rule action payload.")
+
+
+class RubricSeedConfig(BaseModel):
+    """Default rubric seed file loaded from ``packages/config/seeds``.
+
+    Attributes:
+        rules: Ordered default rule definitions.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rules: tuple[RubricSeedRule, ...] = Field(default=(), description="Default rules.")
 
 
 @dataclass(frozen=True)
@@ -76,7 +118,6 @@ class RuleDecision:
         rubric_version: The winning rule's ``version``; ``0`` when the
             decision came from ``known_waste_senders``.
         is_newsletter: Independent newsletter flag.
-        is_job_candidate: Independent jobs flag.
         rule_id: Winning rule's id; ``None`` for synthetic-seed matches.
         source: Always ``"rule"`` from this module — classification
             pipeline promotes to ``hybrid`` if the LLM is also called.
@@ -88,7 +129,6 @@ class RuleDecision:
     rubric_version: int
     rule_id: UUID | None = None
     is_newsletter: bool = False
-    is_job_candidate: bool = False
     source: Literal["rule"] = "rule"
 
 
@@ -147,7 +187,7 @@ class RuleEngine:
                 candidates.append(
                     RuleMatch(
                         decision=RuleDecision(
-                            label="waste",
+                            label="ignore",
                             confidence=0.98,
                             reasons=(f"seed:{seed.reason or 'known-waste-sender'}",),
                             rubric_version=0,
@@ -164,10 +204,9 @@ class RuleEngine:
             _validate_match_keys(match, source=str(rule.id))
             if _match_predicate(match, email):
                 action = rule.action or {}
-                label, is_newsletter, is_job_candidate = _normalize_action_label(
+                label, is_newsletter = _normalize_action_label(
                     str(action.get("label") or "needs_review"),
                     bool(action.get("is_newsletter", False)),
-                    bool(action.get("is_job_candidate", False)),
                 )
                 confidence = float(action.get("confidence", 0.9))
                 reasons_list = action.get("reasons") or []
@@ -180,7 +219,6 @@ class RuleEngine:
                             reasons=reasons or (f"rule:{rule.id}",),
                             rubric_version=rule.version,
                             is_newsletter=is_newsletter,
-                            is_job_candidate=is_job_candidate,
                             rule_id=rule.id,
                         ),
                         priority=rule.priority,
@@ -200,20 +238,21 @@ class RuleEngine:
 def _normalize_action_label(
     label: str,
     is_newsletter: bool,
-    is_job_candidate: bool,
-) -> tuple[str, bool, bool]:
+) -> tuple[str, bool]:
     """Normalize legacy pseudo-labels into primary label + flags.
 
     Older fixtures and seed data may still use ``newsletter`` or
-    ``job_candidate`` as labels. New API writes should use primary labels
-    and the independent flags, but normalizing here keeps historical rows
-    from producing invalid downstream classifications.
+    ``job_candidate`` as labels. New API writes should use primary labels,
+    but normalizing here keeps historical rows from producing invalid
+    downstream classifications.
     """
     if label == "newsletter":
-        return "good_to_read", True, is_job_candidate
+        return "good_to_read", True
     if label == "job_candidate":
-        return "good_to_read", is_newsletter, True
-    return label, is_newsletter, is_job_candidate
+        return "good_to_read", is_newsletter
+    if label == "waste":
+        return "ignore", is_newsletter
+    return label, is_newsletter
 
 
 def _validate_match_keys(match: Mapping[str, Any], *, source: str) -> None:
@@ -263,7 +302,9 @@ def _check_clause(key: str, value: object, email: EmailMessage) -> bool:
     handlers: dict[str, _Handler] = {
         "from_domain": _check_from_domain,
         "from_email": _check_from_email,
+        "subject_contains": _check_subject_contains,
         "subject_regex": _check_subject_regex,
+        "topic_keyword": _check_topic_keyword,
         "has_label": _check_has_label,
         "list_unsubscribe_present": _check_list_unsubscribe_present,
         "header_equals": _check_header_equals,
@@ -288,12 +329,29 @@ def _check_from_email(value: object, email: EmailMessage) -> bool:
     return email.from_addr.email.lower() == str(value).lower()
 
 
+def _check_subject_contains(value: object, email: EmailMessage) -> bool:
+    needle = str(value).strip().lower()
+    if not needle:
+        return False
+    return needle in (email.subject or "").lower()
+
+
 def _check_subject_regex(value: object, email: EmailMessage) -> bool:
     try:
         pattern = re.compile(str(value))
     except re.error:
         return False
     return pattern.search(email.subject or "") is not None
+
+
+def _check_topic_keyword(value: object, email: EmailMessage) -> bool:
+    values = value if isinstance(value, list | tuple) else (value,)
+    haystack = f"{email.subject or ''}\n{email.snippet or ''}".lower()
+    for item in values:
+        needle = str(item).strip().lower()
+        if needle and needle in haystack:
+            return True
+    return False
 
 
 def _check_has_label(value: object, email: EmailMessage) -> bool:
@@ -353,34 +411,32 @@ async def load_default_rules(
     return RuleEngine(user_rules=tuple(rules), seed_waste=tuple(seeds))
 
 
-def default_rubric_seed() -> Iterable[MatchPredicate]:
+def default_rubric_seed(path: Path | None = None) -> tuple[dict[str, object], ...]:
     """Return the rule-set inserted for every freshly-provisioned user.
 
-    The seed captures "obvious" rules we don't want every user to
-    reinvent. Each tuple is ``(priority, match, action)``.
+    Args:
+        path: Optional YAML seed path override.
+
+    Returns:
+        Tuple of seed rule mappings with ``name``, ``priority``,
+        ``match``, and ``action`` keys.
+
+    Raises:
+        ValueError: If the seed YAML is missing or malformed.
     """
-    return (
-        # Boss / "direct mention" heuristics go in Phase 3 once we have
-        # contact-graph data. Phase 2 seeds only the unambiguous rules.
+    seed_path = path if path is not None else _DEFAULT_SEED_PATH
+    try:
+        config = RubricSeedConfig.model_validate(safe_load_yaml_file(seed_path))
+    except (YamlConfigError, ValidationError) as exc:
+        raise ValueError(f"invalid rubric seed config at {seed_path}") from exc
+    return tuple(
         {
-            "priority": 800,
-            "match": {"has_label": "IMPORTANT"},
-            "action": {
-                "label": "must_read",
-                "confidence": 0.9,
-                "reasons": ["Gmail marked this as important."],
-            },
-        },
-        {
-            "priority": 200,
-            "match": {"list_unsubscribe_present": True},
-            "action": {
-                "label": "good_to_read",
-                "is_newsletter": True,
-                "confidence": 0.75,
-                "reasons": ["List-Unsubscribe header present."],
-            },
-        },
+            "name": rule.name,
+            "priority": rule.priority,
+            "match": dict(rule.match),
+            "action": dict(rule.action),
+        }
+        for rule in config.rules
     )
 
 

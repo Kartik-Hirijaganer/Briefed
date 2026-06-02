@@ -16,6 +16,7 @@ import json
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
+from app.core.app_config import get_app_config
 from app.core.logging import get_logger
 from app.workers.messages import UnsubscribeMessage
 
@@ -24,6 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 logger = get_logger(__name__)
+_UNSUBSCRIBE_ENABLED = get_app_config().features.unsubscribe
 
 
 class SqsSender(Protocol):
@@ -51,7 +53,7 @@ async def enqueue_hygiene_run_for_account(
 ) -> int:
     """Enqueue one :class:`UnsubscribeMessage` for the given account.
 
-    Unlike the classify / jobs dispatchers, this emits **one** message
+    Unlike the classify and summarize dispatchers, this emits **one** message
     per account per run — the worker itself aggregates across the
     sender universe. Nothing here touches the DB.
 
@@ -66,9 +68,12 @@ async def enqueue_hygiene_run_for_account(
 
     Returns:
         Count of messages enqueued (always ``1``; returned for
-        symmetry with the classify / jobs dispatchers so telemetry
+        symmetry with the classify and summarize dispatchers so telemetry
         helpers can treat them uniformly).
     """
+    if not _UNSUBSCRIBE_ENABLED:
+        return 0
+
     message = UnsubscribeMessage(
         user_id=user_id,
         account_id=account_id,

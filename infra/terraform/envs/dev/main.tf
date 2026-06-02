@@ -42,6 +42,17 @@ variable "image_uri" {
   type        = string
 }
 
+variable "function_url_auth_mode" {
+  type    = string
+  default = "AWS_IAM"
+}
+
+variable "public_base_url" {
+  description = "Browser-facing app origin used for OAuth callback URLs."
+  type        = string
+  default     = "https://d2vki955e8ckrc.cloudfront.net"
+}
+
 variable "domain_name" {
   description = "Optional custom domain. Empty string = CloudFront default only."
   type        = string
@@ -86,15 +97,18 @@ module "s3" {
 }
 
 module "api" {
-  source               = "../../modules/lambda-api"
-  name                 = "${var.name_prefix}-api"
-  image_uri            = var.image_uri
-  ssm_parameter_prefix = module.ssm.parameter_prefix
-  kms_key_arns         = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
-  sqs_queue_arns       = values(module.sqs.queue_arns)
-  tags                 = local.tags
+  source                 = "../../modules/lambda-api"
+  name                   = "${var.name_prefix}-api"
+  image_uri              = var.image_uri
+  function_url_auth_mode = var.function_url_auth_mode
+  ssm_parameter_prefix   = module.ssm.parameter_prefix
+  kms_key_arns           = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
+  sqs_queue_arns         = values(module.sqs.queue_arns)
+  tags                   = local.tags
   env_vars = {
     BRIEFED_ENV                  = "dev"
+    BRIEFED_INGEST_QUEUE_URL     = module.sqs.queue_urls["ingest"]
+    BRIEFED_PUBLIC_BASE_URL      = var.public_base_url
     BRIEFED_SSM_PREFIX           = module.ssm.parameter_prefix
     BRIEFED_TOKEN_WRAP_KEY_ALIAS = module.kms.token_wrap_alias
     BRIEFED_CONTENT_KEY_ALIAS    = module.kms.content_alias
@@ -117,7 +131,6 @@ module "worker" {
     BRIEFED_CONTENT_KEY_ALIAS     = module.kms.content_alias
     BRIEFED_CLASSIFY_QUEUE_URL    = module.sqs.queue_urls["classify"]
     BRIEFED_SUMMARIZE_QUEUE_URL   = module.sqs.queue_urls["summarize"]
-    BRIEFED_JOBS_QUEUE_URL        = module.sqs.queue_urls["jobs"]
     BRIEFED_UNSUBSCRIBE_QUEUE_URL = module.sqs.queue_urls["unsubscribe"]
     BRIEFED_RAW_EMAIL_BUCKET      = module.s3.bucket_names["raw_email"]
     BRIEFED_STORE_RAW_MIME        = "0"
@@ -154,6 +167,69 @@ resource "aws_s3_bucket_public_access_block" "pwa" {
   restrict_public_buckets = true
 }
 
+resource "aws_wafv2_web_acl" "cdn" {
+  provider = aws.us_east_1
+
+  name  = "${var.name_prefix}-cdn-acl"
+  scope = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "rate-limit"
+    priority = 1
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "rate-limit"
+    }
+  }
+
+  rule {
+    name     = "aws-common"
+    priority = 2
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "aws-common"
+    }
+  }
+
+  visibility_config {
+    sampled_requests_enabled   = true
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.name_prefix}-cdn-acl"
+  }
+
+  tags = local.tags
+}
+
 module "cloudfront" {
   source                   = "../../modules/cloudfront"
   name                     = "${var.name_prefix}-cdn"
@@ -161,7 +237,53 @@ module "cloudfront" {
   lambda_function_url_host = replace(replace(module.api.function_url, "https://", ""), "/", "")
   aliases                  = var.domain_name == "" ? [] : [var.domain_name]
   acm_certificate_arn      = null
+  web_acl_arn              = aws_wafv2_web_acl.cdn.arn
   tags                     = local.tags
+}
+
+# Bucket policy granting CloudFront's OAC read access to the PWA
+# assets. See envs/prod/main.tf for full rationale.
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_policy" "pwa" {
+  bucket = aws_s3_bucket.pwa.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontServicePrincipalReadOnly"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.pwa.arn}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${module.cloudfront.distribution_id}"
+        }
+      }
+    }]
+  })
+}
+
+# AWS (Oct 2025+) requires BOTH actions on a function URL, and the CloudFront OAC
+# guide shows two add-permission calls for the cloudfront.amazonaws.com principal.
+# source_arn (= this distribution) scopes both grants. See §2.
+resource "aws_lambda_permission" "cloudfront_invoke_url" {
+  statement_id           = "AllowCloudFrontInvokeFunctionUrl"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = module.api.function_name
+  qualifier              = module.api.alias_name
+  principal              = "cloudfront.amazonaws.com"
+  function_url_auth_type = "AWS_IAM"
+  source_arn             = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${module.cloudfront.distribution_id}"
+}
+
+resource "aws_lambda_permission" "cloudfront_invoke_function" {
+  statement_id  = "AllowCloudFrontInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = module.api.function_name
+  qualifier     = module.api.alias_name
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${module.cloudfront.distribution_id}"
 }
 
 # Phase 8 — observability + alarms (plan §14, §20.10).
@@ -186,7 +308,8 @@ module "alarms" {
 }
 
 output "function_url" {
-  value = module.api.function_url
+  description = "API Lambda Function URL; kept for reference/debugging and not directly callable without SigV4 signing once AWS_IAM is enabled."
+  value       = module.api.function_url
 }
 
 output "cloudfront_domain" {

@@ -6,10 +6,12 @@ import hashlib
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
@@ -18,14 +20,20 @@ from app.core.config import Settings, get_settings
 from app.db.models import (
     ConnectedAccount,
     DigestRun,
+    DigestRunEmail,
     Email,
     TechNewsCluster,
     TechNewsClusterMember,
     User,
 )
+from app.llm.schemas import CategoryDigestGroup
 from app.main import app
 from app.services.classification.repository import ClassificationsRepo, ClassificationWrite
-from app.services.summarization.repository import SummariesRepo, SummaryTechNewsWrite
+from app.services.summarization.repository import (
+    SummariesRepo,
+    SummaryCategoryDigestWrite,
+    SummaryTechNewsWrite,
+)
 
 
 @pytest_asyncio.fixture()
@@ -148,6 +156,44 @@ async def test_manual_run_rate_limit_returns_429(
 
 
 @pytest.mark.asyncio
+async def test_reclassify_recent_stamps_membership_and_skips_overrides(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """Recent reclassification targets non-overridden mail only by default."""
+    user = await _seed_user_with_account(api_session, email="rules@x.example")
+    target, override = await _seed_reclassify_emails(api_session, user=user)
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/runs",
+            json={
+                "kind": "manual",
+                "mode": "reclassify_recent",
+                "window_days": 30,
+                "include_user_overrides": False,
+            },
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+
+    assert response.status_code == 202, response.text
+    run_id = UUID(response.json()["run_id"])
+    async with api_session() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(DigestRunEmail.email_id).where(DigestRunEmail.run_id == run_id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert rows == [target.id]
+    assert override.id not in rows
+
+
+@pytest.mark.asyncio
 async def test_security_headers_present(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -177,7 +223,7 @@ async def test_digest_today_and_news_return_owned_data(
     """Digest and news aggregate endpoints return decrypted owned rows."""
     user = await _seed_user_with_account(api_session, email="me@x.example")
     email = await _seed_classified_email(api_session, user=user)
-    await _seed_successful_run(api_session, user=user)
+    await _seed_successful_run(api_session, user=user, email=email)
     await _seed_news_cluster(api_session, user=user, email=email)
     cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
 
@@ -189,6 +235,10 @@ async def test_digest_today_and_news_return_owned_data(
         assert digest_response.status_code == 200, digest_response.text
         digest = digest_response.json()
         assert digest["counts"]["must_read"] == 1
+        assert "waste" not in digest["counts"]
+        assert digest["rule_decided"] == 1
+        assert digest["category_summaries"][0]["category"] == "must_read"
+        assert "planning packet" in digest["category_summaries"][0]["narrative"]
         assert digest["must_read_preview"][0]["subject"] == "Quarterly planning"
         assert digest["last_successful_run_at"] is not None
 
@@ -243,7 +293,7 @@ async def _seed_classified_email(
             cc_addrs=[],
             subject="Quarterly planning",
             snippet="Planning packet attached.",
-            labels=[],
+            labels=["UNREAD"],
             content_hash=hashlib.sha256(b"m-planning").digest(),
         )
         session.add(email)
@@ -261,7 +311,6 @@ async def _seed_classified_email(
                 tokens_in=0,
                 tokens_out=0,
                 is_newsletter=False,
-                is_job_candidate=False,
                 reasons={"reasons": ["Executive planning context."]},
                 user_id=user.id,
             ),
@@ -271,23 +320,124 @@ async def _seed_classified_email(
         return email
 
 
+async def _seed_reclassify_emails(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    user: User,
+) -> tuple[Email, Email]:
+    """Insert recent classified rows for the reclassify mode test."""
+    async with factory() as session:
+        account = await _account_for(session, user=user)
+        target = Email(
+            account_id=account.id,
+            gmail_message_id="m-reclassify",
+            thread_id="t-reclassify",
+            internal_date=datetime.now(tz=UTC),
+            from_addr="sender@example.com",
+            to_addrs=[],
+            cc_addrs=[],
+            subject="Apply new rules",
+            snippet="Please reclassify",
+            labels=["UNREAD"],
+            content_hash=hashlib.sha256(b"m-reclassify").digest(),
+        )
+        override = Email(
+            account_id=account.id,
+            gmail_message_id="m-override",
+            thread_id="t-override",
+            internal_date=datetime.now(tz=UTC),
+            from_addr="override@example.com",
+            to_addrs=[],
+            cc_addrs=[],
+            subject="User moved this",
+            snippet="Do not clobber",
+            labels=["UNREAD"],
+            content_hash=hashlib.sha256(b"m-override").digest(),
+        )
+        session.add_all([target, override])
+        await session.flush()
+        repo = ClassificationsRepo(cipher=None)
+        await repo.upsert(
+            session,
+            ClassificationWrite(
+                email_id=target.id,
+                label="good_to_read",
+                score=Decimal("0.800"),
+                rubric_version=1,
+                prompt_version_id=None,
+                decision_source="rule",
+                model="",
+                tokens_in=0,
+                tokens_out=0,
+                is_newsletter=False,
+                reasons={"reasons": ["Seeded target."]},
+                user_id=user.id,
+            ),
+        )
+        await repo.upsert(
+            session,
+            ClassificationWrite(
+                email_id=override.id,
+                label="ignore",
+                score=Decimal("1.000"),
+                rubric_version=0,
+                prompt_version_id=None,
+                decision_source="rule",
+                model="user_override",
+                tokens_in=0,
+                tokens_out=0,
+                is_newsletter=False,
+                reasons={"reasons": ["User moved this email in the PWA."]},
+                user_id=user.id,
+            ),
+        )
+        await session.commit()
+        await session.refresh(target)
+        await session.refresh(override)
+        return target, override
+
+
 async def _seed_successful_run(
     factory: async_sessionmaker[AsyncSession],
     *,
     user: User,
+    email: Email,
 ) -> None:
     """Insert one completed digest run."""
     now = datetime.now(tz=UTC)
     async with factory() as session:
-        session.add(
-            DigestRun(
+        run = DigestRun(
+            user_id=user.id,
+            status="complete",
+            trigger_type="scheduled",
+            started_at=now,
+            completed_at=now,
+            stats={"ingested": 1, "classified": 1, "summarized": 1, "new_must_read": 1},
+            cost_cents=1,
+        )
+        session.add(run)
+        await session.flush()
+        session.add(DigestRunEmail(run_id=run.id, email_id=email.id))
+        await SummariesRepo(cipher=None).upsert_category_digest(
+            session,
+            SummaryCategoryDigestWrite(
+                run_id=run.id,
+                category="must_read",
                 user_id=user.id,
-                status="complete",
-                trigger_type="scheduled",
-                started_at=now,
-                completed_at=now,
-                stats={"ingested": 1, "classified": 1, "summarized": 1, "new_must_read": 1},
-                cost_cents=1,
+                prompt_version_id=None,
+                model="",
+                tokens_in=0,
+                tokens_out=0,
+                narrative="Must-read mail centers on the planning packet.",
+                groups=(
+                    CategoryDigestGroup(
+                        label="Planning",
+                        bullets=("Planning packet attached.",),
+                        item_refs=("E1",),
+                    ),
+                ),
+                confidence=Decimal("0.900"),
+                cache_hit=False,
             ),
         )
         await session.commit()

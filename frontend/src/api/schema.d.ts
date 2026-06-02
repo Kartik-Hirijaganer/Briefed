@@ -27,6 +27,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log out
+         * @description Clear Briefed auth cookies and request browser-side site-data cleanup.
+         *
+         *     Args:
+         *         response: Mutable FastAPI response used to expire cookies and set
+         *             browser cleanup headers.
+         *         settings: Cached app settings, used to mirror the runtime's cookie
+         *             security flags.
+         *
+         *     Returns:
+         *         None.
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/gmail/start": {
         parameters: {
             query?: never;
@@ -129,8 +158,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Disconnect a mailbox
-         * @description Disconnect ``account_id`` (soft-cascade deletes tokens + cursor + emails).
+         * Remove a disconnected mailbox
+         * @description Remove ``account_id`` after it has been disconnected.
          *
          *     Args:
          *         account_id: Target account.
@@ -139,6 +168,7 @@ export interface paths {
          *
          *     Raises:
          *         HTTPException: 404 when the account does not belong to the caller.
+         *         HTTPException: 409 when the account is still active.
          */
         delete: operations["delete_account_api_v1_accounts__account_id__delete"];
         options?: never;
@@ -160,6 +190,41 @@ export interface paths {
          *         HTTPException: 404 when the account does not belong to the caller.
          */
         patch: operations["patch_account_api_v1_accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/accounts/{account_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disconnect a mailbox
+         * @description Disconnect an account while keeping it available for reconnect/remove.
+         *
+         *     The operation removes Briefed's local OAuth grant and account-scoped
+         *     cached data, then marks the account ``revoked`` so the UI can offer a
+         *     reconnect or final remove action. It is safe to call repeatedly.
+         *
+         *     Args:
+         *         account_id: Target account.
+         *         user_id: Authenticated owner's id.
+         *         session: Active async session.
+         *
+         *     Returns:
+         *         The updated revoked account view.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the account does not belong to the caller.
+         */
+        post: operations["disconnect_account_api_v1_accounts__account_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/rubric": {
@@ -241,123 +306,6 @@ export interface paths {
          *         HTTPException: 404 when the rule does not belong to the caller.
          */
         delete: operations["delete_rule_api_v1_rubric__rule_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List curated job matches
-         * @description Return job matches the caller owns.
-         *
-         *     Args:
-         *         user_id: Authenticated owner.
-         *         session: Active async session.
-         *         settings: Cached :class:`Settings`.
-         *         include_filtered: Override the curated default.
-         *         limit: Maximum rows to return.
-         *
-         *     Returns:
-         *         :class:`JobMatchesListResponse` with newest matches first.
-         */
-        get: operations["list_job_matches_api_v1_jobs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/job-filters": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List job filters
-         * @description Return every filter the authenticated user owns.
-         *
-         *     Args:
-         *         user_id: Authenticated owner.
-         *         session: Active async session.
-         *
-         *     Returns:
-         *         :class:`JobFiltersListResponse` ordered by ``created_at ASC``.
-         */
-        get: operations["list_filters_api_v1_job_filters_get"];
-        put?: never;
-        /**
-         * Create a job filter
-         * @description Insert a new filter for the authenticated user.
-         *
-         *     Args:
-         *         payload: Validated request body.
-         *         user_id: Authenticated owner.
-         *         session: Active async session.
-         *
-         *     Returns:
-         *         The created :class:`JobFilterOut`.
-         *
-         *     Raises:
-         *         HTTPException: 409 when ``name`` already exists for the user.
-         */
-        post: operations["create_filter_api_v1_job_filters_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/job-filters/{filter_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Replace a job filter
-         * @description Replace ``filter_id``'s predicate + active flag, bumping ``version``.
-         *
-         *     Args:
-         *         filter_id: Target filter.
-         *         payload: Validated request body.
-         *         user_id: Authenticated owner.
-         *         session: Active async session.
-         *
-         *     Returns:
-         *         The updated :class:`JobFilterOut`.
-         *
-         *     Raises:
-         *         HTTPException: 404 when the filter does not belong to the caller.
-         *         HTTPException: 409 when the rename collides with another filter.
-         */
-        put: operations["update_filter_api_v1_job_filters__filter_id__put"];
-        post?: never;
-        /**
-         * Delete a job filter
-         * @description Hard-delete ``filter_id``.
-         *
-         *     Args:
-         *         filter_id: Target filter.
-         *         user_id: Authenticated owner.
-         *         session: Active async session.
-         *
-         *     Raises:
-         *         HTTPException: 404 when the filter does not belong to the caller.
-         */
-        delete: operations["delete_filter_api_v1_job_filters__filter_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -505,6 +453,12 @@ export interface paths {
          *         settings: Cached app settings.
          *         bucket: Optional primary bucket filter.
          *         account_id: Optional account filter.
+         *         q: Optional case-insensitive subject/sender search.
+         *         sender: Optional exact sender filter.
+         *         received_after: Optional lower bound for provider received time.
+         *         received_before: Optional upper bound for provider received time.
+         *         has_summary: Optional filter for rows with or without email summaries.
+         *         offset: Result offset for pagination.
          *         limit: Maximum row count.
          *
          *     Returns:
@@ -513,6 +467,36 @@ export interface paths {
         get: operations["list_emails_api_v1_emails_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emails/mark-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark emails read in Gmail
+         * @description Remove ``UNREAD`` from selected Gmail messages and local labels.
+         *
+         *     Args:
+         *         body: Explicit email ids or a category selector.
+         *         request: Incoming request, used for error correlation.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached app settings.
+         *
+         *     Returns:
+         *         Count of successfully processed messages and per-email failures.
+         */
+        post: operations["mark_read_emails_api_v1_emails_mark_read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -587,7 +571,7 @@ export interface paths {
         put?: never;
         /**
          * Start a manual digest run
-         * @description Create a digest run and enqueue one ingest message per selected account.
+         * @description Create a digest run and enqueue incremental or reclassification work.
          *
          *     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
          *     per user per rolling 24h window; the limiter raises ``429`` with a
@@ -703,6 +687,7 @@ export interface paths {
          *
          *     Args:
          *         payload: Validated patch body.
+         *         request: Incoming request, used for error correlation.
          *         user_id: Authenticated caller, injected by :func:`current_user_id`.
          *         session: DB session.
          *
@@ -758,6 +743,68 @@ export interface components {
              * @default []
              */
             accounts: components["schemas"]["ConnectedAccountOut"][];
+        };
+        /**
+         * CategoryDigestGroupOut
+         * @description Thematic group inside a category digest.
+         *
+         *     Attributes:
+         *         label: Short group heading.
+         *         bullets: Source-backed summary bullets.
+         *         item_refs: Opaque source refs cited by the group.
+         */
+        CategoryDigestGroupOut: {
+            /**
+             * Label
+             * @description Short group heading.
+             */
+            label: string;
+            /**
+             * Bullets
+             * @description Source-backed bullets.
+             * @default []
+             */
+            bullets: string[];
+            /**
+             * Item Refs
+             * @description Opaque source refs.
+             * @default []
+             */
+            item_refs: string[];
+        };
+        /**
+         * CategoryDigestOut
+         * @description Decrypted run/category digest returned by ``/digest/today``.
+         *
+         *     Attributes:
+         *         category: Triage category summarized by the digest.
+         *         narrative: Plaintext rollup narrative.
+         *         groups: Thematic source-backed groups.
+         *         confidence: Calibrated ``[0, 1]``.
+         */
+        CategoryDigestOut: {
+            /**
+             * Category
+             * @description Summarized triage category.
+             * @enum {string}
+             */
+            category: "must_read" | "good_to_read";
+            /**
+             * Narrative
+             * @description Plaintext rollup narrative.
+             */
+            narrative: string;
+            /**
+             * Groups
+             * @description Thematic source-backed groups.
+             * @default []
+             */
+            groups: components["schemas"]["CategoryDigestGroupOut"][];
+            /**
+             * Confidence
+             * @description Digest confidence.
+             */
+            confidence: number;
         };
         /**
          * ConnectedAccountOut
@@ -862,11 +909,6 @@ export interface components {
              * @default 0
              */
             ignore: number;
-            /**
-             * Waste
-             * @default 0
-             */
-            waste: number;
         };
         /**
          * DigestTodayResponse
@@ -876,6 +918,8 @@ export interface components {
          *         generated_at: Timestamp of the latest successful run.
          *         cost_cents_today: Rounded prompt spend for today.
          *         counts: Current triage counts.
+         *         rule_decided: Count of latest-run classifications decided by rules.
+         *         category_summaries: Decrypted latest-run category digests.
          *         must_read_preview: Newest must-read rows.
          *         last_successful_run_at: Timestamp used for freshness warnings.
          */
@@ -885,6 +929,18 @@ export interface components {
             /** Cost Cents Today */
             cost_cents_today: number;
             counts: components["schemas"]["DigestCounts"];
+            /**
+             * Rule Decided
+             * @description Latest-run classifications decided by rules.
+             * @default 0
+             */
+            rule_decided: number;
+            /**
+             * Category Summaries
+             * @description Latest-run category digest summaries.
+             * @default []
+             */
+            category_summaries: components["schemas"]["CategoryDigestOut"][];
             /**
              * Must Read Preview
              * @default []
@@ -924,7 +980,7 @@ export interface components {
              * Bucket
              * @enum {string}
              */
-            bucket: "must_read" | "good_to_read" | "ignore" | "waste";
+            bucket: "must_read" | "good_to_read" | "ignore";
         };
         /**
          * EmailRowOut
@@ -939,6 +995,7 @@ export interface components {
          *         received_at: Provider internal date.
          *         bucket: Primary triage bucket.
          *         confidence: Classification confidence in ``[0, 1]``.
+         *         needs_review: Low-confidence badge source.
          *         decision_source: Rule / LLM / hybrid source label.
          *         reasons: Human-readable rationale entries.
          *         summary_excerpt: Optional decrypted summary preview.
@@ -969,9 +1026,14 @@ export interface components {
              * Bucket
              * @enum {string}
              */
-            bucket: "must_read" | "good_to_read" | "ignore" | "waste";
+            bucket: "must_read" | "good_to_read" | "ignore";
             /** Confidence */
             confidence: number;
+            /**
+             * Needs Review
+             * @default false
+             */
+            needs_review: boolean;
             /**
              * Decision Source
              * @enum {string}
@@ -1001,6 +1063,40 @@ export interface components {
             emails: components["schemas"]["EmailRowOut"][];
             /** Total */
             total: number;
+        };
+        /**
+         * ErrorEnvelope
+         * @description Aegis-compatible API error response envelope.
+         *
+         *     Attributes:
+         *         code: Stable machine-readable error code.
+         *         message: Human-readable error summary safe to show in the UI.
+         *         details: Structured diagnostic context.
+         *         request_id: Correlation id from the incoming request or generated locally.
+         */
+        ErrorEnvelope: {
+            /**
+             * Code
+             * @description Stable machine-readable error code.
+             */
+            code: string;
+            /**
+             * Message
+             * @description Human-readable error summary.
+             */
+            message: string;
+            /**
+             * Details
+             * @description Structured context.
+             */
+            details?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Requestid
+             * @description Request correlation id.
+             */
+            requestId: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1034,179 +1130,15 @@ export interface components {
             top_domains: components["schemas"]["DomainWasteEntry"][];
         };
         /**
-         * JobFilterIn
-         * @description Request body for ``POST /job-filters`` and ``PUT /job-filters/{id}``.
-         *
-         *     Attributes:
-         *         name: Human-readable label, unique per user (DB enforces).
-         *         predicate: JSONB document consumed by
-         *             :func:`app.services.jobs.predicate.evaluate`.
-         *         active: Soft-delete switch. Defaults to ``True``.
-         */
-        JobFilterIn: {
-            /** Name */
-            name: string;
-            /** Predicate */
-            predicate: {
-                [key: string]: unknown;
-            };
-            /**
-             * Active
-             * @default true
-             */
-            active: boolean;
-        };
-        /**
-         * JobFilterOut
-         * @description Response body for any ``/job-filters`` endpoint.
-         *
-         *     Attributes:
-         *         id: Filter primary key.
-         *         name: Label.
-         *         predicate: JSONB document.
-         *         version: Bumped on every PUT.
-         *         active: Soft-delete switch.
-         *         created_at: First-insert timestamp.
-         *         updated_at: Last-modified timestamp.
-         */
-        JobFilterOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Predicate */
-            predicate: {
-                [key: string]: unknown;
-            };
-            /** Version */
-            version: number;
-            /** Active */
-            active: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * JobFiltersListResponse
-         * @description Envelope for ``GET /job-filters``.
-         *
-         *     Attributes:
-         *         filters: Every :class:`JobFilterOut` owned by the caller,
-         *             ordered by ``created_at ASC`` so client-side ordering is
-         *             stable across requests.
-         */
-        JobFiltersListResponse: {
-            /**
-             * Filters
-             * @default []
-             */
-            filters: components["schemas"]["JobFilterOut"][];
-        };
-        /**
-         * JobMatchOut
-         * @description Response row for ``GET /jobs``.
-         *
-         *     Attributes:
-         *         id: Match primary key.
-         *         email_id: Source email FK.
-         *         title: Role title.
-         *         company: Hiring company / firm.
-         *         location: Free-text location, ``None`` when the posting omitted it.
-         *         remote: Tri-state remote flag.
-         *         comp_min: Lower compensation bound.
-         *         comp_max: Upper compensation bound.
-         *         currency: ISO-4217 code.
-         *         seniority: Normalized tier string.
-         *         source_url: Apply / posting URL with tracking params stripped.
-         *         match_score: Calibrated confidence, three-decimal precision.
-         *         filter_version: Active-filter version snapshot at extract time.
-         *         passed_filter: ``True`` when the row cleared every active filter
-         *             and the confidence floor; the curated board surfaces only
-         *             these.
-         *         match_reason: Plaintext rationale (decrypted by the router).
-         *         created_at: When the match row was first written.
-         *         updated_at: When it was last replaced (re-extraction).
-         */
-        JobMatchOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Email Id
-             * Format: uuid
-             */
-            email_id: string;
-            /** Title */
-            title: string;
-            /** Company */
-            company: string;
-            /** Location */
-            location: string | null;
-            /** Remote */
-            remote: boolean | null;
-            /** Comp Min */
-            comp_min: number | null;
-            /** Comp Max */
-            comp_max: number | null;
-            /** Currency */
-            currency: string | null;
-            /** Seniority */
-            seniority: string | null;
-            /** Source Url */
-            source_url: string | null;
-            /** Match Score */
-            match_score: string;
-            /** Filter Version */
-            filter_version: number;
-            /** Passed Filter */
-            passed_filter: boolean;
-            /** Match Reason */
-            match_reason: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * JobMatchesListResponse
-         * @description Envelope for ``GET /jobs``.
-         *
-         *     Attributes:
-         *         matches: Newest-first list of :class:`JobMatchOut` rows the
-         *             caller is allowed to see.
-         */
-        JobMatchesListResponse: {
-            /**
-             * Matches
-             * @default []
-             */
-            matches: components["schemas"]["JobMatchOut"][];
-        };
-        /**
          * ManualRunRequest
          * @description Request body for ``POST /runs``.
          *
          *     Attributes:
          *         kind: Only ``manual`` is supported by the HTTP trigger.
          *         account_ids: Optional subset of connected accounts to scan.
+         *         mode: Incremental scan or recent-mail reclassification.
+         *         window_days: Optional recent-mail window for reclassification.
+         *         include_user_overrides: Whether user-moved rows may be overwritten.
          */
         ManualRunRequest: {
             /**
@@ -1217,6 +1149,19 @@ export interface components {
             kind: "manual";
             /** Account Ids */
             account_ids?: string[] | null;
+            /**
+             * Mode
+             * @default incremental
+             * @enum {string}
+             */
+            mode: "incremental" | "reclassify_recent";
+            /** Window Days */
+            window_days?: number | null;
+            /**
+             * Include User Overrides
+             * @default false
+             */
+            include_user_overrides: boolean;
         };
         /**
          * ManualRunResponse
@@ -1234,6 +1179,63 @@ export interface components {
             run_id: string;
             /** Accounts Queued */
             accounts_queued: number;
+        };
+        /**
+         * MarkReadFailureOut
+         * @description One email that could not be marked read.
+         *
+         *     Attributes:
+         *         email_id: Local email id.
+         *         provider_message_id: Gmail message id.
+         *         reason: Short provider or permission error.
+         */
+        MarkReadFailureOut: {
+            /**
+             * Email Id
+             * Format: uuid
+             */
+            email_id: string;
+            /** Provider Message Id */
+            provider_message_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * MarkReadRequest
+         * @description Request body for ``POST /emails/mark-read``.
+         *
+         *     Attributes:
+         *         email_ids: Explicit email ids to mark read.
+         *         category: Optional category selector for bulk mark-read.
+         *         account_id: Optional connected-account scope for either selector.
+         */
+        MarkReadRequest: {
+            /**
+             * Email Ids
+             * @default []
+             */
+            email_ids: string[];
+            /** Category */
+            category?: ("must_read" | "good_to_read" | "ignore") | null;
+            /** Account Id */
+            account_id?: string | null;
+        };
+        /**
+         * MarkReadResponse
+         * @description Response from ``POST /emails/mark-read``.
+         *
+         *     Attributes:
+         *         marked: Count of local emails successfully marked read.
+         *         failed: Per-email failures.
+         */
+        MarkReadResponse: {
+            /** Marked */
+            marked: number;
+            /**
+             * Failed
+             * @default []
+             */
+            failed: components["schemas"]["MarkReadFailureOut"][];
         };
         /**
          * NewsCluster
@@ -1304,6 +1306,7 @@ export interface components {
          *
          *     Attributes:
          *         priority: Higher wins. Defaults to ``100``.
+         *         name: Human-readable settings label.
          *         match: Predicate dict; keys limited to
          *             :data:`_ALLOWED_MATCH_KEYS`.
          *         action: Verdict dict; must contain ``label`` ∈
@@ -1316,6 +1319,11 @@ export interface components {
              * @default 100
              */
             priority: number;
+            /**
+             * Name
+             * @default Untitled rule
+             */
+            name: string;
             /** Match */
             match: {
                 [key: string]: unknown;
@@ -1336,6 +1344,7 @@ export interface components {
          *
          *     Attributes:
          *         id: Rule primary key.
+         *         name: Human-readable settings label.
          *         priority: Priority plumbed through from the DB row.
          *         match: Predicate dict.
          *         action: Verdict dict.
@@ -1350,6 +1359,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Name */
+            name: string;
             /** Priority */
             priority: number;
             /** Match */
@@ -1616,8 +1627,8 @@ export interface components {
          *         display_name: Optional display name (consumed by IdentityScrubber).
          *         email_aliases: Extra email addresses to scrub from prompts.
          *         redaction_aliases: Free-form strings to scrub from prompts.
-         *         presidio_enabled: Whether Presidio runs ahead of regex scrubbing.
-         *         theme_preference: Server-side mirror of the user's UI theme.
+         *         presidio_enabled: Legacy toggle retained for compatibility.
+         *             Presidio was removed; only identity + regex scrubbers run.
          *         schedule_frequency: Cadence — ``once_daily`` / ``twice_daily`` /
          *             ``disabled``.
          *         schedule_times_local: ``HH:MM`` slots in :attr:`schedule_timezone`.
@@ -1632,15 +1643,9 @@ export interface components {
             redaction_aliases?: string[];
             /**
              * Presidio Enabled
-             * @default true
+             * @default false
              */
             presidio_enabled: boolean;
-            /**
-             * Theme Preference
-             * @default system
-             * @enum {string}
-             */
-            theme_preference: "system" | "light" | "dark";
             /**
              * Schedule Frequency
              * @default once_daily
@@ -1676,8 +1681,6 @@ export interface components {
             redaction_aliases?: string[] | null;
             /** Presidio Enabled */
             presidio_enabled?: boolean | null;
-            /** Theme Preference */
-            theme_preference?: ("system" | "light" | "dark") | null;
         };
         /**
          * UserScheduleOut
@@ -1759,6 +1762,24 @@ export interface operations {
                         [key: string]: string;
                     };
                 };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1928,6 +1949,39 @@ export interface operations {
             };
         };
     };
+    disconnect_account_api_v1_accounts__account_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectedAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_rules_api_v1_rubric_get: {
         parameters: {
             query?: never;
@@ -2037,175 +2091,6 @@ export interface operations {
             header?: never;
             path: {
                 rule_id: string;
-            };
-            cookie?: {
-                briefed_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_job_matches_api_v1_jobs_get: {
-        parameters: {
-            query?: {
-                /** @description When true, include rows whose active-filter evaluation failed or whose confidence is below the digest floor. */
-                include_filtered?: boolean;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: {
-                briefed_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobMatchesListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_filters_api_v1_job_filters_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                briefed_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobFiltersListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_filter_api_v1_job_filters_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                briefed_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JobFilterIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobFilterOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_filter_api_v1_job_filters__filter_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                filter_id: string;
-            };
-            cookie?: {
-                briefed_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JobFilterIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobFilterOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_filter_api_v1_job_filters__filter_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                filter_id: string;
             };
             cookie?: {
                 briefed_session?: string | null;
@@ -2362,8 +2247,14 @@ export interface operations {
     list_emails_api_v1_emails_get: {
         parameters: {
             query?: {
-                bucket?: ("must_read" | "good_to_read" | "ignore" | "waste") | null;
+                bucket?: ("must_read" | "good_to_read" | "ignore") | null;
                 account_id?: string | null;
+                q?: string | null;
+                sender?: string | null;
+                received_after?: string | null;
+                received_before?: string | null;
+                has_summary?: boolean | null;
+                offset?: number;
                 limit?: number;
             };
             header?: never;
@@ -2390,6 +2281,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_emails_api_v1_emails_mark_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkReadResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
@@ -2682,6 +2635,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2717,6 +2679,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2746,6 +2717,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserScheduleOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Validation Error */
@@ -2783,13 +2763,22 @@ export interface operations {
                     "application/json": components["schemas"]["UserScheduleOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

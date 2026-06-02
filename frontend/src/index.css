@@ -1,6 +1,15 @@
 @import 'tailwindcss';
 
 /*
+ * The @briefed/ui primitives live in a sibling workspace (packages/ui/src),
+ * outside the Vite root, so Tailwind's automatic content detection never
+ * scans them. Without this, utility classes used only inside a primitive
+ * (e.g. `text-link`, `bg-accent-hover`, `shadow-[var(--shadow-3)]`) are never
+ * generated and the primitive renders unstyled. Register the source here.
+ */
+@source '../../packages/ui/src';
+
+/*
  * Tailwind v4 `@theme` block mirrors the design tokens defined in
  * frontend/src/styles/tokens.css so utility classes resolve to the same
  * CSS custom properties the primitives consume. DESIGN.md is the
@@ -20,9 +29,19 @@
   --color-fg-on-accent: var(--fg-on-accent);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-link: var(--link);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
   --color-success: var(--success);
+  --color-success-strong: var(--success-strong);
+
+  /* Sidebar group — dark desktop sidebar (DESIGN.md §2) */
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-hover: var(--sidebar-hover-bg);
+  --color-sidebar-active: var(--sidebar-active-bg);
 
   /* Legacy aliases — kept until @briefed/ui primitives migrate to the
      canonical names. Point at the same CSS custom properties so a
@@ -34,6 +53,7 @@
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 
   --font-sans: var(--font-sans);
   --font-display: var(--font-display);

@@ -9,14 +9,17 @@
  *   - One CloudWatch dashboard wiring the six widgets called out in the
  *     plan: SQS depth / worker success / LLM spend / Gmail quota /
  *     cache-hit / digest success.
- *   - Seven canonical alarms:
- *       1. DLQ depth > 0
- *       2. Daily LLM spend > $1
- *       3. Gmail quota usage > 80%
- *       4. Lambda task restarts > 2/hr
- *       5. p95 RDS / Postgres latency > 500 ms
- *       6. Digest pipeline failure > 0/day
- *       7. KMS Decrypt rate against the content CMK exceeds the
+ *   - Canonical alarms include:
+ *       - DLQ depth > 0
+ *       - Daily LLM spend > $1 and daily budget-cap trips
+ *       - Gmail quota usage > 80%
+ *       - Lambda task restarts > 2/hr
+ *       - p95 RDS / Postgres latency > 500 ms
+ *       - Digest pipeline failure > 0/day
+ *       - Stale run lock detected
+ *       - Scheduler/fanout tick missing
+ *       - OpenRouter breaker opened
+ *       - KMS Decrypt rate against the content CMK exceeds the
  *          7-day rolling baseline by 10x (§20.10 Phase 8).
  *
  * The metric filters that turn EMF logs into alarm-able metrics live
@@ -146,6 +149,32 @@ resource "aws_cloudwatch_log_metric_filter" "digest_failure" {
   metric_transformation {
     name      = "DigestFailures"
     namespace = "Briefed/Digest"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "stale_lock" {
+  name           = "${var.name_prefix}-stale-lock"
+  log_group_name = aws_cloudwatch_log_group.lambda["fanout"].name
+  pattern        = "{ $.event = \"fanout.stale_lock_released\" }"
+
+  metric_transformation {
+    name      = "StaleLocks"
+    namespace = "Briefed/Scheduler"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "fanout_tick" {
+  name           = "${var.name_prefix}-fanout-tick"
+  log_group_name = aws_cloudwatch_log_group.lambda["fanout"].name
+  pattern        = "{ $.event = \"fanout_handler.completed\" }"
+
+  metric_transformation {
+    name      = "FanoutTicks"
+    namespace = "Briefed/Scheduler"
     value     = "1"
     unit      = "Count"
   }
@@ -290,7 +319,40 @@ resource "aws_cloudwatch_metric_alarm" "digest_failure" {
   tags                = var.tags
 }
 
-# 8. ADR 0009 — any LLMBudgetExceededError pages oncall.
+# 7. Stale run lock > 0/hr.
+resource "aws_cloudwatch_metric_alarm" "stale_lock" {
+  alarm_name          = "${var.name_prefix}-stale-lock"
+  alarm_description   = "Daily triage Phase 3: stale run lock released by fanout."
+  namespace           = "Briefed/Scheduler"
+  metric_name         = "StaleLocks"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = var.tags
+}
+
+# 8. Fanout scheduler health — at least one tick per hour.
+resource "aws_cloudwatch_metric_alarm" "scheduler_health" {
+  alarm_name          = "${var.name_prefix}-scheduler-health"
+  alarm_description   = "Daily triage Phase 3: fanout scheduler did not emit a completed tick in the last hour."
+  namespace           = "Briefed/Scheduler"
+  metric_name         = "FanoutTicks"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+  tags                = var.tags
+}
+
+# 9. ADR 0009 — any LLMBudgetExceededError pages oncall.
 resource "aws_cloudwatch_metric_alarm" "llm_budget_exceeded" {
   alarm_name          = "${var.name_prefix}-llm-budget-exceeded"
   alarm_description   = "ADR 0009 / Track A Phase 7: daily LLM USD cap tripped."
@@ -306,7 +368,7 @@ resource "aws_cloudwatch_metric_alarm" "llm_budget_exceeded" {
   tags                = var.tags
 }
 
-# 9. ADR 0009 — per-model OpenRouter breaker open events.
+# 10. ADR 0009 — per-model OpenRouter breaker open events.
 resource "aws_cloudwatch_metric_alarm" "llm_breaker_opened" {
   alarm_name          = "${var.name_prefix}-llm-breaker-opened"
   alarm_description   = "ADR 0009 / Track A Phase 7: a per-model OpenRouter breaker tripped open."
@@ -322,7 +384,7 @@ resource "aws_cloudwatch_metric_alarm" "llm_breaker_opened" {
   tags                = var.tags
 }
 
-# 7. KMS Decrypt anomaly on the content CMK (§20.10 Phase 8).
+# 11. KMS Decrypt anomaly on the content CMK (§20.10 Phase 8).
 #    AWS publishes per-KMS-key request metrics every minute under the
 #    AWS/KMS namespace; we alarm if the rolling-hour Decrypt count is
 #    more than 10x the trailing-7-day baseline.

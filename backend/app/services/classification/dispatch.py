@@ -18,7 +18,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.core.logging import get_logger
-from app.db.models import Classification, Email
+from app.db.models import Classification, DigestRunEmail, Email
 from app.workers.messages import ClassifyMessage
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -50,7 +50,7 @@ async def enqueue_unclassified_for_account(
     sqs: SqsSender,
     run_id: UUID | None,
     prompt_name: str = "triage",
-    prompt_version: int = 1,
+    prompt_version: int = 2,
     limit: int = 500,
 ) -> int:
     """Enqueue one :class:`ClassifyMessage` per un-classified email.
@@ -80,6 +80,10 @@ async def enqueue_unclassified_for_account(
         .order_by(Email.internal_date.desc())
         .limit(limit)
     )
+    if run_id is not None:
+        stmt = stmt.join(DigestRunEmail, DigestRunEmail.email_id == Email.id).where(
+            DigestRunEmail.run_id == run_id,
+        )
     rows = (await session.execute(stmt)).scalars().all()
 
     enqueued = 0

@@ -1,13 +1,11 @@
-"""Zero-deps regex sanitizer (Track B Phase 1).
+"""Zero-deps regex sanitizer.
 
-Covers the common deterministic shapes Presidio handles slowly or
-unevenly: email addresses, phone numbers (E.164 + US-formatted), US
-SSN, US ZIP, IPv4/v6, and URLs. Every match becomes ``<KIND_N>`` where
-``N`` increments per kind across the call.
+Covers common deterministic shapes: email addresses, phone numbers
+(E.164 + US-formatted), US SSN, US ZIP, IPv4/v6, and URLs. Every match
+becomes ``<KIND_N>`` where ``N`` increments per kind across the call.
 
-The regex set is intentionally short. Anything fuzzy (names, locations,
-dates) belongs to :class:`PresidioSanitizer`; user-specific identifiers
-belong to :class:`IdentityScrubber`.
+The regex set is intentionally short. User-specific identifiers belong
+to :class:`IdentityScrubber`.
 """
 
 from __future__ import annotations

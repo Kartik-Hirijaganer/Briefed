@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CircleCheck } from 'lucide-react';
 
 import { Badge, Button, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
 
@@ -67,7 +68,9 @@ export default function UnsubscribePage(): JSX.Element {
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Unsubscribe suggestions</h1>
+          <h1 className="font-display text-xl font-semibold tracking-tight">
+            Unsubscribe suggestions
+          </h1>
           <FreshnessBadge
             state={freshness.state}
             lastKnownGoodAt={freshness.lastKnownGoodAt ?? undefined}
@@ -126,7 +129,7 @@ export default function UnsubscribePage(): JSX.Element {
         </ul>
       ) : (
         <EmptyState
-          icon="check"
+          icon={CircleCheck}
           title="No suggestions right now"
           description="Run a scan — we only recommend when engagement drops below the configured threshold."
         />

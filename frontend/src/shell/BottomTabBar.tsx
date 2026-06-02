@@ -28,9 +28,7 @@ export function BottomTabBar(): JSX.Element {
                 }`
               }
             >
-              <span aria-hidden="true" className="text-lg">
-                {tab.glyph}
-              </span>
+              <tab.icon aria-hidden="true" strokeWidth={1.75} className="h-6 w-6" />
               <span>{tab.label}</span>
             </NavLink>
           </li>

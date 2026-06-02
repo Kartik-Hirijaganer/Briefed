@@ -190,6 +190,9 @@ async def test_cluster_and_summarize_happy_path(test_session) -> None:
         body="Only one.",
         internal_date=now,
     )
+    test_session.expire(email_a, ["body"])
+    test_session.expire(email_b, ["body"])
+    test_session.expire(email_c, ["body"])
 
     test_session.add(
         KnownNewsletter(

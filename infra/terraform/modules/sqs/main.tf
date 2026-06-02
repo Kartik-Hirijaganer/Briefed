@@ -2,7 +2,7 @@
  * Per-stage SQS queues + shared DLQ.
  *
  * Queues per plan §19.15:
- *   ingest, classify, summarize, jobs, unsubscribe, digest, maintenance
+ *   ingest, classify, summarize, unsubscribe, digest, maintenance
  * Plus one DLQ that every queue redrives to after `max_receive_count` fails.
  */
 
@@ -42,7 +42,6 @@ locals {
     "ingest",
     "classify",
     "summarize",
-    "jobs",
     "unsubscribe",
     "digest",
     "maintenance",

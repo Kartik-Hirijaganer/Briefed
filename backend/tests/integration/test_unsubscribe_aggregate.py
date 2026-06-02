@@ -179,7 +179,7 @@ async def _register_prompt(session) -> tuple[PromptRegistry, PromptVersion]:
 @pytest.mark.asyncio
 async def test_aggregate_computes_per_sender_metrics(test_session) -> None:
     _user, account = await _seed_account(test_session)
-    # Sender A: 6 emails, 5 waste, 1 positive → disengaged, noisy, high waste
+    # Sender A: 6 emails, 5 ignore, 1 positive -> disengaged, noisy, high waste
     for idx in range(6):
         await _seed_email(
             test_session,
@@ -188,10 +188,10 @@ async def test_aggregate_computes_per_sender_metrics(test_session) -> None:
             from_addr="deals@promo.example",
             subject=f"Deal {idx}",
             days_ago=idx,
-            label="must_read" if idx == 0 else "waste",
+            label="must_read" if idx == 0 else "ignore",
             has_unsub=True,
         )
-    # Sender B: 2 emails, 0 waste, 2 must_read
+    # Sender B: 2 emails, 0 ignore, 2 must_read
     for idx in range(2):
         await _seed_email(
             test_session,
@@ -242,12 +242,12 @@ async def test_rank_senders_writes_rule_and_model_rows(test_session) -> None:
             from_addr="deals@promo.example",
             subject=f"50% off today {idx}",
             days_ago=idx,
-            label="waste",
+            label="ignore",
             has_unsub=True,
         )
     # Sender B — 2 of 3 criteria (noisy + low_value, engagement above ceiling).
     for idx in range(6):
-        label = "good_to_read" if idx < 2 else "waste"
+        label = "good_to_read" if idx < 2 else "ignore"
         await _seed_email(
             test_session,
             account_id=account.id,
@@ -327,11 +327,11 @@ async def test_rank_senders_writes_rule_and_model_rows(test_session) -> None:
 @pytest.mark.asyncio
 async def test_rank_senders_llm_veto_caps_confidence(test_session) -> None:
     user, account = await _seed_account(test_session)
-    # 7 emails → noisy; 2 must_read + 5 waste → engagement 0.286 (> 0.2,
+    # 7 emails -> noisy; 2 must_read + 5 ignore -> engagement 0.286 (> 0.2,
     # so `disengaged` does NOT fire), waste_rate 0.714 (>= 0.5 → low_value).
     # That is exactly 2-of-3 → borderline → LLM is called.
     for idx in range(7):
-        label = "must_read" if idx < 2 else "waste"
+        label = "must_read" if idx < 2 else "ignore"
         await _seed_email(
             test_session,
             account_id=account.id,

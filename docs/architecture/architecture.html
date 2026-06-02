@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Briefed — System Architecture &amp; Technical Documentation</title>
+  <meta name="description" content="Architecture and technical onboarding guide for Briefed, a personal AI email agent." />
+  <style>
+    /* ============================================================
+       Briefed architecture doc — styling derived from the project
+       design tokens (frontend/src/styles/tokens.css). Self-contained;
+       Mermaid is loaded from a CDN at the bottom of <body>.
+       ============================================================ */
+    :root {
+      color-scheme: light;
+      --bg-canvas: #fafaf9;
+      --bg-surface: #ffffff;
+      --bg-muted: #f6f5f4;
+      --bg-code: #f6f5f4;
+      --border: #e5e3df;
+      --border-strong: #c8c4be;
+      --fg: #37352f;
+      --fg-muted: #5d5b54;
+      --fg-faint: #787671;
+      --accent: #5645d4;
+      --accent-hover: #4534b3;
+      --accent-soft: rgba(86,69,212,.1);
+      --success: #1aae39;
+      --success-soft: rgba(26,174,57,.1);
+      --warn: #dd5b00;
+      --warn-soft: #fdf3e7;
+      --danger: #e03131;
+      --danger-soft: #fdecec;
+      --purple: #9a7cf0;
+      --teal: #0d9488;
+      --shadow-1: 0 1px 2px rgba(15,15,15,.04);
+      --shadow-2: 0 4px 12px rgba(15,15,15,.08);
+      --shadow-3: 0 24px 48px -8px rgba(15,15,15,.2);
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sidebar-w: 290px;
+      --maxw: 1080px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background: var(--bg-canvas);
+      color: var(--fg);
+      line-height: 1.65;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---------- Layout ---------- */
+    .layout { display: flex; align-items: flex-start; }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      flex: 0 0 var(--sidebar-w);
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--bg-surface);
+      padding: 22px 18px 60px;
+    }
+    .sidebar .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .sidebar .brand .logo {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 16px;
+      box-shadow: var(--shadow-1);
+    }
+    .sidebar .brand b { font-size: 17px; letter-spacing: -.2px; }
+    .sidebar .sub { color: var(--fg-faint); font-size: 12px; margin: 0 0 18px 40px; }
+    .toc { list-style: none; margin: 0; padding: 0; }
+    .toc > li { margin: 1px 0; }
+    .toc a {
+      display: block; text-decoration: none; color: var(--fg-muted);
+      padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13.5px;
+      border-left: 2px solid transparent; transition: background .12s, color .12s;
+    }
+    .toc a:hover { background: var(--bg-muted); color: var(--fg); }
+    .toc a.active { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+    .toc .group-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--fg-faint); margin: 16px 10px 4px; font-weight: 700;
+    }
+
+    .content { flex: 1 1 auto; min-width: 0; padding: 0 0 80px; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 32px; }
+
+    /* ---------- Hero ---------- */
+    .hero {
+      background: radial-gradient(1200px 400px at 20% -10%, rgba(86,69,212,.25), transparent 60%),
+                  radial-gradient(1000px 400px at 90% 0%, rgba(154,124,240,.22), transparent 55%),
+                  #191919;
+      color: #f7f6f3; padding: 56px 0 48px; border-bottom: 1px solid var(--border);
+    }
+    .hero .wrap { display: block; }
+    .hero .eyebrow { color: #93c5fd; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 12px; }
+    .hero h1 { font-size: 44px; line-height: 1.08; margin: 12px 0 8px; letter-spacing: -1px; }
+    .hero .tagline { font-size: 19px; color: #d4d4dc; max-width: 720px; margin: 0 0 22px; }
+    .hero .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #a1a1aa; font-size: 13px; margin-top: 8px; }
+    .hero .meta b { color: #e4e4e8; font-weight: 600; }
+    .stack-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .stack-badges span {
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+      color: #e4e4e8; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+    }
+
+    /* ---------- Typography & sections ---------- */
+    section { padding-top: 46px; }
+    section > .wrap > h2 {
+      font-size: 30px; letter-spacing: -.5px; margin: 0 0 4px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 12px;
+    }
+    section > .wrap > h2 .num {
+      font-size: 14px; color: var(--accent); background: var(--accent-soft);
+      border-radius: 8px; padding: 3px 9px; font-weight: 800; letter-spacing: 0;
+    }
+    h3 { font-size: 21px; letter-spacing: -.3px; margin: 34px 0 8px; }
+    h4 { font-size: 16px; margin: 22px 0 6px; color: var(--fg); }
+    p { margin: 10px 0; color: var(--fg); }
+    .lead { font-size: 18px; color: var(--fg-muted); }
+    a { color: var(--accent); }
+    code {
+      font-family: var(--font-mono); font-size: .86em; background: var(--bg-code);
+      border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--fg);
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 5px 0; }
+    strong { font-weight: 650; }
+
+    /* ---------- Cards / grids ---------- */
+    .grid { display: grid; gap: 16px; margin: 18px 0; }
+    .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .card {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 18px 18px; box-shadow: var(--shadow-1);
+    }
+    .card h4 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+    .card .ic { font-size: 18px; }
+    .card p { margin: 6px 0 0; color: var(--fg-muted); font-size: 14.5px; }
+
+    .stat {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 16px; text-align: center; box-shadow: var(--shadow-1);
+    }
+    .stat .v { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -.5px; }
+    .stat .k { font-size: 12.5px; color: var(--fg-muted); margin-top: 2px; }
+
+    /* ---------- Callouts ---------- */
+    .callout {
+      border-radius: var(--radius-md); padding: 14px 16px 14px 18px; margin: 18px 0;
+      border: 1px solid var(--border); border-left-width: 4px; background: var(--bg-surface); font-size: 14.5px;
+    }
+    .callout .t { font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+    .callout p { margin: 4px 0 0; color: var(--fg-muted); }
+    .callout.note { border-left-color: var(--accent); }
+    .callout.note .t { color: var(--accent); }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.warn .t { color: var(--warn); }
+    .callout.security { border-left-color: var(--danger); }
+    .callout.security .t { color: var(--danger); }
+    .callout.ok { border-left-color: var(--success); }
+    .callout.ok .t { color: var(--success); }
+
+    /* ---------- Tables ---------- */
+    .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); margin: 14px 0 8px; box-shadow: var(--shadow-1); }
+    table { border-collapse: collapse; width: 100%; font-size: 13.6px; background: var(--bg-surface); }
+    th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--bg-muted); font-weight: 700; color: var(--fg); white-space: nowrap; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-muted); }
+    td code { white-space: nowrap; }
+    .col-name code { color: var(--accent); font-weight: 600; }
+    .muted { color: var(--fg-faint); }
+
+    /* method pills */
+    .m { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; display: inline-block; min-width: 52px; text-align: center; color: #fff; }
+    .m.get { background: var(--accent); }
+    .m.post { background: var(--success); }
+    .m.put { background: var(--warn); }
+    .m.patch { background: var(--purple); }
+    .m.delete { background: var(--danger); }
+
+    .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
+    .pill.pk { background: var(--accent-soft); color: var(--accent); }
+    .pill.fk { background: var(--warn-soft); color: var(--warn); }
+    .pill.uk { background: rgba(154,124,240,.12); color: var(--purple); }
+    .pill.enc { background: var(--danger-soft); color: var(--danger); }
+
+    /* ---------- Mermaid diagram cards ---------- */
+    .diagram {
+      background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 22px; margin: 18px 0; box-shadow: var(--shadow-2); overflow-x: auto;
+    }
+    .diagram .mermaid { text-align: center; }
+    .diagram .cap { text-align: center; color: #6b7280; font-size: 12.5px; margin-top: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; margin-top: 14px; font-size: 12px; color: #4b5563; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+    /* ---------- Misc ---------- */
+    .anchor { scroll-margin-top: 24px; }
+    .backtop {
+      position: fixed; right: 22px; bottom: 22px; z-index: 40;
+      background: var(--accent); color: #fff; border: none; cursor: pointer;
+      width: 42px; height: 42px; border-radius: 50%; font-size: 18px; box-shadow: var(--shadow-2);
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .backtop.show { opacity: 1; pointer-events: auto; }
+    .menu-btn {
+      display: none; position: fixed; top: 12px; left: 12px; z-index: 50;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 12px;
+      font-size: 14px; cursor: pointer; box-shadow: var(--shadow-2);
+    }
+    footer.docfoot { border-top: 1px solid var(--border); margin-top: 50px; padding: 26px 0; color: var(--fg-faint); font-size: 13px; }
+
+    .kvtable td:first-child { font-weight: 600; white-space: nowrap; width: 1%; color: var(--fg); }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 1000px) {
+      .grid.cols-3, .grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 860px) {
+      .menu-btn { display: block; }
+      .sidebar {
+        position: fixed; left: 0; top: 0; z-index: 49; transform: translateX(-105%);
+        transition: transform .25s ease; box-shadow: var(--shadow-3);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .hero h1 { font-size: 33px; }
+      .wrap { padding: 0 18px; }
+      .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰ Contents</button>
+
+  <div class="layout">
+    <!-- ============================ SIDEBAR ============================ -->
+    <nav class="sidebar" id="sidebar" aria-label="Table of contents">
+      <div class="brand"><span class="logo">B</span><b>Briefed</b></div>
+      <p class="sub">Architecture &amp; onboarding</p>
+      <ul class="toc" id="toc">
+        <li class="group-label">Start here</li>
+        <li><a href="#summary">1 · Executive summary</a></li>
+        <li><a href="#how-it-works">2 · How it works (a day)</a></li>
+        <li class="group-label">Architecture</li>
+        <li><a href="#architecture">3 · System architecture</a></li>
+        <li><a href="#runtimes">4 · Runtime shapes</a></li>
+        <li><a href="#pipeline">5 · The daily pipeline</a></li>
+        <li><a href="#llm">6 · LLM subsystem</a></li>
+        <li><a href="#security">7 · Security &amp; encryption</a></li>
+        <li><a href="#flows">8 · Key sequence flows</a></li>
+        <li><a href="#stack">9 · Technology stack</a></li>
+        <li class="group-label">Reference</li>
+        <li><a href="#data-model">10 · Data model &amp; ERD</a></li>
+        <li><a href="#tables">11 · Table reference</a></li>
+        <li><a href="#api">12 · API reference</a></li>
+        <li class="group-label">Operate &amp; extend</li>
+        <li><a href="#config">13 · Configuration</a></li>
+        <li><a href="#extending">14 · Extending safely</a></li>
+        <li><a href="#source-map">15 · Source map</a></li>
+        <li class="group-label">Context</li>
+        <li><a href="#assumptions">16 · Assumptions &amp; limitations</a></li>
+        <li><a href="#glossary">17 · Glossary</a></li>
+      </ul>
+    </nav>
+
+    <!-- ============================ CONTENT ============================ -->
+    <main class="content">
+      <!-- HERO -->
+      <header class="hero">
+        <div class="wrap">
+          <div class="eyebrow">Technical documentation</div>
+          <h1>Briefed</h1>
+          <p class="tagline">A personal AI email agent. Every day it reads your Gmail, decides what matters, summarizes it, finds job openings, and tells you what to unsubscribe from — and it never touches your mailbox without you.</p>
+          <div class="stack-badges">
+            <span>Python · FastAPI</span><span>Pydantic</span><span>React · Vite · PWA</span>
+            <span>OpenRouter (Gemini Flash + Claude Haiku 4.5)</span><span>Gmail API</span>
+            <span>Supabase Postgres</span><span>AWS Lambda (container image)</span><span>SQS</span><span>KMS</span><span>Terraform</span>
+          </div>
+          <div class="meta">
+            <span><b>Version:</b> 1.0.0 (released 2026-04-25)</span>
+            <span><b>Audience:</b> new engineers onboarding to the codebase</span>
+            <span><b>Doc generated:</b> 2026-05-30</span>
+            <span><b>Source of truth:</b> code at commit <code>dcf4284</code></span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ===================== 1. EXECUTIVE SUMMARY ===================== -->
+      <section id="summary" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">01</span> Executive summary</h2>
+          <p class="lead">Briefed is a <strong>single-user, self-hosted assistant</strong> that turns a noisy Gmail inbox into a short, useful daily briefing. You connect your Gmail account once; after that, Briefed quietly does the reading for you and shows the results in a phone-friendly web app.</p>
+
+          <div class="grid cols-3">
+            <div class="card">
+              <h4><span class="ic">📥</span> What it does</h4>
+              <p>Sorts every new email into buckets (must-read, good-to-read, ignore, waste), writes plain-language summaries of the important ones, groups newsletters into a tech-news digest, pulls structured job listings out of recruiter emails, and ranks senders you should probably unsubscribe from.</p>
+            </div>
+            <div class="card">
+              <h4><span class="ic">⚙️</span> How it does it</h4>
+              <p>A scheduled job wakes up once or twice a day, fetches new mail through the Gmail API, and pushes each email through a chain of small background workers. Each stage calls a large language model (LLM) through OpenRouter to read and reason, then stores the result in a database. The web app reads those results.</p>
+            </div>
+            <div class="card">
+              <h4><span class="ic">🛡️</span> What it will <em>not</em> do</h4>
+              <p>It never archives, deletes, marks-read, replies, or unsubscribes for you. Release 1.0.0 is <strong>recommend-only</strong> — every action is a suggestion with an "Open in Gmail" link, so a wrong guess can never lose your mail.</p>
+            </div>
+          </div>
+
+          <div class="grid cols-3" style="--cols:6; grid-template-columns: repeat(6, 1fr);">
+            <div class="stat"><div class="v">1</div><div class="k">user (self-host)</div></div>
+            <div class="stat"><div class="v">~$8–11</div><div class="k">cloud cost / month</div></div>
+            <div class="stat"><div class="v">21</div><div class="k">database tables</div></div>
+            <div class="stat"><div class="v">32</div><div class="k">HTTP endpoints</div></div>
+            <div class="stat"><div class="v">2</div><div class="k">LLM routes</div></div>
+            <div class="stat"><div class="v">10</div><div class="k">ADRs</div></div>
+          </div>
+
+          <h3>The mental model in one paragraph</h3>
+          <p>Think of Briefed as a tiny factory that runs overnight. A <strong>timer</strong> (AWS EventBridge Scheduler) starts the line. A <strong>fan-out</strong> step creates one work order per connected mailbox. That work order flows down a <strong>conveyor belt of queues</strong> (AWS SQS): first <em>ingest</em> the new emails, then <em>classify</em> them, then in parallel <em>summarize</em> the important ones and run a periodic <em>unsubscribe</em> hygiene pass. Each station is a small serverless function (AWS Lambda) that shuts off when idle, so the factory costs almost nothing when nothing is happening. The finished briefing lands in a Postgres database, and a React web app (installed like a phone app) shows it to you.</p>
+
+          <div class="callout note">
+            <div class="t">📌 Why this shape?</div>
+            <p>The whole design optimizes for <strong>one person, low cost, and safety</strong>. Serverless means you pay per-use (near zero at idle). Recommend-only means a model mistake can't damage your inbox. Two managed services (Supabase for the database, OpenRouter for the LLM) keep the operational surface tiny. The trade-offs behind each of these are written down as <a href="#assumptions">Architecture Decision Records</a>.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 2. HOW IT WORKS (A DAY) ===================== -->
+      <section id="how-it-works" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">02</span> How it works — a day in the life</h2>
+          <p>Here is the same system told as a story, so the moving parts have a reason to exist before you meet them by name.</p>
+
+          <ol>
+            <li><strong>The timer ticks — every 15 minutes.</strong> EventBridge Scheduler triggers the <em>fan-out</em> Lambda on a fixed 15-minute cadence. The cadence is constant; <em>who actually runs</em> is decided next. (You pick once-daily or twice-daily with specific <code>HH:MM</code> slots; those live on your profile.)</li>
+            <li><strong>Fan-out decides who is due.</strong> A cheap SQL filter shortlists candidate users, then a Python predicate (<code>app.core.scheduling.is_due</code>) authoritatively re-checks each one — handling timezone, DST, a "ran in the last hour" debounce, and stale locks. For each due user it takes a per-user idempotency lock (<code>users.current_run_id</code>) so two ticks can't stomp on each other, then drops one "go ingest this mailbox" message onto the <em>ingest</em> queue per active auto-scan account.</li>
+            <li><strong>Ingest fetches new mail.</strong> The ingest worker uses the saved <em>sync cursor</em> (Gmail's <code>historyId</code>) to ask Gmail only for what changed since last time. It de-duplicates, splits each message into lightweight metadata + a separately-encrypted body, and saves it. Then it chains the emails onto the <em>classify</em> queue.</li>
+            <li><strong>Classify decides what matters.</strong> For each email, a fast rule engine runs first (cheap, deterministic). If the rules are confident, it stops there. If not, it asks the LLM. The verdict — one of <code>must_read</code>, <code>good_to_read</code>, or <code>ignore</code> — is saved, with the model's reasoning <strong>encrypted</strong>.</li>
+            <li><strong>The line splits.</strong> Emails flagged important go to <em>summarize</em>; newsletters get grouped into tech-news clusters and summarized as a set.</li>
+            <li><strong>Hygiene runs.</strong> Periodically, the <em>unsubscribe</em> worker looks back 30 days per sender, scores how often they email you versus how often you engage, and ranks unsubscribe suggestions.</li>
+            <li><strong>You open the app.</strong> The React PWA calls the API and shows today's digest, the triage buckets, tech news, and unsubscribe recommendations. Because it's a PWA, the last digest is also readable offline.</li>
+          </ol>
+
+          <div class="callout ok">
+            <div class="t">✅ Idempotent by design</div>
+            <p>Every step is safe to re-run. Gmail fetches are keyed on <code>historyId</code> (re-runs are no-ops), each pipeline message carries a <code>run_id</code>, and rows like classifications and summaries are <em>upserted</em> per email. If a worker crashes, SQS redelivers the message and nothing is corrupted.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 3. SYSTEM ARCHITECTURE ===================== -->
+      <section id="architecture" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">03</span> System architecture</h2>
+          <p>The diagram below is the whole system on one page. Colors group the pieces by kind: <strong>client</strong>, <strong>AWS edge</strong>, <strong>serverless compute</strong>, <strong>messaging</strong>, <strong>data</strong>, <strong>security</strong>, and <strong>external services</strong>.</p>
+
+          <div class="diagram">
+            <pre class="mermaid">
+flowchart TB
+    user([👤 User<br/>browser / installed PWA]):::client
+
+    subgraph EDGE["AWS Edge"]
+      cf["CloudFront CDN<br/>(TLS, caching, routing)"]:::edge
+      pwaS3[("S3 — PWA static assets")]:::data
+    end
+
+    subgraph COMPUTE["AWS Lambda (one container image, three handlers)"]
+      api["API Lambda<br/>FastAPI + Mangum<br/>1024 MB · container image"]:::compute
+      fan["Fan-out Lambda<br/>enqueue due accounts"]:::compute
+      worker["Worker Lambda<br/>SQS dispatcher<br/>1536 MB · 900s"]:::compute
+    end
+
+    subgraph MSG["Messaging — Amazon SQS"]
+      q["Per-stage queues:<br/>ingest · classify · summarize<br/>unsubscribe · digest · maintenance"]:::queue
+      dlq[["Dead-letter queue<br/>(after 5 failures)"]]:::queue
+    end
+
+    sched["EventBridge Scheduler<br/>(ticks every 15 min)"]:::sched
+
+    subgraph DATA["Data plane"]
+      pg[("Supabase Postgres<br/>via pgbouncer pooler")]:::data
+      rawS3[("S3 — raw email bodies")]:::data
+    end
+
+    subgraph SEC["Security (AWS)"]
+      kms{{"KMS — 2 CMKs<br/>token-wrap · content-encrypt"}}:::sec
+      ssm[/"SSM Parameter Store<br/>(secrets at cold start)"/]:::sec
+    end
+
+    subgraph EXT["External services"]
+      gmail["Gmail API<br/>(read-only)"]:::ext
+      orouter["OpenRouter<br/>(LLM routing)"]:::ext
+      gem["Gemini 2.0 Flash"]:::ext
+      claude["Claude Haiku 4.5"]:::ext
+    end
+
+    user -->|HTTPS| cf
+    cf -->|static| pwaS3
+    cf -->|/api, /oauth| api
+    sched --> fan
+    fan -->|IngestMessage| q
+    q --> worker
+    worker -->|chain next stage| q
+    q -. on repeated failure .-> dlq
+    api --> pg
+    worker --> pg
+    worker --> rawS3
+    api -. read .-> kms
+    worker -. encrypt / decrypt .-> kms
+    api -. cold start .-> ssm
+    worker -. cold start .-> ssm
+    worker -->|fetch mail| gmail
+    api -->|OAuth| gmail
+    worker -->|prompts| orouter
+    orouter --> gem
+    orouter --> claude
+
+    classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12;
+    classDef edge fill:#ecfeff,stroke:#0891b2,stroke-width:1.5px,color:#155e75;
+    classDef compute fill:#f5f3ff,stroke:#7c3aed,stroke-width:1.5px,color:#4c1d95;
+    classDef queue fill:#f1effd,stroke:#5645d4,stroke-width:1.5px,color:#37352f;
+    classDef sched fill:#fef9c3,stroke:#ca8a04,stroke-width:1.5px,color:#713f12;
+    classDef data fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
+    classDef sec fill:#fef2f2,stroke:#dc2626,stroke-width:1.5px,color:#7f1d1d;
+    classDef ext fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155;
+            </pre>
+            <div class="legend">
+              <span><i style="background:#fff7ed;border:1px solid #ea580c"></i>Client</span>
+              <span><i style="background:#ecfeff;border:1px solid #0891b2"></i>AWS edge</span>
+              <span><i style="background:#f5f3ff;border:1px solid #7c3aed"></i>Compute (Lambda)</span>
+              <span><i style="background:#f1effd;border:1px solid #5645d4"></i>Messaging (SQS)</span>
+              <span><i style="background:#fef9c3;border:1px solid #ca8a04"></i>Scheduler</span>
+              <span><i style="background:#ecfdf5;border:1px solid #059669"></i>Data</span>
+              <span><i style="background:#fef2f2;border:1px solid #dc2626"></i>Security</span>
+              <span><i style="background:#f8fafc;border:1px solid #64748b"></i>External</span>
+            </div>
+            <div class="cap">Figure 1 — End-to-end system. One Docker image runs as three Lambda handlers; everything is event-driven and serverless.</div>
+          </div>
+
+          <h3>The big idea: one image, two "shapes", event-driven glue</h3>
+          <p>There is <strong>one backend codebase and one container image</strong>. An environment variable, <code>BRIEFED_RUNTIME</code>, decides which entrypoint runs. The web traffic path (CloudFront → API Lambda) is completely separate from the work path (Scheduler → fan-out → SQS → worker Lambda), but both share the same code, the same database, and the same encryption keys. This is why a feature can be written once and used both by an API request and by a background worker.</p>
+
+          <div class="grid cols-2">
+            <div class="card">
+              <h4>🌐 The request path (interactive)</h4>
+              <p>You hit CloudFront. Static PWA files come from S3. Anything under <code>/api</code> or <code>/oauth</code> is forwarded to the API Lambda, which runs FastAPI wrapped by Mangum. It reads/writes Postgres and decrypts content through KMS as needed.</p>
+            </div>
+            <div class="card">
+              <h4>🔁 The work path (batch)</h4>
+              <p>The Scheduler fires the fan-out Lambda. From there it's all SQS messages and the worker Lambda, one queue per pipeline stage. Failed messages retry up to 5 times, then land in a dead-letter queue for inspection.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 4. RUNTIME SHAPES ===================== -->
+      <section id="runtimes" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">04</span> Runtime shapes</h2>
+          <p>The same code can boot in four ways. The first is for local development; the other three are the production Lambda handlers. The selector is the <code>BRIEFED_RUNTIME</code> environment variable (see <code>backend/app/core/config.py</code>).</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Runtime</th><th>Entry point</th><th>Triggered by</th><th>Job</th></tr></thead>
+              <tbody>
+                <tr><td><code>local</code></td><td><code>app.main:app</code> via uvicorn</td><td>Developer / tests</td><td>Serves the full FastAPI app on <code>:8000</code> for dev and the test suite.</td></tr>
+                <tr><td><code>lambda-api</code></td><td><code>app/lambda_api.py</code> (Mangum)</td><td>Lambda Function URL behind CloudFront</td><td>Handles all HTTP API + OAuth requests. 1024 MB. SnapStart-ready in code but currently disabled (container-image packaging — see note below).</td></tr>
+                <tr><td><code>lambda-worker</code></td><td><code>app/lambda_worker.py</code> → <code>sqs_dispatcher</code></td><td>SQS event-source mappings (one per stage)</td><td>Routes each message by its source queue ARN to the right handler in <code>app/workers/handlers/</code>. 1536 MB, 900s timeout. Reports partial batch failures so a single poison message doesn't re-drive the whole batch.</td></tr>
+                <tr><td><code>lambda-fanout</code></td><td><code>app/lambda_worker.py</code> → <code>fanout_handler</code></td><td>EventBridge Scheduler (every 15 min)</td><td>On each tick, a cheap SQL filter shortlists users, then the Python <code>is_due</code> predicate decides who is actually due, takes a per-user run lock, and enqueues one ingest message per active auto-scan account.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn">
+            <div class="t">⚡ SnapStart: designed-for, but currently OFF</div>
+            <p>ADR 0003 planned for AWS SnapStart (snapshot a booted Lambda, restore in ~200–300 ms instead of a 1–3 s cold start). <strong>In the deployed Terraform it is intentionally disabled</strong> because all three Lambdas ship as <em>container images</em> (<code>package_type = "Image"</code>), and AWS SnapStart does not support container-image packaging. So cold starts are <em>not</em> yet mitigated. The code is still written to be snapshot-friendly — settings are hydrated from SSM and logging is configured at <em>import time</em>, not in a factory — so SnapStart can be flipped on if AWS adds container support or the team moves to ZIP packaging. The same reasoning is why heavy libraries (boto3, httpx, the LLM SDK) are imported lazily inside handler bodies; the per-file <code>ruff</code> ignore <code>PLC0415</code> marks those intentional late imports.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 5. THE DAILY PIPELINE ===================== -->
+      <section id="pipeline" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">05</span> The daily pipeline</h2>
+          <p>This is the heart of Briefed: a fan-out into a chain of independent stages, each with its own SQS queue and its own handler. Messages between stages are strict, versioned Pydantic models in <code>backend/app/workers/messages.py</code> — you never invent a payload inline.</p>
+
+          <div class="diagram">
+            <pre class="mermaid">
+flowchart LR
+    sched["⏰ EventBridge<br/>Scheduler"]:::sched --> fan["fan-out<br/>handler"]:::stage
+    fan -->|"IngestMessage<br/>(1 per account)"| ing["📥 ingest"]:::stage
+    ing -->|"ClassifyMessage<br/>(1 per email)"| cls["🏷️ classify"]:::stage
+    cls -->|"SummarizeEmailMessage"| sum["📝 summarize<br/>(per-email)"]:::stage
+    cls -->|"TechNewsClusterMessage"| tn["🗞️ tech-news<br/>clusters"]:::stage
+    acct["connected<br/>accounts"]:::side -. "30-day pass" .-> uns["🧹 unsubscribe<br/>hygiene"]:::stage
+    sum --> dig[("digest<br/>ready in DB")]:::out
+    tn --> dig
+    uns --> dig
+
+    classDef sched fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+    classDef stage fill:#f1effd,stroke:#5645d4,stroke-width:1.5px,color:#37352f;
+    classDef side fill:#f1f5f9,stroke:#94a3b8,color:#334155;
+    classDef out fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
+            </pre>
+            <div class="cap">Figure 2 — Pipeline fan-out. Each arrow label is the exact Pydantic message class that crosses that queue.</div>
+          </div>
+
+          <h3>Stage-by-stage</h3>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Stage</th><th>Queue</th><th>Input message</th><th>What it produces</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Fan-out</strong></td><td>—</td><td><code>FanoutMessage</code></td><td>One <code>IngestMessage</code> per active account; sets the per-user run lock.</td></tr>
+                <tr><td><strong>Ingest</strong></td><td><code>ingest</code></td><td><code>IngestMessage</code></td><td>New <code>emails</code> + encrypted <code>email_content_blobs</code>; advances the <code>sync_cursors</code>. Chains to classify.</td></tr>
+                <tr><td><strong>Classify</strong></td><td><code>classify</code></td><td><code>ClassifyMessage</code></td><td>One <code>classifications</code> row (label + score + encrypted reasons). Sets <code>is_newsletter</code> for downstream newsletter grouping.</td></tr>
+                <tr><td><strong>Summarize (email)</strong></td><td><code>summarize</code></td><td><code>SummarizeEmailMessage</code></td><td>One encrypted <code>summaries</code> row per important email.</td></tr>
+                <tr><td><strong>Tech-news clusters</strong></td><td><code>summarize</code></td><td><code>TechNewsClusterMessage</code></td><td>Groups newsletters into <code>tech_news_clusters</code> + members, one summary per cluster.</td></tr>
+                <tr><td><strong>Unsubscribe</strong></td><td><code>unsubscribe</code></td><td><code>UnsubscribeMessage</code></td><td>Upserts <code>unsubscribe_suggestions</code> from a 30-day per-sender aggregate.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">Two more queues exist for operational work: <code>digest</code> (compose/notify) and <code>maintenance</code> (keep-alive + cleanup). Queue URLs are injected per-stage via <code>BRIEFED_*_QUEUE_URL</code> env vars; a stage only chains forward when its downstream URL is set.</p>
+
+          <h3>Failure handling &amp; graceful degradation</h3>
+          <p>The pipeline is built to <em>degrade</em> rather than drop work. Two patterns repeat: <strong>retry-by-bubbling</strong> (let the exception propagate so SQS redelivers, eventually to the DLQ) and <strong>degrade-in-place</strong> (write a safe fallback row so the email is never silently lost).</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Stage</th><th>What happens when it goes wrong</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Ingest</strong></td><td>If the saved Gmail cursor is stale/rejected, it falls back to a bounded <code>newer_than:14d</code> scan instead of a full history walk. Token-refresh, quota, and provider errors are allowed to bubble so SQS retries the message.</td></tr>
+                <tr><td><strong>Classify</strong></td><td>If the LLM call fails entirely, the email is persisted as <code>needs_review</code> (graceful degradation) rather than dropped. Even on success, a model confidence below <strong>0.55</strong> is forced to <code>needs_review</code> so low-confidence guesses surface for a human instead of mislabeling.</td></tr>
+                <tr><td><strong>Summarize</strong></td><td>A missing prompt-version row is retried. LLM/parse failures are handled as service-layer outcomes; a missing source email is treated as a no-op so a deleted email can't wedge the queue.</td></tr>
+                <tr><td><strong>Unsubscribe</strong></td><td>If the borderline LLM call fails for one sender, that sender is skipped and the 30-day aggregate continues for the rest. User dismissals are always preserved across re-runs.</td></tr>
+                <tr><td><strong>Any stage</strong></td><td>After 5 failed receives the message redrives to the shared DLQ (14-day retention). The worker reports <em>partial</em> batch failures, so one poison record doesn't force healthy records in the same batch to reprocess.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn">
+            <div class="t">⚠️ Reliability knobs (from the SQS Terraform module)</div>
+            <p>Queue visibility timeout is <strong>900 s</strong> (≥ the worker's max runtime). A message is retried up to <strong>5 times</strong> before redriving to the shared dead-letter queue, which retains failures for <strong>14 days</strong>. Normal queues retain messages for 4 days. A CloudWatch alarm watches DLQ depth.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 6. LLM SUBSYSTEM ===================== -->
+      <section id="llm" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">06</span> LLM subsystem</h2>
+          <p>Every call to a language model goes through one object: <code>LLMClient</code> in <code>backend/app/llm/client.py</code>. Nothing in the business logic talks to a provider directly. This single chokepoint is what makes cost control, retries, fallback, and auditing possible.</p>
+
+          <div class="diagram">
+            <pre class="mermaid">
+flowchart TB
+    caller["Pipeline stage<br/>(classify / summarize / unsubscribe)"]:::stage
+    prompt["Prompt registry<br/>(name, version) → bundle"]:::comp
+    redact["Redaction chain<br/>identity → regex"]:::sec
+    client["LLMClient<br/>retries · circuit breaker · cost cap · logging"]:::core
+    provider["OpenRouterProvider<br/>(implements LLMProvider)"]:::comp
+
+    caller --> prompt --> redact --> client --> provider
+    provider -->|"primary"| gem["Gemini 2.0 Flash"]:::ext
+    provider -. "fallback" .-> claude["Claude Haiku 4.5<br/>(cap 100 calls/day)"]:::ext
+    client -->|"1 row per call"| log[("prompt_call_log<br/>tokens · cost · status")]:::data
+
+    classDef stage fill:#f1effd,stroke:#5645d4,color:#37352f;
+    classDef comp fill:#f5f3ff,stroke:#7c3aed,color:#4c1d95;
+    classDef core fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12;
+    classDef sec fill:#fef2f2,stroke:#dc2626,color:#7f1d1d;
+    classDef ext fill:#f8fafc,stroke:#64748b,color:#334155;
+    classDef data fill:#ecfdf5,stroke:#059669,color:#065f46;
+            </pre>
+            <div class="cap">Figure 3 — Anatomy of an LLM call. The prompt is rendered from a versioned bundle, redacted, then sent through the resilient client.</div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="card">
+              <h4>🔀 Fallback chain</h4>
+              <p>The chain is catalog-driven: <code>[primary, *fallbacks]</code> = <strong>Gemini 2.0 Flash</strong> then <strong>Claude Haiku 4.5</strong>, both routed through OpenRouter (ADR 0009). Adding a model is a one-line edit in <code>catalog.py</code>.</p>
+            </div>
+            <div class="card">
+              <h4>🔁 Retries &amp; circuit breaker</h4>
+              <p>Up to 3 attempts with exponential backoff + jitter, only on errors marked retryable. After 5 consecutive failures the breaker trips and the fallback takes over while it's open.</p>
+            </div>
+            <div class="card">
+              <h4>💰 Hard cost caps</h4>
+              <p>A per-day USD cap (<code>daily_llm_usd_cap</code>) is enforced from each call's reported <code>usage.cost</code>; exceeding it raises <code>LLMBudgetExceededError</code> and opens a global breaker until UTC midnight. Claude Haiku is separately capped at 100 calls/day.</p>
+            </div>
+            <div class="card">
+              <h4>🧾 Full auditing</h4>
+              <p>Every call writes one <code>prompt_call_log</code> row — model, tokens (incl. cache read/write), cost, latency, status (<code>ok</code>/<code>fallback</code>/<code>error</code>/<code>skipped</code>), and a redaction <em>count</em> summary (never the values).</p>
+            </div>
+          </div>
+
+          <h3>Prompts are versioned artifacts, not strings</h3>
+          <p>Prompts live in <code>packages/prompts/</code> as versioned bundles with JSON Schemas, and are referenced by <code>(name, version)</code> — e.g. <code>("triage", 2)</code>, <code>("summarize_relevant", 1)</code>, <code>("category_digest", 1)</code>, <code>("newsletter_group", 1)</code>, <code>("unsubscribe_borderline", 1)</code>. At process start the <code>PromptRegistry</code> loads them into the <code>prompt_versions</code> table, which every audit row foreign-keys to. You never paste a prompt into business logic.</p>
+        </div>
+      </section>
+
+      <!-- ===================== 7. SECURITY & ENCRYPTION ===================== -->
+      <section id="security" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">07</span> Security &amp; encryption</h2>
+          <p>Briefed handles your email, so privacy is a first-class design constraint, not an afterthought. Three layers matter: authentication, encryption at rest, and prompt redaction.</p>
+
+          <h3>Authentication — a signed cookie</h3>
+          <p>Because 1.0.0 is single-user self-host, auth is deliberately simple: a cookie named <code>briefed_session</code> containing the owner's <code>user_id</code>, signed with HMAC-SHA-256 using <code>session_signing_key</code> (see <code>backend/app/api/session.py</code>). Tampering breaks the signature and is rejected. The cookie is <strong>HttpOnly</strong>, <strong>SameSite=Lax</strong>, and <strong>Secure</strong> outside local dev, with a 30-day lifetime. The OAuth flow uses a second short-lived signed cookie (<code>briefed_oauth_state</code>, 10-min TTL) carrying the random state <em>and</em> the PKCE verifier. All <code>/api/v1/*</code> routes require the session cookie; only <code>/health</code> and the two OAuth endpoints are open.</p>
+          <div class="callout warn">
+            <div class="t">⚠️ CSRF posture (be precise here)</div>
+            <p>CSRF defense in 1.0.0 rests on <strong>SameSite=Lax cookies + same-origin serving</strong> (CloudFront proxies the API under the PWA's origin). There is <strong>no separate CSRF token / double-submit token</strong> in the backend today. If a future change moves the API cross-origin or relaxes SameSite, add an explicit CSRF token for state-changing requests.</p>
+          </div>
+
+          <h3>Encryption at rest — two KMS keys, envelope encryption</h3>
+          <p>Supabase can technically read any column you don't encrypt, so the sensitive ones are encrypted before they ever reach the database (ADR 0008). Briefed uses <strong>two separate customer-managed KMS keys</strong> so a token leak and a content leak have independent revocation paths:</p>
+          <div class="grid cols-2">
+            <div class="card">
+              <h4><span class="ic">🔑</span> <code>alias/briefed-*-token-wrap</code></h4>
+              <p>Wraps your Gmail OAuth access &amp; refresh tokens (<code>oauth_tokens.access_token_ct</code> / <code>refresh_token_ct</code>). Helper: <code>app/core/security.py</code>.</p>
+            </div>
+            <div class="card">
+              <h4><span class="ic">🔒</span> <code>alias/briefed-*-content-encrypt</code></h4>
+              <p>Wraps email-derived content: summary bodies, classification reasons, job rationales, unsubscribe rationale, email body excerpts. Helper: <code>app/core/content_crypto.py</code>.</p>
+            </div>
+          </div>
+          <p>The pattern is <strong>envelope encryption</strong>: a fresh 256-bit data key (DEK) encrypts the value with AES-GCM; KMS wraps the DEK; key material never leaves KMS. Every encrypt/decrypt binds the <code>user_id</code> into the KMS <em>encryption context</em>, so a ciphertext stolen for one user can't be decrypted under another. Revoking the Lambda role's <code>kms:Decrypt</code> permission instantly bricks all reads — a real trust boundary, not "security theater."</p>
+
+          <div class="callout security">
+            <div class="t">🔐 What "<code>_ct</code>" columns mean</div>
+            <p>Any column ending in <code>_ct</code> (ciphertext) holds an envelope-encrypted value — Supabase only ever sees opaque bytes. Repositories encrypt on write and decrypt on read; plaintext such as a summary body or an LLM rationale <strong>never touches disk</strong>. In the table reference below these are flagged <span class="pill enc">encrypted</span>.</p>
+          </div>
+
+          <h3>Prompt redaction — shrinking the blast radius</h3>
+          <p>Before any email text is sent to OpenRouter, it passes through a sanitizer chain (ADR 0010): <strong>identity → regex → Presidio</strong>. The identity scrubber replaces the user's own email/name/aliases with stable placeholders; regex catches residue; Presidio (Microsoft's PII NER) fills in names and contact info the regex misses. Honest scope: this <em>reduces</em> what a downstream breach or subpoena would expose; it does not hide that a request happened, its timing, or behavioral patterns. Re-identification of model output is <strong>off by default</strong> and gated behind an allowlist. The audit log stores only <code>{kind: count}</code>, never the reversal map.</p>
+        </div>
+      </section>
+
+      <!-- ===================== 8. KEY FLOWS ===================== -->
+      <section id="flows" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">08</span> Key sequence flows</h2>
+
+          <h3>Connecting a Gmail account (OAuth)</h3>
+          <div class="diagram">
+            <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as User (PWA)
+    participant API as API Lambda
+    participant G as Google OAuth
+    participant DB as Postgres
+    participant K as KMS (token-wrap)
+
+    U->>API: GET /api/v1/oauth/gmail/start
+    API->>API: Make PKCE pair + random state
+    API->>U: 302 to Google + signed state cookie<br/>(holds state + PKCE verifier)
+    U->>G: Authorize (gmail.readonly scope)<br/>code_challenge sent
+    G->>U: Redirect with auth code
+    U->>API: GET /api/v1/oauth/gmail/callback?code=...
+    API->>API: Verify state cookie + match state (CSRF)
+    API->>G: Exchange code + PKCE verifier for tokens
+    G->>API: access + refresh tokens + id_token
+    API->>K: Wrap tokens (envelope encrypt)
+    API->>DB: Save connected_account + oauth_tokens (ciphertext)
+    API->>U: Set session cookie, redirect into app
+            </pre>
+            <div class="cap">Figure 4 — OAuth connect. PKCE + a signed, HttpOnly, SameSite=Lax state cookie (10-min TTL) protect the flow. Only <code>gmail.readonly</code> is requested (ADR 0006); tokens are KMS-encrypted before storage. The user's email comes from the <code>id_token</code> (signature verification is deferred to a later phase — see §16).</div>
+          </div>
+
+          <h3>A dashboard read (e.g. "show me today's digest")</h3>
+          <div class="diagram">
+            <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as User (PWA)
+    participant CF as CloudFront
+    participant API as API Lambda
+    participant DB as Postgres
+    participant K as KMS (content)
+
+    U->>CF: GET /api/v1/digest/today (session cookie)
+    CF->>API: Forward request
+    API->>API: Verify signed session cookie → user_id
+    API->>DB: Query summaries / classifications for the run
+    DB->>API: Rows (content columns are ciphertext)
+    API->>K: Decrypt content DEKs (user_id in context)
+    K->>API: Plaintext summaries
+    API->>U: JSON digest (typed by the OpenAPI contract)
+            </pre>
+            <div class="cap">Figure 5 — Interactive read. Decryption happens in the API Lambda; the database never holds plaintext content.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 9. TECH STACK ===================== -->
+      <section id="stack" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">09</span> Technology stack</h2>
+          <p>Each choice is justified by a written ADR; the "why" column summarizes it.</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Layer</th><th>Technology</th><th>Role</th><th>Why (ADR)</th></tr></thead>
+              <tbody>
+                <tr><td>Backend language</td><td>Python 3.11+</td><td>API + pipeline + Lambda handlers</td><td>Mature LLM/Google SDKs; strict typing via mypy.</td></tr>
+                <tr><td>Web framework</td><td>FastAPI + Pydantic</td><td>Typed HTTP API; all boundary data is a Pydantic model</td><td>Auto OpenAPI; runtime validation.</td></tr>
+                <tr><td>Lambda adapter</td><td>Mangum</td><td>Runs FastAPI inside a Lambda Function URL</td><td>Serverless API path (ADR 0003).</td></tr>
+                <tr><td>LLM routing</td><td>OpenRouter</td><td>Single API in front of Gemini Flash + Claude Haiku 4.5</td><td>One bill/SDK; <code>usage.cost</code> drives the cap (ADR 0009, supersedes 0002).</td></tr>
+                <tr><td>Mailbox</td><td>Gmail API (read-only)</td><td>Source of email; incremental sync via <code>historyId</code></td><td>Scheduled sync, no push/webhook (ADR 0001); read-only scope (ADR 0006).</td></tr>
+                <tr><td>Database</td><td>Supabase Postgres</td><td>All metadata + ciphertext; SQLAlchemy 2.0 async + Alembic</td><td>$0 free tier; pgbouncer pooler for Lambda churn (ADR 0004).</td></tr>
+                <tr><td>Object storage</td><td>Amazon S3</td><td>PWA static assets + raw email bodies</td><td>Cheap, durable; keeps Postgres small.</td></tr>
+                <tr><td>Messaging</td><td>Amazon SQS</td><td>One queue per pipeline stage + DLQ</td><td>Decoupled, retryable, idempotent stages.</td></tr>
+                <tr><td>Compute</td><td>AWS Lambda (container image)</td><td>API, worker, fan-out — one image, three handlers</td><td>~$0 at idle. SnapStart-ready in code but disabled for container images (ADR 0003 was the intent); cold starts not yet mitigated.</td></tr>
+                <tr><td>Scheduling</td><td>EventBridge Scheduler</td><td>Ticks every 15 min; <code>is_due</code> predicate selects due users</td><td>Serverless cron; no always-on host. User-facing "once/twice daily" lives in the predicate, not the cron.</td></tr>
+                <tr><td>Secrets</td><td>SSM Parameter Store</td><td>Secrets hydrated at cold start</td><td>SnapStart-friendly; required secrets fail init hard.</td></tr>
+                <tr><td>Encryption</td><td>AWS KMS (2 CMKs)</td><td>Envelope-encrypt tokens + content</td><td>Revocable trust boundary (ADR 0008).</td></tr>
+                <tr><td>Frontend</td><td>React + TypeScript + Vite (PWA)</td><td>Installable dashboard, offline reads</td><td>One codebase, web + mobile; no App Store (ADR 0005). Uses TanStack Query (+ persistence), <code>openapi-fetch</code> typed client, Dexie (IndexedDB) offline mutation queue, vite-plugin-pwa / Workbox.</td></tr>
+                <tr><td>Infrastructure</td><td>Terraform</td><td>Modular IaC; blue/green Lambda alias deploys</td><td>Reproducible; rollback = one alias swing.</td></tr>
+                <tr><td>Observability</td><td>OpenTelemetry + Sentry + CloudWatch</td><td>Tracing, error reporting, alarms</td><td>Trace IDs propagate into logs; DLQ + cost alarms.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 10. DATA MODEL & ERD ===================== -->
+      <section id="data-model" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">10</span> Data model &amp; ERD</h2>
+          <p>21 tables, all defined in <code>backend/app/db/models.py</code> (SQLAlchemy 2.0). Every table has a UUID <code>id</code> (or composite PK) plus <code>created_at</code> / <code>updated_at</code>. The diagram shows primary keys (<span class="pill pk">PK</span>), foreign keys (<span class="pill fk">FK</span>), and a few signature columns; the full column lists are in <a href="#tables">§11</a>.</p>
+
+          <div class="diagram">
+            <pre class="mermaid">
+erDiagram
+    users ||--o{ connected_accounts : owns
+    users ||--o{ rubric_rules : "defines"
+    users ||--o{ tech_news_clusters : "owns"
+    users ||--o{ digest_runs : "triggers"
+    users ||--o| user_preferences : "has"
+
+    connected_accounts ||--o| oauth_tokens : "1:1"
+    connected_accounts ||--o| sync_cursors : "1:1"
+    connected_accounts ||--o{ emails : "stores"
+    connected_accounts ||--o{ unsubscribe_suggestions : "scored for"
+
+    emails ||--o| email_content_blobs : "body 1:1"
+    emails ||--o| classifications : "verdict 1:1"
+    emails ||--o| summaries : "summary 0..1"
+    emails ||--o{ tech_news_cluster_members : "member of"
+    emails ||--o{ prompt_call_log : "audited by"
+
+    tech_news_clusters ||--o{ tech_news_cluster_members : "groups"
+    tech_news_clusters ||--o| summaries : "summarized 1:1"
+
+    prompt_versions ||--o{ classifications : "produced"
+    prompt_versions ||--o{ summaries : "produced"
+    prompt_versions ||--o{ unsubscribe_suggestions : "produced"
+    prompt_versions ||--o{ prompt_call_log : "logged for"
+
+    users {
+      uuid id PK
+      citext email UK
+      string status
+      string schedule_frequency
+      uuid current_run_id "run lock"
+    }
+    connected_accounts {
+      uuid id PK
+      uuid user_id FK
+      string provider "gmail"
+      citext email
+      string status
+    }
+    oauth_tokens {
+      uuid id PK
+      uuid account_id FK "UK"
+      bytea access_token_ct "encrypted"
+      bytea refresh_token_ct "encrypted"
+    }
+    sync_cursors {
+      uuid account_id PK "FK"
+      int history_id
+      bool stale
+    }
+    emails {
+      uuid id PK
+      uuid account_id FK
+      string gmail_message_id
+      citext from_addr
+      bytea content_hash
+    }
+    email_content_blobs {
+      uuid id PK
+      uuid message_id FK "UK"
+      string storage_backend "pg|s3"
+      bytea plain_text_excerpt_ct "encrypted"
+    }
+    classifications {
+      uuid id PK
+      uuid email_id FK "UK"
+      string label
+      numeric score
+      bytea reasons_ct "encrypted"
+    }
+    rubric_rules {
+      uuid id PK
+      uuid user_id FK
+      jsonb match
+      jsonb action
+      int priority
+    }
+    known_waste_senders {
+      uuid id PK
+      jsonb match
+      string added_by
+    }
+    prompt_versions {
+      uuid id PK
+      string name
+      int version
+      bytea content_hash UK
+    }
+    prompt_call_log {
+      uuid id PK
+      uuid prompt_version_id FK
+      string status
+      numeric cost_usd
+      jsonb redaction_summary
+    }
+    summaries {
+      uuid id PK
+      string kind "email|cluster"
+      uuid email_id FK
+      uuid cluster_id FK
+      bytea body_md_ct "encrypted"
+    }
+    tech_news_clusters {
+      uuid id PK
+      uuid user_id FK
+      string cluster_key
+      int member_count
+    }
+    tech_news_cluster_members {
+      uuid id PK
+      uuid cluster_id FK
+      uuid email_id FK
+      int sort_order
+    }
+    known_newsletters {
+      uuid id PK
+      jsonb match
+      string cluster_key
+    }
+    unsubscribe_suggestions {
+      uuid id PK
+      uuid account_id FK
+      citext sender_email
+      numeric waste_rate
+      bytea rationale_ct "encrypted"
+    }
+    user_preferences {
+      uuid user_id PK "FK"
+      bool auto_execution_enabled
+      int digest_send_hour_utc
+    }
+    digest_runs {
+      uuid id PK
+      uuid user_id FK
+      string status
+      string trigger_type
+    }
+            </pre>
+            <div class="cap">Figure 6 — Entity-relationship diagram. <code>known_newsletters</code>, <code>known_waste_senders</code>, and <code>release_metadata</code> are standalone reference/ledger tables with no foreign keys.</div>
+          </div>
+
+          <div class="callout note">
+            <div class="t">🧩 One ORM, two databases</div>
+            <p>Columns use portable types from <code>app/db/types.py</code> so the same models run on <strong>Postgres in production</strong> and <strong>SQLite in unit tests</strong>. <code>citext</code> (case-insensitive text) and <code>StringArray</code>/<code>json_column</code> map to native Postgres types in prod and JSON-backed equivalents under SQLite.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 11. TABLE REFERENCE ===================== -->
+      <section id="tables" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">11</span> Table reference</h2>
+          <p>Full column-level reference, grouped by domain. Every table also carries <code>created_at</code> and <code>updated_at</code> (<code>TIMESTAMPTZ</code>, not null) from the shared <code>TimestampMixin</code> — omitted from the rows below to reduce noise. Legend: <span class="pill pk">PK</span> primary key · <span class="pill fk">FK</span> foreign key · <span class="pill uk">UQ</span> unique · <span class="pill enc">encrypted</span> envelope ciphertext.</p>
+
+          <!-- GROUP A -->
+          <h3>A · Identity &amp; accounts</h3>
+
+          <h4><code>users</code> — the account owner</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td>UUIDv4.</td></tr>
+              <tr class="col-name"><td><code>email</code> <span class="pill uk">UQ</span></td><td>CITEXT(320)</td><td>Owner email, case-insensitive, unique.</td></tr>
+              <tr class="col-name"><td><code>display_name</code></td><td>VARCHAR(255)</td><td>Optional; used by the identity scrubber.</td></tr>
+              <tr class="col-name"><td><code>tz</code></td><td>VARCHAR(64)</td><td>IANA timezone, default <code>UTC</code>.</td></tr>
+              <tr class="col-name"><td><code>status</code></td><td>VARCHAR(16)</td><td><code>active</code> / <code>disabled</code> / <code>deleted</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>last_login_at</code></td><td>TIMESTAMPTZ</td><td>Most recent login.</td></tr>
+              <tr class="col-name"><td><code>email_aliases</code></td><td>TEXT[]</td><td>Extra addresses to scrub from prompts.</td></tr>
+              <tr class="col-name"><td><code>redaction_aliases</code></td><td>TEXT[]</td><td>Free-form strings to scrub.</td></tr>
+              <tr class="col-name"><td><code>schedule_frequency</code></td><td>VARCHAR(16)</td><td><code>once_daily</code> / <code>twice_daily</code> / <code>disabled</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>schedule_times_local</code></td><td>TEXT[]</td><td><code>HH:MM</code> slots; count must match frequency.</td></tr>
+              <tr class="col-name"><td><code>schedule_timezone</code></td><td>VARCHAR(64)</td><td>Timezone the local times resolve in.</td></tr>
+              <tr class="col-name"><td><code>presidio_enabled</code></td><td>BOOLEAN</td><td>Run Presidio in the redaction chain (default true).</td></tr>
+              <tr class="col-name"><td><code>last_run_finished_at</code></td><td>TIMESTAMPTZ</td><td>Clears the "ran in the last hour" lockout.</td></tr>
+              <tr class="col-name"><td><code>current_run_id</code></td><td>TEXT</td><td>Idempotency lock set by fan-out.</td></tr>
+              <tr class="col-name"><td><code>current_run_started_at</code></td><td>TIMESTAMPTZ</td><td>Used to detect stale locks (30-min release).</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>connected_accounts</code> — one row per (user, Gmail mailbox)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>user_id</code> <span class="pill fk">FK</span></td><td>UUID → users</td><td>Cascade on delete.</td></tr>
+              <tr class="col-name"><td><code>provider</code></td><td>VARCHAR(16)</td><td>Always <code>gmail</code> in 1.0.0 (CHECK).</td></tr>
+              <tr class="col-name"><td><code>email</code></td><td>CITEXT(320)</td><td>Mailbox address; unique per user (<code>uq_connected_accounts_user_email</code>).</td></tr>
+              <tr class="col-name"><td><code>gmail_account_id</code></td><td>VARCHAR(128)</td><td>Google subject (<code>sub</code>); detects account swaps.</td></tr>
+              <tr class="col-name"><td><code>status</code></td><td>VARCHAR(16)</td><td><code>active</code> / <code>disabled</code> / <code>revoked</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>daily_budget_in</code></td><td>INTEGER</td><td>Max input tokens/day (default 500,000).</td></tr>
+              <tr class="col-name"><td><code>daily_budget_out</code></td><td>INTEGER</td><td>Max output tokens/day (default 100,000).</td></tr>
+              <tr class="col-name"><td><code>exclude_from_global_digest</code></td><td>BOOLEAN</td><td>Per-mailbox opt-out.</td></tr>
+              <tr class="col-name"><td><code>auto_scan_enabled</code></td><td>BOOLEAN</td><td>Tri-state; true by default.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>oauth_tokens</code> — encrypted Gmail credentials (1:1 with account)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>account_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → connected_accounts</td><td>One token row per account.</td></tr>
+              <tr class="col-name"><td><code>access_token_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Envelope ciphertext over the access token.</td></tr>
+              <tr class="col-name"><td><code>refresh_token_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Envelope ciphertext over the refresh token.</td></tr>
+              <tr class="col-name"><td><code>scope</code></td><td>TEXT[]</td><td>Granted scope strings.</td></tr>
+              <tr class="col-name"><td><code>expires_at</code></td><td>TIMESTAMPTZ</td><td>Access-token expiry.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>sync_cursors</code> — incremental-sync position (1:1, PK is the FK)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>account_id</code> <span class="pill pk">PK</span> <span class="pill fk">FK</span></td><td>UUID → connected_accounts</td><td>Primary key is also the foreign key.</td></tr>
+              <tr class="col-name"><td><code>history_id</code></td><td>INTEGER</td><td>Latest Gmail <code>historyId</code>.</td></tr>
+              <tr class="col-name"><td><code>last_full_sync_at</code></td><td>TIMESTAMPTZ</td><td>Last bounded full sync.</td></tr>
+              <tr class="col-name"><td><code>last_incremental_at</code></td><td>TIMESTAMPTZ</td><td>Last incremental run.</td></tr>
+              <tr class="col-name"><td><code>stale</code></td><td>BOOLEAN</td><td>True when the cursor was rejected → forces a re-sync.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP B -->
+          <h3>B · Email storage</h3>
+
+          <h4><code>emails</code> — index-hot metadata (body lives elsewhere)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>account_id</code> <span class="pill fk">FK</span></td><td>UUID → connected_accounts</td><td></td></tr>
+              <tr class="col-name"><td><code>gmail_message_id</code></td><td>VARCHAR(64)</td><td>Unique per account (<code>uq_emails_account_message</code>).</td></tr>
+              <tr class="col-name"><td><code>thread_id</code></td><td>VARCHAR(64)</td><td>Provider thread id.</td></tr>
+              <tr class="col-name"><td><code>internal_date</code></td><td>TIMESTAMPTZ</td><td>Send time; indexed with account.</td></tr>
+              <tr class="col-name"><td><code>from_addr</code></td><td>CITEXT(320)</td><td>Raw <code>From</code>.</td></tr>
+              <tr class="col-name"><td><code>to_addrs</code> / <code>cc_addrs</code></td><td>TEXT[]</td><td>Recipients.</td></tr>
+              <tr class="col-name"><td><code>subject</code> / <code>snippet</code></td><td>TEXT</td><td>Decoded subject + preview.</td></tr>
+              <tr class="col-name"><td><code>labels</code></td><td>TEXT[]</td><td>Gmail labels/folders.</td></tr>
+              <tr class="col-name"><td><code>list_unsubscribe</code></td><td>JSONB</td><td>Normalized <code>List-Unsubscribe</code> header.</td></tr>
+              <tr class="col-name"><td><code>content_hash</code></td><td>BYTEA</td><td>SHA-256 over subject+from+date+snippet (dedup).</td></tr>
+              <tr class="col-name"><td><code>size_bytes</code></td><td>INTEGER</td><td>Declared MIME size.</td></tr>
+              <tr class="col-name"><td><code>raw_s3_key</code></td><td>TEXT</td><td><span class="muted">Deprecated; kept for a migration window.</span></td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>email_content_blobs</code> — out-of-row body (1:1 with email)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>message_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → emails</td><td></td></tr>
+              <tr class="col-name"><td><code>storage_backend</code></td><td>VARCHAR(8)</td><td><code>pg</code> (excerpt in-row) or <code>s3</code> (full body in S3) (CHECK).</td></tr>
+              <tr class="col-name"><td><code>object_key</code></td><td>TEXT</td><td>S3 key when backend is <code>s3</code>.</td></tr>
+              <tr class="col-name"><td><code>plain_text_excerpt_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted first-N chars of <code>text/plain</code>.</td></tr>
+              <tr class="col-name"><td><code>plain_text_dek_wrapped</code></td><td>BYTEA</td><td>Reserved for a future split-storage layout.</td></tr>
+              <tr class="col-name"><td><code>html_sanitized_key</code></td><td>TEXT</td><td>Optional S3 key for sanitized HTML.</td></tr>
+              <tr class="col-name"><td><code>quoted_text_removed</code></td><td>BOOLEAN</td><td>Reply tail trimmed.</td></tr>
+              <tr class="col-name"><td><code>language</code></td><td>VARCHAR(16)</td><td>Detected language.</td></tr>
+              <tr class="col-name"><td><code>size_bytes</code></td><td>INTEGER</td><td>Raw body size before excerpting.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP C -->
+          <h3>C · Classification &amp; rules</h3>
+
+          <h4><code>classifications</code> — one triage verdict per email (1:1)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>email_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → emails</td><td></td></tr>
+              <tr class="col-name"><td><code>label</code></td><td>VARCHAR(24)</td><td><code>must_read</code> / <code>good_to_read</code> / <code>ignore</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>score</code></td><td>NUMERIC(4,3)</td><td>Confidence in [0,1] (CHECK).</td></tr>
+              <tr class="col-name"><td><code>rubric_version</code></td><td>INTEGER</td><td>Rule-set version that produced the row.</td></tr>
+              <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td>Null when rules short-circuited (no LLM).</td></tr>
+              <tr class="col-name"><td><code>decision_source</code></td><td>VARCHAR(8)</td><td><code>rule</code> / <code>model</code> / <code>hybrid</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>model</code></td><td>VARCHAR(64)</td><td>Model id (e.g. <code>gemini-2.0-flash</code>).</td></tr>
+              <tr class="col-name"><td><code>tokens_in</code> / <code>tokens_out</code></td><td>INTEGER</td><td>Billed tokens (0 when rule-only).</td></tr>
+              <tr class="col-name"><td><code>is_newsletter</code></td><td>BOOLEAN</td><td>Routing flag for downstream newsletter grouping.</td></tr>
+              <tr class="col-name"><td><code>reasons_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted JSON rationale.</td></tr>
+              <tr class="col-name"><td><code>reasons_dek_wrapped</code></td><td>BYTEA</td><td>Reserved (packed envelope already carries the DEK).</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>rubric_rules</code> — user-editable classification rules</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>user_id</code> <span class="pill fk">FK</span></td><td>UUID → users</td><td>Indexed with priority.</td></tr>
+              <tr class="col-name"><td><code>priority</code></td><td>INTEGER</td><td>Higher wins on conflicts.</td></tr>
+              <tr class="col-name"><td><code>match</code></td><td>JSONB</td><td>Predicate: <code>from_domain</code>, <code>from_email</code>, <code>subject_regex</code>, <code>has_label</code>, <code>list_unsubscribe_present</code>, <code>header_equals</code> (implicit AND).</td></tr>
+              <tr class="col-name"><td><code>action</code></td><td>JSONB</td><td>Verdict: <code>label</code> + <code>confidence</code> (+ optional <code>reasons</code>).</td></tr>
+              <tr class="col-name"><td><code>version</code></td><td>INTEGER</td><td>Bumped on each mutation.</td></tr>
+              <tr class="col-name"><td><code>active</code></td><td>BOOLEAN</td><td>Soft-delete switch.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>known_waste_senders</code> — curated short-circuit-to-waste list (no FK)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>match</code></td><td>JSONB</td><td>Same predicate shape as <code>rubric_rules.match</code>.</td></tr>
+              <tr class="col-name"><td><code>added_by</code></td><td>VARCHAR(64)</td><td><code>seed</code> / <code>user:&lt;id&gt;</code>.</td></tr>
+              <tr class="col-name"><td><code>reason</code></td><td>TEXT</td><td>Short justification.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP D -->
+          <h3>D · LLM governance</h3>
+
+          <h4><code>prompt_versions</code> — registry of versioned prompt bundles</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>name</code></td><td>VARCHAR(64)</td><td>Prompt key (<code>triage</code>, <code>summarize_relevant</code>, …). Unique with version.</td></tr>
+              <tr class="col-name"><td><code>version</code></td><td>INTEGER</td><td><code>UNIQUE(name, version)</code>.</td></tr>
+              <tr class="col-name"><td><code>content</code></td><td>TEXT</td><td>Raw prompt body (markdown).</td></tr>
+              <tr class="col-name"><td><code>content_hash</code> <span class="pill uk">UQ</span></td><td>BYTEA</td><td>SHA-256 of content; unique table-wide.</td></tr>
+              <tr class="col-name"><td><code>model</code></td><td>VARCHAR(64)</td><td>Default model validated against.</td></tr>
+              <tr class="col-name"><td><code>params</code></td><td>JSONB</td><td>Default call params (temperature, max_tokens, cache_tier).</td></tr>
+              <tr class="col-name"><td><code>activated_at</code></td><td>TIMESTAMPTZ</td><td>When this version became active.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>prompt_call_log</code> — one row per LLM call (cost &amp; audit)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td>Required.</td></tr>
+              <tr class="col-name"><td><code>email_id</code> <span class="pill fk">FK</span></td><td>UUID → emails</td><td>Set when the call was email-scoped.</td></tr>
+              <tr class="col-name"><td><code>model</code> / <code>provider</code></td><td>VARCHAR</td><td>Model id and provider (<code>openrouter</code>, …).</td></tr>
+              <tr class="col-name"><td><code>tokens_in</code> / <code>tokens_out</code></td><td>INTEGER</td><td>Billed tokens.</td></tr>
+              <tr class="col-name"><td><code>tokens_cache_read</code> / <code>tokens_cache_write</code></td><td>INTEGER</td><td>Provider-reported cache tokens.</td></tr>
+              <tr class="col-name"><td><code>cost_usd</code></td><td>NUMERIC(12,6)</td><td>Provider-reported cost.</td></tr>
+              <tr class="col-name"><td><code>latency_ms</code></td><td>INTEGER</td><td>Wall-clock latency.</td></tr>
+              <tr class="col-name"><td><code>status</code></td><td>VARCHAR(12)</td><td><code>ok</code> / <code>fallback</code> / <code>error</code> / <code>skipped</code> (CHECK); indexed on <code>created_at</code>.</td></tr>
+              <tr class="col-name"><td><code>run_id</code></td><td>UUID</td><td>Triggering digest run (optional).</td></tr>
+              <tr class="col-name"><td><code>redaction_summary</code></td><td>JSONB</td><td><code>{kind: count}</code>; reversal map is <strong>never</strong> stored.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP E -->
+          <h3>E · Summaries &amp; tech news</h3>
+
+          <h4><code>summaries</code> — per-email or per-cluster summary</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>kind</code></td><td>VARCHAR(24)</td><td><code>email</code> or <code>tech_news_cluster</code> (CHECK + target CHECK).</td></tr>
+              <tr class="col-name"><td><code>email_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → emails</td><td>Set for <code>email</code> kind.</td></tr>
+              <tr class="col-name"><td><code>cluster_id</code> <span class="pill fk">FK</span> <span class="pill uk">UQ</span></td><td>UUID → tech_news_clusters</td><td>Set for cluster kind.</td></tr>
+              <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td></td></tr>
+              <tr class="col-name"><td><code>model</code>, <code>tokens_in</code>, <code>tokens_out</code></td><td>—</td><td>Provenance + billing.</td></tr>
+              <tr class="col-name"><td><code>body_md_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted markdown summary.</td></tr>
+              <tr class="col-name"><td><code>entities_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted entity chips.</td></tr>
+              <tr class="col-name"><td><code>cache_hit</code></td><td>BOOLEAN</td><td>Provider reported cache-read.</td></tr>
+              <tr class="col-name"><td><code>confidence</code></td><td>NUMERIC(4,3)</td><td>[0,1]; ≥ 0.55 ships in the digest (CHECK).</td></tr>
+              <tr class="col-name"><td><code>batch_id</code></td><td>VARCHAR(128)</td><td>Set when produced via an overnight Batch job.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>tech_news_clusters</code> &amp; <code>tech_news_cluster_members</code></h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>clusters.id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>clusters.user_id</code> <span class="pill fk">FK</span></td><td>UUID → users</td><td></td></tr>
+              <tr class="col-name"><td><code>clusters.run_id</code></td><td>UUID</td><td>Unique with (user_id, cluster_key, run_id).</td></tr>
+              <tr class="col-name"><td><code>clusters.cluster_key</code></td><td>VARCHAR(64)</td><td>Stable slug matching the routing label.</td></tr>
+              <tr class="col-name"><td><code>clusters.topic_hint</code></td><td>TEXT</td><td>Human-readable caption.</td></tr>
+              <tr class="col-name"><td><code>clusters.member_count</code></td><td>INTEGER</td><td>Denormalized for fast rendering.</td></tr>
+              <tr class="col-name"><td><code>members.id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>members.cluster_id</code> <span class="pill fk">FK</span></td><td>UUID → tech_news_clusters</td><td>Unique with email_id.</td></tr>
+              <tr class="col-name"><td><code>members.email_id</code> <span class="pill fk">FK</span></td><td>UUID → emails</td><td>The source newsletter.</td></tr>
+              <tr class="col-name"><td><code>members.sort_order</code></td><td>INTEGER</td><td>Order in the cluster.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>known_newsletters</code> — curated list-ID/domain → cluster (no FK)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>match</code></td><td>JSONB</td><td><code>list_id_equals</code>, <code>from_domain</code>, <code>from_email</code>, <code>subject_regex</code>.</td></tr>
+              <tr class="col-name"><td><code>cluster_key</code></td><td>VARCHAR(64)</td><td>Target cluster slug; indexed.</td></tr>
+              <tr class="col-name"><td><code>topic_hint</code></td><td>TEXT</td><td>Caption the prompt uses verbatim.</td></tr>
+              <tr class="col-name"><td><code>maintainer</code></td><td>VARCHAR(64)</td><td><code>seed</code> / <code>user:&lt;id&gt;</code>.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP F -->
+          <h3>F · Inbox hygiene</h3>
+
+          <h4><code>unsubscribe_suggestions</code> — ranked per-sender recommendation</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>account_id</code> <span class="pill fk">FK</span></td><td>UUID → connected_accounts</td><td>Unique with sender_email.</td></tr>
+              <tr class="col-name"><td><code>sender_domain</code> / <code>sender_email</code></td><td>CITEXT</td><td>Normalized, lowercased.</td></tr>
+              <tr class="col-name"><td><code>frequency_30d</code></td><td>INTEGER</td><td>Emails in the last 30 days (CHECK ≥ 0).</td></tr>
+              <tr class="col-name"><td><code>engagement_score</code></td><td>NUMERIC(4,3)</td><td>[0,1]; lower = better unsubscribe candidate.</td></tr>
+              <tr class="col-name"><td><code>waste_rate</code></td><td>NUMERIC(4,3)</td><td>[0,1]; higher = better candidate.</td></tr>
+              <tr class="col-name"><td><code>list_unsubscribe</code></td><td>JSONB</td><td>Mirrored from the latest email's header.</td></tr>
+              <tr class="col-name"><td><code>confidence</code></td><td>NUMERIC(4,3)</td><td>[0,1]; &lt; 0.8 never auto-surfaces.</td></tr>
+              <tr class="col-name"><td><code>decision_source</code></td><td>VARCHAR(8)</td><td><code>rule</code> / <code>model</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>rationale_ct</code> <span class="pill enc">encrypted</span></td><td>BYTEA</td><td>Encrypted explanation.</td></tr>
+              <tr class="col-name"><td><code>prompt_version_id</code> <span class="pill fk">FK</span></td><td>UUID → prompt_versions</td><td>Null for rule-only rows.</td></tr>
+              <tr class="col-name"><td><code>dismissed</code> / <code>dismissed_at</code></td><td>BOOLEAN / TIMESTAMPTZ</td><td>User dismissal, preserved across re-runs; drives 180-day cleanup.</td></tr>
+              <tr class="col-name"><td><code>last_email_at</code></td><td>TIMESTAMPTZ</td><td>"Last seen" without a subquery.</td></tr>
+            </tbody>
+          </table></div>
+
+          <!-- GROUP H -->
+          <h3>H · Frontend, runs &amp; ops</h3>
+
+          <h4><code>user_preferences</code> — PWA settings (PK is the user)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>user_id</code> <span class="pill pk">PK</span> <span class="pill fk">FK</span></td><td>UUID → users</td><td></td></tr>
+              <tr class="col-name"><td><code>auto_execution_enabled</code></td><td>BOOLEAN</td><td>Global scheduled-scan switch.</td></tr>
+              <tr class="col-name"><td><code>digest_send_hour_utc</code></td><td>INTEGER</td><td>0–23 (CHECK), default 13.</td></tr>
+              <tr class="col-name"><td><code>redact_pii</code></td><td>BOOLEAN</td><td>Redact PII before prompts.</td></tr>
+              <tr class="col-name"><td><code>secure_offline_mode</code></td><td>BOOLEAN</td><td>Require a passcode for offline cache.</td></tr>
+              <tr class="col-name"><td><code>retention_policy_json</code></td><td>JSONB</td><td>Operator-readable retention knobs.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>digest_runs</code> — API-visible run ledger</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>user_id</code> <span class="pill fk">FK</span></td><td>UUID → users</td><td>Indexed on (user_id, started_at).</td></tr>
+              <tr class="col-name"><td><code>status</code></td><td>VARCHAR(16)</td><td><code>queued</code> / <code>running</code> / <code>complete</code> / <code>failed</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>trigger_type</code></td><td>VARCHAR(16)</td><td><code>scheduled</code> / <code>manual</code> (CHECK).</td></tr>
+              <tr class="col-name"><td><code>started_at</code> / <code>completed_at</code></td><td>TIMESTAMPTZ</td><td>Run window.</td></tr>
+              <tr class="col-name"><td><code>stats</code></td><td>JSONB</td><td>Per-stage counters.</td></tr>
+              <tr class="col-name"><td><code>cost_cents</code></td><td>INTEGER</td><td>Run cost.</td></tr>
+              <tr class="col-name"><td><code>error</code></td><td>TEXT</td><td>Failure detail.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h4><code>release_metadata</code> — append-only deploy ledger (no FK)</h4>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr class="col-name"><td><code>id</code> <span class="pill pk">PK</span></td><td>UUID</td><td></td></tr>
+              <tr class="col-name"><td><code>version</code> / <code>git_sha</code></td><td>VARCHAR</td><td>Unique together; semver + 40-char SHA.</td></tr>
+              <tr class="col-name"><td><code>alembic_head</code> / <code>db_schema_version</code></td><td>VARCHAR(32)</td><td>Migration revision at deploy.</td></tr>
+              <tr class="col-name"><td><code>api_schema_version</code></td><td>VARCHAR(32)</td><td>OpenAPI <code>info.version</code>.</td></tr>
+              <tr class="col-name"><td><code>frontend_build_id</code> / <code>prompt_bundle_version</code></td><td>VARCHAR(64)</td><td>PWA build hash + prompt bundle hash.</td></tr>
+              <tr class="col-name"><td><code>deployed_at</code></td><td>TIMESTAMPTZ</td><td>When the alias swing landed.</td></tr>
+              <tr class="col-name"><td><code>notes</code></td><td>TEXT</td><td>e.g. "first cut", "rollback".</td></tr>
+            </tbody>
+          </table></div>
+          <p class="muted">This table has no <code>updated_at</code> — it is append-only; a rollback writes a new row rather than editing one.</p>
+        </div>
+      </section>
+
+      <!-- ===================== 12. API REFERENCE ===================== -->
+      <section id="api" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">12</span> API reference</h2>
+          <p>The API is defined by FastAPI and exported as an OpenAPI 3 contract at <code>packages/contracts/openapi.json</code> (regenerate with <code>make docs</code>; never hand-edit). Interactive docs run at <code>/docs</code> (Swagger UI) and <code>/redoc</code>. All paths are prefixed <code>/api/v1</code> except <code>/health</code>.</p>
+
+          <div class="callout note">
+            <div class="t">🔑 Authentication</div>
+            <p>Every endpoint except <code>GET /health</code> and the two <code>/oauth/gmail/*</code> endpoints requires the signed <code>briefed_session</code> cookie (HMAC-SHA-256). There is no API key or bearer token in 1.0.0 — auth is the browser session cookie set after OAuth. The frontend talks same-origin so cookies + CSRF "just work".</p>
+          </div>
+
+          <h3>Meta &amp; auth</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/health</code></td><td>Liveness probe; returns status + version.</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/oauth/gmail/start</code></td><td>Begin Google OAuth (authorization-code flow).</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/oauth/gmail/callback</code></td><td>Exchange the code, encrypt + persist the account, set the session.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Accounts</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/accounts</code></td><td>List connected Gmail accounts.</td></tr>
+              <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/accounts/{account_id}</code></td><td>Update account settings (budgets, auto-scan, digest opt-out).</td></tr>
+              <tr><td><span class="m delete">DELETE</span></td><td><code>/api/v1/accounts/{account_id}</code></td><td>Disconnect a mailbox.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Triage rubric &amp; emails</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/rubric</code></td><td>List classification rules.</td></tr>
+              <tr><td><span class="m post">POST</span></td><td><code>/api/v1/rubric</code></td><td>Create a rule.</td></tr>
+              <tr><td><span class="m put">PUT</span></td><td><code>/api/v1/rubric/{rule_id}</code></td><td>Replace a rule.</td></tr>
+              <tr><td><span class="m delete">DELETE</span></td><td><code>/api/v1/rubric/{rule_id}</code></td><td>Delete a rule.</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/emails</code></td><td>List classified emails (offline-cacheable bucket lists).</td></tr>
+              <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/emails/{email_id}/bucket</code></td><td>Override the user-selected bucket for an email.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Inbox hygiene (unsubscribe)</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/unsubscribes</code></td><td>List unsubscribe recommendations.</td></tr>
+              <tr><td><span class="m post">POST</span></td><td><code>/api/v1/unsubscribes/{suggestion_id}/dismiss</code></td><td>Dismiss a suggestion.</td></tr>
+              <tr><td><span class="m post">POST</span></td><td><code>/api/v1/unsubscribes/{suggestion_id}/confirm</code></td><td>Mark that the user acted on it (recommend-only — Briefed never clicks).</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/hygiene/stats</code></td><td>Inbox-hygiene summary counters.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Digest, runs, history &amp; news</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/digest/today</code></td><td>Today's digest summary.</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/news</code></td><td>Tech-news digest (newsletter clusters).</td></tr>
+              <tr><td><span class="m post">POST</span></td><td><code>/api/v1/runs</code></td><td>Start a manual digest run (capped per user per rolling 24h).</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/runs/{run_id}</code></td><td>Poll a run's status (PWA uses polling, not long-lived connections).</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/history</code></td><td>List past digest runs.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Profile &amp; preferences</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/profile/me</code></td><td>Caller's profile.</td></tr>
+              <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/profile/me</code></td><td>Update profile (display name, aliases, redaction options).</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/profile/me/schedule</code></td><td>Get schedule (frequency + local time slots).</td></tr>
+              <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/profile/me/schedule</code></td><td>Update schedule.</td></tr>
+              <tr><td><span class="m get">GET</span></td><td><code>/api/v1/preferences</code></td><td>Get user preferences.</td></tr>
+              <tr><td><span class="m patch">PATCH</span></td><td><code>/api/v1/preferences</code></td><td>Update preferences (auto-execution, digest hour, offline mode).</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Frontend routes (PWA pages)</h3>
+          <p>For orientation, the React app (<code>frontend/src/router.tsx</code>) maps these screens onto the API above:</p>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Route</th><th>Screen</th></tr></thead>
+            <tbody>
+              <tr><td><code>/</code></td><td>Dashboard (today's digest)</td></tr>
+              <tr><td><code>/must-read</code>, <code>/good-to-read</code>, <code>/ignore</code>, <code>/waste</code></td><td>Triage buckets</td></tr>
+              <tr><td><code>/news</code></td><td>Tech-news digest</td></tr>
+              <tr><td><code>/unsubscribe</code></td><td>Unsubscribe recommendations</td></tr>
+              <tr><td><code>/history</code>, <code>/history/:runId</code></td><td>Run history + detail</td></tr>
+              <tr><td><code>/settings/{accounts,preferences,prompts,schedule}</code></td><td>Settings</td></tr>
+              <tr><td><code>/login</code>, <code>/oauth/callback</code></td><td>Auth</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ===================== 13. CONFIGURATION ===================== -->
+      <section id="config" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">13</span> Configuration &amp; environment</h2>
+          <p>All configuration flows through one typed object: <code>Settings</code> (<code>pydantic-settings</code>) in <code>backend/app/core/config.py</code>, accessed via the memoized <code>get_settings()</code>. <strong>Never call <code>os.getenv</code> in business logic</strong> — route through <code>Settings</code> so tests and SSM hydration keep working. Locally, values come from process env + a <code>.env</code> file. In Lambda runtimes, secrets are pulled from <strong>SSM Parameter Store at cold start</strong> and merged in (env still wins over SSM for local overrides).</p>
+
+          <div class="callout security">
+            <div class="t">🔑 Required secrets fail init hard</div>
+            <p>In any <code>lambda-*</code> runtime, these five must be present (in SSM or env) or the process refuses to boot — so a misconfigured deploy fails loudly at cold start instead of serving broken requests: <code>openrouter_api_key</code>, <code>session_signing_key</code>, <code>google_oauth_client_id</code>, <code>google_oauth_client_secret</code>, and the database URL (<code>supabase_db_url</code> in SSM → <code>BRIEFED_DATABASE_URL</code>).</p>
+          </div>
+
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Setting / variable</th><th>Purpose</th><th>Source</th></tr></thead>
+              <tbody>
+                <tr><td><code>BRIEFED_RUNTIME</code></td><td>Selects the runtime shape: <code>local</code> / <code>lambda-api</code> / <code>lambda-worker</code> / <code>lambda-fanout</code>.</td><td>Env / Terraform</td></tr>
+                <tr><td><code>BRIEFED_SSM_PREFIX</code></td><td>SSM path prefix for secret hydration (e.g. <code>/briefed/prod/</code>).</td><td>Terraform</td></tr>
+                <tr><td><code>BRIEFED_DATABASE_URL</code></td><td>Async SQLAlchemy (asyncpg) connection string.</td><td>Local <code>.env</code> / SSM <code>supabase_db_url</code></td></tr>
+                <tr><td><code>openrouter_api_key</code></td><td>OpenRouter auth — the only LLM credential (ADR 0009). <strong>Required.</strong></td><td>SSM / env</td></tr>
+                <tr><td><code>google_oauth_client_id</code> / <code>_secret</code></td><td>Gmail OAuth connect + token refresh. <strong>Required.</strong></td><td>SSM / env</td></tr>
+                <tr><td><code>session_signing_key</code></td><td>HMAC key for the session + OAuth-state cookies. <strong>Required.</strong></td><td>SSM / env</td></tr>
+                <tr><td><code>BRIEFED_TOKEN_WRAP_KEY_ALIAS</code></td><td>KMS alias for OAuth-token envelope encryption.</td><td>Terraform KMS module</td></tr>
+                <tr><td><code>BRIEFED_CONTENT_KEY_ALIAS</code></td><td>KMS alias for content / rationale envelope encryption.</td><td>Terraform KMS module</td></tr>
+                <tr><td><code>BRIEFED_*_QUEUE_URL</code></td><td>Per-stage SQS URLs used to chain stages (classify, summarize, unsubscribe, ingest).</td><td>Terraform SQS module</td></tr>
+                <tr><td><code>BRIEFED_RAW_EMAIL_BUCKET</code> / <code>BRIEFED_STORE_RAW_MIME</code></td><td>Optional raw-MIME S3 storage (off in dev).</td><td>Terraform S3 module / env</td></tr>
+                <tr><td><code>BRIEFED_DAILY_LLM_USD_CAP</code></td><td>Hard per-UTC-day LLM spend cap; trips a global breaker (ADR 0009).</td><td>Env / SSM</td></tr>
+                <tr><td><code>BRIEFED_MANUAL_RUN_DAILY_CAP</code></td><td>Per-user manual-trigger cap (rolling 24h), default 10.</td><td>Env</td></tr>
+                <tr><td><code>BRIEFED_REDACTION_PRESIDIO_ENABLED</code></td><td>Toggle Presidio in the redaction chain (ADR 0010), default on.</td><td>Env</td></tr>
+                <tr><td><code>BRIEFED_OTEL_EXPORTER</code> / <code>BRIEFED_SENTRY_DSN</code></td><td>Observability: OpenTelemetry exporter + Sentry DSN (both no-op when unset).</td><td>Env / SSM</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 14. EXTENDING ===================== -->
+      <section id="extending" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">14</span> Extending the system safely</h2>
+          <p>A practical "if you need to change X, do Y" guide for new contributors. Each row also lists the traps worth checking before you ship. The project's coding rules (typed Pydantic at every boundary, Google-style docstrings, no raw dicts for structured data) are in <code>CLAUDE.md</code> and enforced by tooling.</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>You want to…</th><th>Steps</th><th>Watch out for</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Add an HTTP endpoint</td>
+                  <td>Add request/response Pydantic schemas, implement the router under <code>backend/app/api/v1/</code>, include it in <code>api_router</code> (<code>api/v1/__init__.py</code>), run <code>make docs</code>, then regenerate the frontend client.</td>
+                  <td>Scope every query by the authenticated <code>user_id</code>; SameSite/cookie auth; OpenAPI drift (never hand-edit <code>openapi.json</code>).</td>
+                </tr>
+                <tr>
+                  <td>Add a database table</td>
+                  <td>Add the SQLAlchemy model in <code>db/models.py</code> (portable types from <code>db/types.py</code>), create a revision with <code>make migrate-rev MSG="…"</code>, run <code>make migrate</code> to confirm it upgrades <em>and</em> downgrades, add tests.</td>
+                  <td>Encrypt sensitive content (use the <code>_ct</code> + KMS helpers); add indexes for hot queries; pick the right cascade behavior.</td>
+                </tr>
+                <tr>
+                  <td>Add a pipeline stage / message</td>
+                  <td>Add a frozen, <code>extra="forbid"</code> Pydantic class to <code>workers/messages.py</code> with a <code>kind</code> literal; add the handler under <code>workers/handlers/</code>; wire the queue URL env var and the dispatcher branch; make the write an idempotent upsert.</td>
+                  <td>SQS at-least-once delivery (duplicates), the 256 KB message limit, DLQ visibility, and the per-user run lock.</td>
+                </tr>
+                <tr>
+                  <td>Add / change an LLM prompt</td>
+                  <td>Add <code>packages/prompts/&lt;name&gt;/v&lt;n&gt;.md</code> + its JSON Schema, a Pydantic output model, and eval fixtures. Reference it by <code>(name, version)</code>; let <code>LLMClient</code> make the call.</td>
+                  <td>Prompt injection, schema-validation failures, cost/cap impact, and that every call writes a <code>prompt_call_log</code> row. Never inline a prompt string.</td>
+                </tr>
+                <tr>
+                  <td>Add a mailbox provider (Outlook/IMAP)</td>
+                  <td>Implement the <code>MailboxProvider</code> protocol (ADR 0007) as a new class selected by config; add its OAuth/token handling and a parser adapter; do <strong>not</strong> change the ingestion pipeline.</td>
+                  <td>Provider cursor semantics, OAuth scope review, rate limits, and mapping to the shared normalized message shape.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout ok">
+            <div class="t">✅ Verification baseline before you push</div>
+            <p><strong>Backend:</strong> <code>ruff format --check</code>, <code>ruff check</code>, <code>mypy --strict</code>, and the relevant <code>pytest</code> subset (the <code>e2e</code> / <code>eval</code> markers are opt-in). <strong>Frontend:</strong> <code>npm run lint</code>, <code>npm run format:check</code>, and Vitest. When a change crosses layers, run <code>make test</code> and <code>make lint</code> — CI calls the same Makefile targets. Coverage floor is 80% (<code>make coverage</code>); a few modules are pinned at 100%.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 15. SOURCE MAP ===================== -->
+      <section id="source-map" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">15</span> Source map — where things live</h2>
+          <p>The fastest way to get productive: open the file that owns the thing you're changing. This maps each subsystem to its authoritative source.</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Subsystem</th><th>Source of truth</th></tr></thead>
+              <tbody>
+                <tr><td>API entrypoint &amp; routers</td><td><code>backend/app/main.py</code>, <code>backend/app/api/v1/*.py</code>, <code>backend/app/api/v1/__init__.py</code></td></tr>
+                <tr><td>API contract (generated)</td><td><code>packages/contracts/openapi.json</code> (via <code>make docs</code>), <code>frontend/src/api/schema.d.ts</code></td></tr>
+                <tr><td>Auth / sessions</td><td><code>backend/app/api/session.py</code>, <code>backend/app/api/v1/oauth.py</code>, <code>backend/app/api/deps.py</code></td></tr>
+                <tr><td>Lambda handlers</td><td><code>backend/app/lambda_api.py</code>, <code>backend/app/lambda_worker.py</code></td></tr>
+                <tr><td>Pipeline messages &amp; workers</td><td><code>backend/app/workers/messages.py</code>, <code>backend/app/workers/handlers/*.py</code></td></tr>
+                <tr><td>Pipeline services</td><td><code>backend/app/services/{ingestion,classification,summarization,unsubscribe}/</code></td></tr>
+                <tr><td>Scheduling predicate</td><td><code>backend/app/core/scheduling.py</code>, <code>backend/app/workers/handlers/fanout.py</code></td></tr>
+                <tr><td>LLM client, catalog &amp; providers</td><td><code>backend/app/llm/client.py</code>, <code>catalog.py</code>, <code>providers/openrouter.py</code>; prompts in <code>packages/prompts/</code></td></tr>
+                <tr><td>Prompt redaction</td><td><code>backend/app/llm/redaction/</code> (identity → regex)</td></tr>
+                <tr><td>Data model &amp; migrations</td><td><code>backend/app/db/models.py</code>, <code>backend/app/db/session.py</code>, <code>backend/alembic/versions/*.py</code></td></tr>
+                <tr><td>Encryption helpers</td><td><code>backend/app/core/security.py</code> (tokens), <code>backend/app/core/content_crypto.py</code> (content)</td></tr>
+                <tr><td>Config &amp; secrets</td><td><code>backend/app/core/config.py</code>, <code>backend/app/integrations/ssm_secrets.py</code>, <code>.env.example</code></td></tr>
+                <tr><td>Mailbox abstraction</td><td><code>backend/app/domain/providers.py</code> (interface), <code>backend/app/services/gmail/</code> (Gmail impl)</td></tr>
+                <tr><td>Frontend</td><td><code>frontend/src/router.tsx</code>, <code>frontend/src/api/client.ts</code>, <code>frontend/src/offline/*.ts</code></td></tr>
+                <tr><td>Infrastructure</td><td><code>infra/terraform/envs/{dev,prod}/main.tf</code>, <code>infra/terraform/modules/*/main.tf</code></td></tr>
+                <tr><td>Decisions &amp; rules</td><td><code>docs/adr/0001–0010</code>, <code>CLAUDE.md</code>, <code>DESIGN.md</code>, <code>Makefile</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 16. ASSUMPTIONS & DECISIONS ===================== -->
+      <section id="assumptions" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">16</span> Assumptions, constraints &amp; decisions</h2>
+          <p>Briefed makes deliberate trade-offs. Knowing them up front prevents "why isn't this real-time?" and "why no auto-archive?" surprises. Each is backed by an Architecture Decision Record (ADR) in <code>docs/adr/</code>.</p>
+
+          <h3>Core assumptions baked into 1.0.0</h3>
+          <div class="grid cols-2">
+            <div class="card"><h4>👤 Single user, self-hosted</h4><p>One owner per deployment. Auth is a signed cookie, not a multi-tenant identity system. Many simplifications follow from this (no RLS, simple redaction policy, one set of KMS keys).</p></div>
+            <div class="card"><h4>🛡️ Recommend-only (ADR 0006)</h4><p>Briefed never mutates your mailbox. OAuth stays at <code>gmail.readonly</code>. Worst case of a model mistake is a bad suggestion, never lost mail.</p></div>
+            <div class="card"><h4>⏱️ Daily, not real-time (ADR 0001)</h4><p>Scheduled incremental sync via <code>historyId</code>; no Gmail push/webhook. Up to ~24h latency between an email arriving and being surfaced — fine for a daily digest.</p></div>
+            <div class="card"><h4>💸 Cost-bounded (~$8–11/mo)</h4><p>Serverless + free-tier database + capped LLM spend. A per-day USD cap and a Haiku call cap stop runaway bills. Steady-state AWS is ~$1–2/mo; the two KMS keys add ~$2/mo.</p></div>
+            <div class="card"><h4>🤖 Quality over auto-escalation (ADR 0002→0009)</h4><p>Gemini Flash does the work; Claude Haiku is a gated fallback. No automatic jump to a pricier model — quality regressions page a human via the eval suite instead.</p></div>
+            <div class="card"><h4>📱 PWA only (ADR 0005)</h4><p>No native iOS/Android app. iOS Safari quirks are accepted: progress is polled (no long-lived sockets), OAuth escapes the in-app webview, IndexedDB eviction is handled with Dexie.</p></div>
+          </div>
+
+          <h3>Trust boundaries (read this before touching prompts or crypto)</h3>
+          <div class="callout security">
+            <div class="t">🌐 The OpenRouter hop (ADR 0009)</div>
+            <p>Email content leaves your infrastructure and passes through OpenRouter on the way to Gemini/Anthropic. Briefed sends <code>data_collection: "deny"</code> and runs the redaction chain first, but the request body is plaintext to OpenRouter's edge. This is <strong>knowingly accepted for a single-user personal project</strong> and is explicitly <strong>not acceptable</strong> for PHI/PII at scale or multi-tenant use. Onboarding a second user requires revisiting ADR 0009.</p>
+          </div>
+          <div class="callout security">
+            <div class="t">🔐 The database trust boundary (ADR 0004 + 0008)</div>
+            <p>Supabase can read any column you do not encrypt. Therefore tokens and all email-derived content are envelope-encrypted with KMS before storage; Supabase only ever sees metadata (labels, scores, timings) and ciphertext. Never add a plaintext content column without an ADR.</p>
+          </div>
+          <div class="callout warn">
+            <div class="t">🧹 What redaction does <em>not</em> do (ADR 0010)</div>
+            <p>Redaction reduces blast radius; it is not invisibility. It does not hide that a request happened, its timing/size, or behavioral patterns inferable from prompts. Re-identifying model output is off by default and allowlist-gated. Treat redaction as harm-reduction, not a guarantee.</p>
+          </div>
+
+          <h3>Explicit non-goals for 1.0.0</h3>
+          <ul>
+            <li>No mailbox writes (archive, delete, mark-read, send, auto-unsubscribe).</li>
+            <li>No real-time / push ingestion.</li>
+            <li>No multi-tenant or hosted SaaS mode — single user only.</li>
+            <li>No providers other than Gmail (though the <code>MailboxProvider</code> interface (ADR 0007) makes Outlook/IMAP additive, not a rewrite).</li>
+            <li>No auto-generated ERD pipeline — the data model is hand-maintained alongside migrations.</li>
+          </ul>
+
+          <h3>Known limitations &amp; residual risks (as of this commit)</h3>
+          <p>Honest gaps a new engineer should know before relying on a behavior. None are bugs — they're conscious 1.0.0 trade-offs or "not built yet" edges.</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Limitation</th><th>Detail &amp; impact</th></tr></thead>
+              <tbody>
+                <tr><td>Metadata is plaintext</td><td>Subjects, snippets, sender/recipients, labels, and timestamps are stored unencrypted (only content + rationales are <code>_ct</code> encrypted). Accepted residual risk; a database read still reveals who emailed you and when.</td></tr>
+                <tr><td>LLM caps are per-process</td><td>The daily USD cap and the Haiku call cap are tracked <strong>in-memory per warm Lambda</strong>. Across many concurrent instances the global cap is approximate, not strict. For hard global enforcement, move budget state to the database or a strongly-consistent store.</td></tr>
+                <tr><td>Scheduled runs aren't ledgered</td><td>Only the manual <code>POST /api/v1/runs</code> path writes a <code>digest_runs</code> row. The scheduled fan-out propagates a <code>run_id</code> lock but does not insert a <code>digest_runs</code> row, so <code>GET /history</code> reflects manual runs as of this commit. Add explicit scheduled-run ledgering if history must cover scheduled runs.</td></tr>
+                <tr><td>SnapStart is off</td><td>Container-image packaging means cold starts are not mitigated (see §4). The code is snapshot-ready for when this changes.</td></tr>
+                <tr><td>OAuth <code>id_token</code> not signature-verified</td><td>The callback decodes the Google <code>id_token</code> for the <code>email</code>/<code>sub</code> claims but defers cryptographic signature verification to a later phase — it trusts the response because it came directly from Google's HTTPS token endpoint.</td></tr>
+                <tr><td>This doc needs network for diagrams</td><td>Mermaid is loaded from a CDN. Offline, the diagram source remains readable as text but won't render as SVG.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>All ADRs at a glance</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>ADR</th><th>Decision</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>0001</td><td>Scheduled sync over Gmail push</td><td>Accepted</td></tr>
+              <tr><td>0002</td><td>Gemini Flash primary, Claude Haiku fallback</td><td><span class="muted">Superseded by 0009</span></td></tr>
+              <tr><td>0003</td><td>AWS Lambda + SnapStart over Fargate/App Runner</td><td>Accepted</td></tr>
+              <tr><td>0004</td><td>Supabase Postgres for 1.0.0, portable to RDS</td><td>Accepted</td></tr>
+              <tr><td>0005</td><td>PWA over native iOS</td><td>Accepted</td></tr>
+              <tr><td>0006</td><td>Recommend-only in release 1.0.0</td><td>Accepted</td></tr>
+              <tr><td>0007</td><td><code>MailboxProvider</code> interface</td><td>Accepted</td></tr>
+              <tr><td>0008</td><td>KMS CMK for OAuth token-wrap (+ content key)</td><td>Accepted</td></tr>
+              <tr><td>0009</td><td>OpenRouter as the LLM routing layer</td><td>Accepted</td></tr>
+              <tr><td>0010</td><td>LLM prompt redaction</td><td>Accepted</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ===================== 14. GLOSSARY ===================== -->
+      <section id="glossary" class="anchor">
+        <div class="wrap">
+          <h2><span class="num">17</span> Glossary</h2>
+          <div class="tablewrap"><table class="kvtable">
+            <tbody>
+              <tr><td>Briefed</td><td>This project — a personal AI email agent that produces a daily inbox briefing.</td></tr>
+              <tr><td>PWA</td><td>Progressive Web App — a website installable to the home screen with offline support.</td></tr>
+              <tr><td>Fan-out</td><td>The step that turns "run the daily job" into one work item per connected mailbox.</td></tr>
+              <tr><td>SQS</td><td>Amazon Simple Queue Service — the message queues between pipeline stages.</td></tr>
+              <tr><td>DLQ</td><td>Dead-Letter Queue — where messages go after failing the configured number of retries (5).</td></tr>
+              <tr><td>SnapStart</td><td>AWS Lambda feature that snapshots a booted function to cut cold-start latency. Designed-for here but currently disabled because the Lambdas ship as container images (see §4).</td></tr>
+              <tr><td>Mangum</td><td>Adapter that lets a FastAPI (ASGI) app run inside AWS Lambda.</td></tr>
+              <tr><td>PKCE</td><td>Proof Key for Code Exchange — an OAuth hardening step; Briefed generates a verifier/challenge pair so an intercepted auth code can't be redeemed without the verifier.</td></tr>
+              <tr><td>Partial batch response</td><td>An SQS+Lambda feature where the worker reports only the failed records in a batch, so healthy records aren't reprocessed.</td></tr>
+              <tr><td><code>is_due</code> predicate</td><td>The Python check (<code>app.core.scheduling</code>) that decides whether a user's schedule is due on a given 15-minute tick — timezone, DST, debounce, and stale-lock aware.</td></tr>
+              <tr><td>OpenRouter</td><td>A single API that routes prompts to multiple LLM providers (here: Gemini Flash, Claude Haiku 4.5).</td></tr>
+              <tr><td>Rubric</td><td>The set of user rules that classify emails before (or instead of) an LLM call.</td></tr>
+              <tr><td>Classification label</td><td>One of must_read, good_to_read, ignore.</td></tr>
+              <tr><td>Envelope encryption</td><td>Encrypt data with a one-time data key (DEK), then encrypt the DEK with a KMS master key.</td></tr>
+              <tr><td>CMK</td><td>Customer-Managed Key in AWS KMS — Briefed uses two (token-wrap and content-encrypt).</td></tr>
+              <tr><td>Encryption context</td><td>Extra key/value data (here, <code>user_id</code>) bound into every KMS call; a mismatch is rejected.</td></tr>
+              <tr><td><code>_ct</code> column</td><td>A ciphertext column — envelope-encrypted; the database never sees plaintext.</td></tr>
+              <tr><td>Sync cursor</td><td>The saved Gmail <code>historyId</code> that makes each fetch incremental and idempotent.</td></tr>
+              <tr><td>Circuit breaker</td><td>A guard in <code>LLMClient</code> that stops calling a failing provider after 5 consecutive errors.</td></tr>
+              <tr><td>ADR</td><td>Architecture Decision Record — a short doc capturing one decision and its trade-offs.</td></tr>
+              <tr><td>Redaction chain</td><td>identity → regex → Presidio scrubbing applied to every outbound prompt.</td></tr>
+              <tr><td>Run / <code>run_id</code></td><td>One execution of the daily pipeline; threaded through every message. Manual runs are ledgered in <code>digest_runs</code> (scheduled runs currently are not — see §16).</td></tr>
+            </tbody>
+          </table></div>
+
+          <footer class="docfoot">
+            <p><strong>Briefed — System Architecture &amp; Technical Documentation.</strong> Generated 2026-05-30 from the codebase at commit <code>dcf4284</code> (branch <code>dev</code>), version 1.0.0.</p>
+            <p>This document is hand-maintained alongside the code. When the data model, API, or a major decision changes, update this file (and the relevant ADR). Authoritative sources: <code>backend/app/db/models.py</code> (tables), <code>packages/contracts/openapi.json</code> (API), <code>docs/adr/</code> (decisions), and <code>CLAUDE.md</code> (project rules).</p>
+          </footer>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <button class="backtop" id="backtop" aria-label="Back to top">↑</button>
+
+  <!-- ============================ SCRIPTS ============================ -->
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    // Diagrams always render on a light card, so a single light-tuned theme
+    // stays legible regardless of the page's light/dark chrome.
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      securityLevel: 'loose',
+      flowchart: { curve: 'basis', useMaxWidth: true, htmlLabels: true },
+      themeVariables: {
+        fontFamily: "'Inter Variable', Inter, system-ui, sans-serif",
+        primaryColor: 'rgba(86,69,212,.1)',
+        primaryBorderColor: '#5645d4',
+        primaryTextColor: '#37352f',
+        lineColor: '#64748b',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <script>
+    // ---- Mobile nav toggle ----
+    const sidebar = document.getElementById('sidebar');
+    const menuBtn = document.getElementById('menuBtn');
+    menuBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
+    sidebar.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A' && window.innerWidth <= 860) sidebar.classList.remove('open');
+    });
+
+    // ---- Back to top ----
+    const backtop = document.getElementById('backtop');
+    window.addEventListener('scroll', () => {
+      backtop.classList.toggle('show', window.scrollY > 600);
+    }, { passive: true });
+    backtop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+    // ---- Scrollspy: highlight the active TOC link ----
+    const links = Array.from(document.querySelectorAll('#toc a'));
+    const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+    const spy = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          links.forEach(l => l.classList.remove('active'));
+          const a = byId.get(entry.target.id);
+          if (a) {
+            a.classList.add('active');
+            a.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      });
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+    document.querySelectorAll('section.anchor').forEach(s => spy.observe(s));
+  </script>
+</body>
+</html>

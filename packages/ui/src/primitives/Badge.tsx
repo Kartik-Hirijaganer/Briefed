@@ -20,7 +20,7 @@ export interface BadgeProps {
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: 'bg-border text-fg',
   accent: 'bg-accent/10 text-accent',
-  success: 'bg-success/10 text-success',
+  success: 'bg-success/10 text-success-strong',
   warn: 'bg-warn/10 text-warn',
   danger: 'bg-danger/10 text-danger',
 };
