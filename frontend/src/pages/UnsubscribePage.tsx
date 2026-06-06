@@ -30,6 +30,7 @@ import { useUnsubscribeData } from '../features/unsubscribe/useUnsubscribeData';
 export default function UnsubscribePage(): JSX.Element {
   const data = useUnsubscribeData();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [executeDialogBusy, setExecuteDialogBusy] = useState(false);
   // Only the destructive execute path (capability on) is online-only (§5);
   // the recommend-only path stays usable offline (links best-effort, the
   // mark-handled /confirm enqueues for replay).
@@ -45,8 +46,11 @@ export default function UnsubscribePage(): JSX.Element {
   };
 
   const onConfirmExecute = (): void => {
-    setConfirmOpen(false);
-    void data.executeSelected();
+    setExecuteDialogBusy(true);
+    void data.executeSelected().finally(() => {
+      setExecuteDialogBusy(false);
+      setConfirmOpen(false);
+    });
   };
 
   return (
@@ -138,15 +142,27 @@ export default function UnsubscribePage(): JSX.Element {
 
       <Dialog
         open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
+        onClose={() => {
+          if (!executeDialogBusy) setConfirmOpen(false);
+        }}
         title={`Unsubscribe from ${data.selectedCount} senders?`}
         description="Briefed sends one-click requests where supported; others open for you to finish."
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setConfirmOpen(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmOpen(false)}
+              disabled={executeDialogBusy}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" onClick={onConfirmExecute}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onConfirmExecute}
+              loading={executeDialogBusy}
+            >
               Unsubscribe
             </Button>
           </>

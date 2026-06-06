@@ -56,7 +56,9 @@ const SIZE_CLASS: Record<ButtonSize, string> = {
 };
 
 const BASE_CLASS =
-  'inline-flex items-center justify-center gap-2 font-medium transition ' +
+  'inline-flex items-center justify-center gap-2 font-medium ' +
+  'transition-[background-color,border-color,color,box-shadow,opacity,transform] ' +
+  'duration-[var(--motion-fast)] ease-[var(--ease-standard)] ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ' +
   'focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
