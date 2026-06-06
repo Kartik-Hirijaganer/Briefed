@@ -847,6 +847,76 @@
         }
       }
     },
+    "/api/v1/unsubscribes/{suggestion_id}/execute": {
+      "post": {
+        "tags": [
+          "unsubscribes"
+        ],
+        "summary": "Execute an unsubscribe (ADR 0014, gated)",
+        "description": "Execute (or surface) the sender-advertised unsubscribe for a row.\n\nGated behind ``FeatureConfig.unsubscribe_execute`` (ADR 0014): when the\nflag is off the endpoint 404s so the capability stays invisible. Requires\nan explicit ``{\"confirm\": true}`` body. Re-executing an already\n``unsubscribed`` row is a no-op. On a successful one-click the row is also\ndismissed so it drops from the active list; ``manual_required`` / ``failed``\nrows stay active.\n\nArgs:\n    suggestion_id: Target suggestion.\n    body: Confirmation envelope.\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    :class:`UnsubscribeExecuteResponse` describing the outcome.\n\nRaises:\n    HTTPException: 404 when the flag is off or the row is not owned;\n        400 when ``confirm`` is not true.",
+        "operationId": "execute_suggestion_api_v1_unsubscribes__suggestion_id__execute_post",
+        "parameters": [
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Suggestion Id"
+            }
+          },
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsubscribeExecuteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeExecuteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/hygiene/stats": {
       "get": {
         "tags": [
@@ -1237,6 +1307,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EmailRowOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "tags": [
+          "frontend"
+        ],
+        "summary": "Get runtime client capability flags",
+        "description": "Return the runtime capability flags the PWA branches on.\n\nReads the single source of truth (``get_app_config()``) so the frontend\nnever guesses whether the execute-unsubscribe capability (ADR 0014) is\nenabled. Authenticated like the rest of the PWA surface.\n\nArgs:\n    user_id: Authenticated owner (session-gated).\n\nReturns:\n    :class:`ClientConfigResponse` with the current capability flags.",
+        "operationId": "client_config_api_v1_config_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfigResponse"
                 }
               }
             }
@@ -2004,6 +2124,21 @@
         ],
         "title": "CategoryDigestOut",
         "description": "Decrypted run/category digest returned by ``/digest/today``.\n\nAttributes:\n    category: Triage category summarized by the digest.\n    narrative: Plaintext rollup narrative.\n    groups: Thematic source-backed groups.\n    confidence: Calibrated ``[0, 1]``."
+      },
+      "ClientConfigResponse": {
+        "properties": {
+          "unsubscribe_execute": {
+            "type": "boolean",
+            "title": "Unsubscribe Execute",
+            "description": "Whether the execute-unsubscribe capability is enabled (ADR 0014)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "unsubscribe_execute"
+        ],
+        "title": "ClientConfigResponse",
+        "description": "Runtime capability flags the PWA reads on bootstrap.\n\nKept intentionally tiny \u2014 only the capabilities the UI must branch on at\nruntime live here (everything else is build-time or per-resource).\n\nAttributes:\n    unsubscribe_execute: Whether the agent may actually execute\n        unsubscribes (ADR 0014). When false the unsubscribe page stays\n        recommend-only; when true it routes the bulk action to the\n        ``/execute`` flow."
       },
       "ConnectedAccountOut": {
         "properties": {
@@ -3026,6 +3161,70 @@
         "title": "UnsubscribeActionOut",
         "description": "Normalized ``List-Unsubscribe`` target surfaced to the UI.\n\nAttributes:\n    http_urls: Every HTTP/HTTPS URL advertised by the sender.\n    mailto: First ``mailto:`` URI, if present.\n    one_click: RFC 8058 one-click POST is supported."
       },
+      "UnsubscribeExecuteRequest": {
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "title": "Confirm",
+            "description": "Explicit per-action confirmation; must be true to execute."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirm"
+        ],
+        "title": "UnsubscribeExecuteRequest",
+        "description": "Body for ``POST /unsubscribes/{id}/execute`` (ADR 0014).\n\nThe explicit ``confirm`` flag is the per-action confirmation gate ADR 0014\nrequires \u2014 the endpoint rejects a request without it.\n\nAttributes:\n    confirm: Must be ``True`` to execute; the frontend sets it only after\n        the user confirms the destructive action."
+      },
+      "UnsubscribeExecuteResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unsubscribed",
+              "manual_required",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "Execute lifecycle outcome."
+          },
+          "executed_via": {
+            "type": "string",
+            "enum": [
+              "one_click",
+              "none"
+            ],
+            "title": "Executed Via",
+            "description": "How the unsubscribe was performed."
+          },
+          "manual_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Url",
+            "description": "URL the user must open when a manual step is required."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable outcome summary."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "executed_via",
+          "message"
+        ],
+        "title": "UnsubscribeExecuteResponse",
+        "description": "Result of an execute attempt (ADR 0014).\n\nAttributes:\n    status: ``unsubscribed`` (one-click POST succeeded), ``manual_required``\n        (the user must open :attr:`manual_url` to finish), or ``failed``.\n    executed_via: ``one_click`` when Briefed sent the request, else\n        ``none``.\n    manual_url: URL/``mailto:`` to open for ``manual_required``; ``None``\n        otherwise.\n    message: Human-readable summary for the UI."
+      },
       "UnsubscribeSuggestionOut": {
         "properties": {
           "id": {
@@ -3130,6 +3329,15 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "recent_subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recent Subjects",
+            "description": "Up to six newest-first plaintext recent subject lines.",
+            "default": []
           }
         },
         "type": "object",
@@ -3152,7 +3360,7 @@
           "updated_at"
         ],
         "title": "UnsubscribeSuggestionOut",
-        "description": "Response row for ``GET /unsubscribes``.\n\nAttributes:\n    id: Suggestion primary key.\n    sender_domain: Normalized sender domain.\n    sender_email: Full normalized address.\n    frequency_30d: Emails received in the trailing 30 days.\n    engagement_score: Positive-label ratio, 3-decimal precision.\n    waste_rate: Waste/ignore ratio, 3-decimal precision.\n    confidence: Calibrated ``[0, 1]`` \u2014 the UI hides rows below\n        ``0.5`` by default.\n    decision_source: ``rule`` or ``model``.\n    category: Sender archetype when the model decided; ``None`` for\n        rule-only rows (the UI can still render a heuristic badge).\n    rationale: Plaintext rationale (decrypted by the router).\n    list_unsubscribe: Normalized action payload. ``None`` when no\n        email from this sender in the window carried a\n        ``List-Unsubscribe`` header.\n    dismissed: User-side dismissal flag.\n    dismissed_at: When the user dismissed (``None`` while active).\n    last_email_at: Most recent email time from this sender.\n    created_at: First-insert timestamp of the suggestion row.\n    updated_at: Last aggregate-update timestamp."
+        "description": "Response row for ``GET /unsubscribes``.\n\nAttributes:\n    id: Suggestion primary key.\n    sender_domain: Normalized sender domain.\n    sender_email: Full normalized address.\n    frequency_30d: Emails received in the trailing 30 days.\n    engagement_score: Positive-label ratio, 3-decimal precision.\n    waste_rate: Waste/ignore ratio, 3-decimal precision.\n    confidence: Calibrated ``[0, 1]`` \u2014 the UI hides rows below\n        ``0.5`` by default.\n    decision_source: ``rule`` or ``model``.\n    category: Sender archetype when the model decided; ``None`` for\n        rule-only rows (the UI can still render a heuristic badge).\n    rationale: Plaintext rationale (decrypted by the router).\n    list_unsubscribe: Normalized action payload. ``None`` when no\n        email from this sender in the window carried a\n        ``List-Unsubscribe`` header.\n    dismissed: User-side dismissal flag.\n    dismissed_at: When the user dismissed (``None`` while active).\n    last_email_at: Most recent email time from this sender.\n    created_at: First-insert timestamp of the suggestion row.\n    updated_at: Last aggregate-update timestamp.\n    recent_subjects: Up to six newest-first plaintext subject lines\n        from this sender (already truncated by the aggregator). Empty\n        when the row predates the column or no subjects were captured.\n        Read-only \u2014 the UI shows them as recent-activity chips."
       },
       "UnsubscribeSuggestionsListResponse": {
         "properties": {

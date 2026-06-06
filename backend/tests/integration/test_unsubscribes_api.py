@@ -16,21 +16,56 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import app.api.v1.unsubscribes as unsubscribes_module
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
+from app.core.app_config import AppConfig, FeatureConfig
 from app.core.config import Settings, get_settings
 from app.db.models import ConnectedAccount, User
 from app.main import app
+from app.services.unsubscribe.executor import ExecuteOutcome
+from app.services.unsubscribe.parser import UnsubscribeAction
 from app.services.unsubscribe.repository import (
     UnsubscribeSuggestionsRepo,
     UnsubscribeSuggestionWrite,
 )
+
+
+def _enable_execute(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flip the ``unsubscribe_execute`` gate on for the endpoint module."""
+    monkeypatch.setattr(
+        unsubscribes_module,
+        "_APP_CONFIG",
+        AppConfig(features=FeatureConfig(unsubscribe_execute=True)),
+    )
+
+
+def _stub_executor(
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: ExecuteOutcome,
+    *,
+    calls: list[UnsubscribeAction] | None = None,
+) -> None:
+    """Replace the real executor with one returning a canned outcome."""
+
+    async def _stub(
+        action: UnsubscribeAction,
+        *,
+        http_client: object,
+        timeout: float,
+    ) -> ExecuteOutcome:
+        if calls is not None:
+            calls.append(action)
+        return outcome
+
+    monkeypatch.setattr(unsubscribes_module, "execute_unsubscribe", _stub)
 
 
 @pytest_asyncio.fixture()
@@ -98,6 +133,7 @@ async def _write_suggestion(
     rationale: str = "Noisy promo sender.",
     list_unsub: bool = True,
     last_email_days_ago: int = 1,
+    recent_subjects: tuple[str, ...] = (),
 ) -> None:
     repo = UnsubscribeSuggestionsRepo(cipher=None)
     async with factory() as session:
@@ -128,6 +164,7 @@ async def _write_suggestion(
                 tokens_in=0,
                 tokens_out=0,
                 last_email_at=datetime.now(tz=UTC) - timedelta(days=last_email_days_ago),
+                recent_subjects=recent_subjects,
             ),
         )
         await session.commit()
@@ -146,6 +183,7 @@ async def test_list_suggestions_sorts_by_confidence_and_hides_dismissed(
         sender_domain="promo.example",
         confidence=Decimal("0.92"),
         frequency=22,
+        recent_subjects=("50% off everything", "Flash sale ends tonight"),
     )
     await _write_suggestion(
         api_session,
@@ -172,6 +210,12 @@ async def test_list_suggestions_sorts_by_confidence_and_hides_dismissed(
         ]
         assert suggestions[0]["rationale"] == "Noisy promo sender."
         assert suggestions[0]["list_unsubscribe"]["one_click"] is True
+        # recent_subjects round-trips newest-first; absent rows default to [].
+        assert suggestions[0]["recent_subjects"] == [
+            "50% off everything",
+            "Flash sale ends tonight",
+        ]
+        assert suggestions[1]["recent_subjects"] == []
 
         # Dismiss the top row; it should no longer surface by default.
         target_id = suggestions[0]["id"]
@@ -388,3 +432,254 @@ async def test_unsubscribes_endpoint_requires_session(
         assert response.status_code == 401
         response2 = client.get("/api/v1/hygiene/stats")
         assert response2.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_client_config_exposes_execute_capability(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, _account = await _seed_user(api_session, email="me@x.example")
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        # Unauthenticated callers are rejected.
+        assert client.get("/api/v1/config").status_code == 401
+
+        # Defaults off.
+        off = client.get("/api/v1/config", cookies={SESSION_COOKIE_NAME: cookie})
+        assert off.status_code == 200
+        assert off.json()["unsubscribe_execute"] is False
+
+        # Reflects the flag when enabled.
+        monkeypatch.setattr(
+            "app.api.v1.frontend._APP_CONFIG",
+            AppConfig(features=FeatureConfig(unsubscribe_execute=True)),
+        )
+        on = client.get("/api/v1/config", cookies={SESSION_COOKIE_NAME: cookie})
+        assert on.json()["unsubscribe_execute"] is True
+
+
+@pytest.mark.asyncio
+async def test_execute_is_gated_off_by_default(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    user, account = await _seed_user(api_session, email="me@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user,
+        account=account,
+        sender_email="deals@promo.example",
+        sender_domain="promo.example",
+        confidence=Decimal("0.92"),
+        frequency=22,
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        sid = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"][0]["id"]
+        response = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_execute_requires_explicit_confirmation(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_execute(monkeypatch)
+    user, _account = await _seed_user(api_session, email="me@x.example")
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/unsubscribes/{uuid4()}/execute",
+            json={"confirm": False},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_execute_one_click_unsubscribes_and_dismisses(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_execute(monkeypatch)
+    _stub_executor(
+        monkeypatch,
+        ExecuteOutcome(
+            status="unsubscribed",
+            executed_via="one_click",
+            manual_url=None,
+            error=None,
+            message="Unsubscribed via the sender's one-click endpoint.",
+        ),
+    )
+    user, account = await _seed_user(api_session, email="me@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user,
+        account=account,
+        sender_email="deals@promo.example",
+        sender_domain="promo.example",
+        confidence=Decimal("0.92"),
+        frequency=22,
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        sid = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"][0]["id"]
+        response = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "unsubscribed"
+        assert response.json()["executed_via"] == "one_click"
+
+        # A successful one-click dismisses the row (drops from the active list).
+        after = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"]
+        assert all(s["id"] != sid for s in after)
+
+
+@pytest.mark.asyncio
+async def test_execute_manual_required_keeps_row_active(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_execute(monkeypatch)
+    _stub_executor(
+        monkeypatch,
+        ExecuteOutcome(
+            status="manual_required",
+            executed_via="none",
+            manual_url="https://promo.example/unsub",
+            error=None,
+            message="Open the unsubscribe link to finish.",
+        ),
+    )
+    user, account = await _seed_user(api_session, email="me@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user,
+        account=account,
+        sender_email="deals@promo.example",
+        sender_domain="promo.example",
+        confidence=Decimal("0.92"),
+        frequency=22,
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        sid = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"][0]["id"]
+        response = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "manual_required"
+        assert body["manual_url"] == "https://promo.example/unsub"
+
+        # The row stays active for the user to finish manually.
+        after = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"]
+        assert any(s["id"] == sid for s in after)
+
+
+@pytest.mark.asyncio
+async def test_execute_is_idempotent_for_unsubscribed_rows(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_execute(monkeypatch)
+    calls: list[UnsubscribeAction] = []
+    _stub_executor(
+        monkeypatch,
+        ExecuteOutcome(
+            status="unsubscribed",
+            executed_via="one_click",
+            manual_url=None,
+            error=None,
+            message="ok",
+        ),
+        calls=calls,
+    )
+    user, account = await _seed_user(api_session, email="me@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user,
+        account=account,
+        sender_email="deals@promo.example",
+        sender_domain="promo.example",
+        confidence=Decimal("0.92"),
+        frequency=22,
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        sid = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        ).json()["suggestions"][0]["id"]
+        first = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert first.json()["status"] == "unsubscribed"
+        # Re-executing the now-unsubscribed row is a no-op (executor not called).
+        second = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+        assert second.json()["status"] == "unsubscribed"
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_requires_ownership(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_execute(monkeypatch)
+    user_a, _account_a = await _seed_user(api_session, email="a@x.example")
+    user_b, account_b = await _seed_user(api_session, email="b@x.example")
+    await _write_suggestion(
+        api_session,
+        user=user_b,
+        account=account_b,
+        sender_email="b-promo@b.example",
+        sender_domain="b.example",
+        confidence=Decimal("0.91"),
+        frequency=12,
+    )
+    cookie_a = sign_cookie({"user_id": str(user_a.id)}, secret="test-key")
+    cookie_b = sign_cookie({"user_id": str(user_b.id)}, secret="test-key")
+    with TestClient(app) as client:
+        sid = client.get(
+            "/api/v1/unsubscribes",
+            cookies={SESSION_COOKIE_NAME: cookie_b},
+        ).json()["suggestions"][0]["id"]
+        cross = client.post(
+            f"/api/v1/unsubscribes/{sid}/execute",
+            json={"confirm": True},
+            cookies={SESSION_COOKIE_NAME: cookie_a},
+        )
+        assert cross.status_code == 404

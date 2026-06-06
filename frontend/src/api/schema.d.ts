@@ -418,6 +418,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/unsubscribes/{suggestion_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute an unsubscribe (ADR 0014, gated)
+         * @description Execute (or surface) the sender-advertised unsubscribe for a row.
+         *
+         *     Gated behind ``FeatureConfig.unsubscribe_execute`` (ADR 0014): when the
+         *     flag is off the endpoint 404s so the capability stays invisible. Requires
+         *     an explicit ``{"confirm": true}`` body. Re-executing an already
+         *     ``unsubscribed`` row is a no-op. On a successful one-click the row is also
+         *     dismissed so it drops from the active list; ``manual_required`` / ``failed``
+         *     rows stay active.
+         *
+         *     Args:
+         *         suggestion_id: Target suggestion.
+         *         body: Confirmation envelope.
+         *         user_id: Authenticated owner.
+         *         session: Active async session.
+         *         settings: Cached :class:`Settings`.
+         *
+         *     Returns:
+         *         :class:`UnsubscribeExecuteResponse` describing the outcome.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the flag is off or the row is not owned;
+         *             400 when ``confirm`` is not true.
+         */
+        post: operations["execute_suggestion_api_v1_unsubscribes__suggestion_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hygiene/stats": {
         parameters: {
             query?: never;
@@ -543,6 +584,36 @@ export interface paths {
          *         HTTPException: 404 when the email does not belong to the caller.
          */
         patch: operations["patch_email_bucket_api_v1_emails__email_id__bucket_patch"];
+        trace?: never;
+    };
+    "/api/v1/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get runtime client capability flags
+         * @description Return the runtime capability flags the PWA branches on.
+         *
+         *     Reads the single source of truth (``get_app_config()``) so the frontend
+         *     never guesses whether the execute-unsubscribe capability (ADR 0014) is
+         *     enabled. Authenticated like the rest of the PWA surface.
+         *
+         *     Args:
+         *         user_id: Authenticated owner (session-gated).
+         *
+         *     Returns:
+         *         :class:`ClientConfigResponse` with the current capability flags.
+         */
+        get: operations["client_config_api_v1_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/preferences": {
@@ -814,6 +885,26 @@ export interface components {
              * @description Digest confidence.
              */
             confidence: number;
+        };
+        /**
+         * ClientConfigResponse
+         * @description Runtime capability flags the PWA reads on bootstrap.
+         *
+         *     Kept intentionally tiny — only the capabilities the UI must branch on at
+         *     runtime live here (everything else is build-time or per-resource).
+         *
+         *     Attributes:
+         *         unsubscribe_execute: Whether the agent may actually execute
+         *             unsubscribes (ADR 0014). When false the unsubscribe page stays
+         *             recommend-only; when true it routes the bulk action to the
+         *             ``/execute`` flow.
+         */
+        ClientConfigResponse: {
+            /**
+             * Unsubscribe Execute
+             * @description Whether the execute-unsubscribe capability is enabled (ADR 0014).
+             */
+            unsubscribe_execute: boolean;
         };
         /**
          * ConnectedAccountOut
@@ -1517,6 +1608,61 @@ export interface components {
             one_click: boolean;
         };
         /**
+         * UnsubscribeExecuteRequest
+         * @description Body for ``POST /unsubscribes/{id}/execute`` (ADR 0014).
+         *
+         *     The explicit ``confirm`` flag is the per-action confirmation gate ADR 0014
+         *     requires — the endpoint rejects a request without it.
+         *
+         *     Attributes:
+         *         confirm: Must be ``True`` to execute; the frontend sets it only after
+         *             the user confirms the destructive action.
+         */
+        UnsubscribeExecuteRequest: {
+            /**
+             * Confirm
+             * @description Explicit per-action confirmation; must be true to execute.
+             */
+            confirm: boolean;
+        };
+        /**
+         * UnsubscribeExecuteResponse
+         * @description Result of an execute attempt (ADR 0014).
+         *
+         *     Attributes:
+         *         status: ``unsubscribed`` (one-click POST succeeded), ``manual_required``
+         *             (the user must open :attr:`manual_url` to finish), or ``failed``.
+         *         executed_via: ``one_click`` when Briefed sent the request, else
+         *             ``none``.
+         *         manual_url: URL/``mailto:`` to open for ``manual_required``; ``None``
+         *             otherwise.
+         *         message: Human-readable summary for the UI.
+         */
+        UnsubscribeExecuteResponse: {
+            /**
+             * Status
+             * @description Execute lifecycle outcome.
+             * @enum {string}
+             */
+            status: "unsubscribed" | "manual_required" | "failed";
+            /**
+             * Executed Via
+             * @description How the unsubscribe was performed.
+             * @enum {string}
+             */
+            executed_via: "one_click" | "none";
+            /**
+             * Manual Url
+             * @description URL the user must open when a manual step is required.
+             */
+            manual_url?: string | null;
+            /**
+             * Message
+             * @description Human-readable outcome summary.
+             */
+            message: string;
+        };
+        /**
          * UnsubscribeSuggestionOut
          * @description Response row for ``GET /unsubscribes``.
          *
@@ -1541,6 +1687,10 @@ export interface components {
          *         last_email_at: Most recent email time from this sender.
          *         created_at: First-insert timestamp of the suggestion row.
          *         updated_at: Last aggregate-update timestamp.
+         *         recent_subjects: Up to six newest-first plaintext subject lines
+         *             from this sender (already truncated by the aggregator). Empty
+         *             when the row predates the column or no subjects were captured.
+         *             Read-only — the UI shows them as recent-activity chips.
          */
         UnsubscribeSuggestionOut: {
             /**
@@ -1586,6 +1736,12 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Recent Subjects
+             * @description Up to six newest-first plaintext recent subject lines.
+             * @default []
+             */
+            recent_subjects: string[];
         };
         /**
          * UnsubscribeSuggestionsListResponse
@@ -2223,6 +2379,43 @@ export interface operations {
             };
         };
     };
+    execute_suggestion_api_v1_unsubscribes__suggestion_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnsubscribeExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsubscribeExecuteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     hygiene_stats_api_v1_hygiene_stats_get: {
         parameters: {
             query?: never;
@@ -2381,6 +2574,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailRowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_config_api_v1_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientConfigResponse"];
                 };
             };
             /** @description Validation Error */

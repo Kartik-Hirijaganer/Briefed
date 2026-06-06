@@ -17,6 +17,27 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.emails import EmailRowOut
 
 
+class ClientConfigResponse(BaseModel):
+    """Runtime capability flags the PWA reads on bootstrap.
+
+    Kept intentionally tiny — only the capabilities the UI must branch on at
+    runtime live here (everything else is build-time or per-resource).
+
+    Attributes:
+        unsubscribe_execute: Whether the agent may actually execute
+            unsubscribes (ADR 0014). When false the unsubscribe page stays
+            recommend-only; when true it routes the bulk action to the
+            ``/execute`` flow.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    unsubscribe_execute: bool = Field(
+        ...,
+        description="Whether the execute-unsubscribe capability is enabled (ADR 0014).",
+    )
+
+
 class UserPreferencesOut(BaseModel):
     """Current user's global PWA preferences.
 
@@ -248,6 +269,7 @@ class NewsDigestResponse(BaseModel):
 __all__ = [
     "CategoryDigestGroupOut",
     "CategoryDigestOut",
+    "ClientConfigResponse",
     "DigestCounts",
     "DigestTodayResponse",
     "ManualRunRequest",

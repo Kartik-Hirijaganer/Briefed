@@ -325,6 +325,49 @@ async def test_rank_senders_writes_rule_and_model_rows(test_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rank_senders_persists_recent_subjects_truncated(test_session) -> None:
+    user, account = await _seed_account(test_session)
+    long_subject = "A" * 250
+    # 8 emails, all ignore + unsub → 3-of-3 criteria → rule-only persist
+    # (no LLM call). idx=0 is newest and carries the over-length subject.
+    for idx in range(8):
+        await _seed_email(
+            test_session,
+            account_id=account.id,
+            gmail_id=f"r-{idx}",
+            from_addr="deals@promo.example",
+            subject=long_subject if idx == 0 else f"Daily deal {idx}",
+            days_ago=idx,
+            label="ignore",
+            has_unsub=True,
+        )
+
+    registry, pv = await _register_prompt(test_session)
+    # Empty provider — a rule-only (3-of-3) sender never calls the LLM.
+    llm = LLMClient(primary=_StubProvider([]))
+    repo = UnsubscribeSuggestionsRepo(cipher=None)
+
+    outcome = await rank_senders(
+        session=test_session,
+        user_id=user.id,
+        account_id=account.id,
+        llm=llm,
+        prompt=registry.get("unsubscribe_borderline", version=1),
+        prompt_version_id=pv.id,
+        repo=repo,
+    )
+    assert outcome.rule_recommendations == 1
+    assert outcome.model_recommendations == 0
+
+    row = (await test_session.execute(select(UnsubscribeSuggestion))).scalars().one()
+    # Capped at six, newest-first, with the over-length subject truncated.
+    assert len(row.recent_subjects) == 6
+    assert row.recent_subjects[0] == "A" * 160
+    assert row.recent_subjects[1] == "Daily deal 1"
+    assert all(len(subject) <= 160 for subject in row.recent_subjects)
+
+
+@pytest.mark.asyncio
 async def test_rank_senders_llm_veto_caps_confidence(test_session) -> None:
     user, account = await _seed_account(test_session)
     # 7 emails -> noisy; 2 must_read + 5 ignore -> engagement 0.286 (> 0.2,

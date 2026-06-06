@@ -143,6 +143,8 @@ convention = "google"
 "backend/app/api/v1/unsubscribes.py" = ["PLC0415"]
 "backend/app/api/v1/emails.py" = ["PLC0415"]
 "backend/app/api/v1/frontend.py" = ["PLC0415"]
+# Executor defers httpx to the request path so SnapStart does not snapshot it.
+"backend/app/services/unsubscribe/executor.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true

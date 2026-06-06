@@ -21,6 +21,7 @@ export {
 } from './primitives/FreshnessBadge';
 export { InstallPromptIOS, type InstallPromptIOSProps } from './primitives/InstallPromptIOS';
 export { Motion, type MotionProps } from './primitives/Motion';
+export { MOTION_PRESETS, type MotionPreset } from './motion/presets';
 export { OpenInGmailLink, type OpenInGmailLinkProps } from './primitives/OpenInGmailLink';
 export {
   SafeMarkdown,
@@ -29,5 +30,7 @@ export {
 } from './primitives/SafeMarkdown';
 export { Sheet, type SheetProps } from './primitives/Sheet';
 export { Skeleton, type SkeletonProps } from './primitives/Skeleton';
+export { Spinner, type SpinnerProps } from './primitives/Spinner';
 export { Switch, type SwitchProps } from './primitives/Switch';
 export { WhyBadge, type DecisionSource, type WhyBadgeProps } from './primitives/WhyBadge';
+export { WhySortedBanner, type WhySortedBannerProps } from './primitives/WhySortedBanner';

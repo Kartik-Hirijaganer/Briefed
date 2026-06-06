@@ -891,6 +891,28 @@ class UnsubscribeSuggestion(Base, TimestampMixin):
         last_email_at: UTC timestamp of the most recent email from this
             sender that fed the aggregate — useful for the UI to show
             "last seen" without a subquery.
+        recent_subjects: Up to six plaintext subject lines from this
+            sender in the aggregate window, newest-first, each truncated
+            by the aggregator. Subjects are already plaintext in
+            ``emails.subject`` (and exposed via the email-list API), so
+            this column stores them in the clear — unlike the
+            envelope-encrypted :attr:`rationale_ct`. Surfaced read-only so
+            the unsubscribe cards can show recent activity.
+        execute_status: Lifecycle of the execute-unsubscribe action (ADR
+            0014): ``pending`` (default, never attempted), ``unsubscribed``
+            (one-click POST succeeded), ``manual_required`` (the user must
+            finish via :attr:`manual_url`), or ``failed``. Re-executing an
+            already-``unsubscribed`` row is a no-op.
+        executed_via: How the unsubscribe was performed — ``one_click`` or
+            ``none`` (manual/failed). ``None`` until an attempt is made.
+        execute_attempted_at: UTC timestamp of the most recent execute
+            attempt; ``None`` until first attempted.
+        executed_at: UTC timestamp set only when ``execute_status`` becomes
+            ``unsubscribed``.
+        execute_error: Short failure note when ``execute_status='failed'``;
+            ``None`` otherwise.
+        manual_url: The ``List-Unsubscribe`` URL / ``mailto:`` the user must
+            open when ``execute_status='manual_required'``; ``None`` otherwise.
     """
 
     __tablename__ = "unsubscribe_suggestions"
@@ -919,6 +941,10 @@ class UnsubscribeSuggestion(Base, TimestampMixin):
         CheckConstraint(
             "frequency_30d >= 0",
             name="ck_unsubscribe_suggestions_frequency_non_negative",
+        ),
+        CheckConstraint(
+            "execute_status IN ('pending','unsubscribed','manual_required','failed')",
+            name="ck_unsubscribe_suggestions_execute_status",
         ),
         Index(
             "ix_unsubscribe_suggestions_account_score",
@@ -967,6 +993,17 @@ class UnsubscribeSuggestion(Base, TimestampMixin):
     dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_email_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recent_subjects: Mapped[list[str]] = mapped_column(
+        StringArray(),
+        nullable=False,
+        default=list,
+    )
+    execute_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    executed_via: Mapped[str | None] = mapped_column(String(16))
+    execute_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    execute_error: Mapped[str | None] = mapped_column(Text)
+    manual_url: Mapped[str | None] = mapped_column(Text)
 
 
 class KnownWasteSender(Base, TimestampMixin):
