@@ -488,6 +488,7 @@ async def _persist(
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             last_email_at=stats.last_email_at,
+            recent_subjects=stats.recent_subjects,
         ),
     )
 

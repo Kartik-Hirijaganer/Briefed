@@ -18,13 +18,15 @@ describe('<Sidebar>', () => {
     logoutMock.mockResolvedValue(undefined);
   });
 
-  it('renders the brand and every primary nav target', () => {
+  it('renders the brand glyph and every primary nav target', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <Sidebar />
       </MemoryRouter>,
     );
-    expect(screen.getByText('Briefed')).toBeInTheDocument();
+    // The wordmark is gone; the icon rail uses a "B" glyph link with an
+    // accessible name instead.
+    expect(screen.getByRole('link', { name: /briefed/i })).toHaveAttribute('href', '/');
     for (const item of NAV_ITEMS) {
       expect(screen.getByRole('link', { name: new RegExp(item.label, 'i') })).toHaveAttribute(
         'href',
@@ -41,6 +43,21 @@ describe('<Sidebar>', () => {
     );
     const active = screen.getByRole('link', { name: /history/i });
     expect(active.className).toMatch(/bg-sidebar-active/);
+  });
+
+  it('gives every icon-only link a non-empty accessible name and a title tooltip', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    const links = screen.getAllByRole('link');
+    expect(links.length).toBe(NAV_ITEMS.length + 1); // nav items + brand glyph
+    for (const link of links) {
+      expect(link).toHaveAccessibleName(/.+/);
+      expect(link).toHaveAttribute('title');
+      expect(link.getAttribute('title')).not.toBe('');
+    }
   });
 
   it('logs out from the sidebar action', async () => {

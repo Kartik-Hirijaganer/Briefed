@@ -29,6 +29,8 @@ export interface Schemas {
   MarkReadResponse: Components['MarkReadResponse'];
   UnsubscribeSuggestion: Components['UnsubscribeSuggestionOut'];
   UnsubscribesListResponse: Components['UnsubscribeSuggestionsListResponse'];
+  UnsubscribeExecuteResponse: Components['UnsubscribeExecuteResponse'];
+  ClientConfig: Components['ClientConfigResponse'];
   HygieneStats: Components['HygieneStatsResponse'];
   NewsCluster: Components['NewsCluster'];
   NewsDigestResponse: Components['NewsDigestResponse'];

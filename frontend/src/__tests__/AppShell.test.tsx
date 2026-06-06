@@ -33,7 +33,8 @@ const wrap = (initial: string): JSX.Element => {
 describe('<AppShell>', () => {
   it('renders sidebar, bottom tab bar, version, offline banners and outlet content', () => {
     render(wrap('/'));
-    expect(screen.getByText('Briefed')).toBeInTheDocument();
+    // The sidebar brand is now an icon-rail "B" glyph link (accessible name "Briefed").
+    expect(screen.getByRole('link', { name: /briefed/i })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: /primary mobile/i })).toBeInTheDocument();
     expect(screen.getByTestId('offline-banners')).toBeInTheDocument();
     expect(screen.getByTestId('queued-actions')).toBeInTheDocument();
