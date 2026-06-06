@@ -275,6 +275,44 @@ describe('<UnsubscribePage>', () => {
     );
   });
 
+  it('shows a spinner in the confirmation button while execute is busy', async () => {
+    const user = userEvent.setup();
+    let resolveExecute:
+      | ((value: { data: Schemas['UnsubscribeExecuteResponse'] }) => void)
+      | undefined;
+    mockRequests({ executeEnabled: true, suggestions: [suggestion({ id: 's1' })] });
+    apiMock.POST.mockImplementation((path: string) => {
+      if (path.endsWith('/execute')) {
+        return new Promise<{ data: Schemas['UnsubscribeExecuteResponse'] }>((resolve) => {
+          resolveExecute = resolve;
+        });
+      }
+      return Promise.resolve({ data: undefined });
+    });
+    renderPage();
+    await screen.findByText('noisy@news.example');
+
+    await user.click(screen.getByRole('checkbox', { name: /select all senders/i }));
+    await user.click(screen.getByRole('button', { name: /unsubscribe 1 selected/i }));
+    await user.click(screen.getByRole('button', { name: 'Unsubscribe' }));
+
+    const confirmButton = screen.getByRole('button', { name: 'Unsubscribe' });
+    expect(confirmButton).toHaveAttribute('aria-busy', 'true');
+    expect(confirmButton).toBeDisabled();
+
+    resolveExecute?.({
+      data: {
+        status: 'unsubscribed',
+        executed_via: 'one_click',
+        manual_url: null,
+        message: 'ok',
+      },
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/unsubscribe from 1 senders\?/i)).not.toBeInTheDocument(),
+    );
+  });
+
   it('applies per-result transitions and a results summary (no tab spam)', async () => {
     const user = userEvent.setup();
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);

@@ -853,7 +853,7 @@
           "unsubscribes"
         ],
         "summary": "Execute an unsubscribe (ADR 0014, gated)",
-        "description": "Execute (or surface) the sender-advertised unsubscribe for a row.\n\nGated behind ``FeatureConfig.unsubscribe_execute`` (ADR 0014): when the\nflag is off the endpoint 404s so the capability stays invisible. Requires\nan explicit ``{\"confirm\": true}`` body. Re-executing an already\n``unsubscribed`` row is a no-op. On a successful one-click the row is also\ndismissed so it drops from the active list; ``manual_required`` / ``failed``\nrows stay active.\n\nArgs:\n    suggestion_id: Target suggestion.\n    body: Confirmation envelope.\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    :class:`UnsubscribeExecuteResponse` describing the outcome.\n\nRaises:\n    HTTPException: 404 when the flag is off or the row is not owned;\n        400 when ``confirm`` is not true.",
+        "description": "Execute (or surface) the sender-advertised unsubscribe for a row.\n\nGated behind ``FeatureConfig.unsubscribe_execute`` (ADR 0014): when the\nflag is off the endpoint 404s so the capability stays invisible. Requires\nan explicit ``{\"confirm\": true}`` body. Re-executing an already\n``unsubscribed`` row is a no-op. On a successful one-click the row is also\ndismissed so it drops from the active list; ``manual_required`` / ``failed``\nrows stay active.\n\nArgs:\n    suggestion_id: Target suggestion.\n    body: Confirmation envelope.\n    request: Incoming request, used for error correlation.\n    user_id: Authenticated owner.\n    session: Active async session.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    :class:`UnsubscribeExecuteResponse` describing the outcome.\n\nRaises:\n    Aegis-compatible error response when the flag is off, the row is not\n    owned, or ``confirm`` is not true.",
         "operationId": "execute_suggestion_api_v1_unsubscribes__suggestion_id__execute_post",
         "parameters": [
           {
@@ -903,6 +903,26 @@
                 }
               }
             }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",

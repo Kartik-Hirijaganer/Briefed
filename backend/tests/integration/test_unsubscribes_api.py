@@ -485,6 +485,11 @@ async def test_execute_is_gated_off_by_default(
             cookies={SESSION_COOKIE_NAME: cookie},
         )
         assert response.status_code == 404
+        body = response.json()
+        assert body["code"] == "not_found"
+        assert body["message"] == "not found"
+        assert body["details"] == {}
+        assert body["requestId"]
 
 
 @pytest.mark.asyncio
@@ -502,6 +507,11 @@ async def test_execute_requires_explicit_confirmation(
             cookies={SESSION_COOKIE_NAME: cookie},
         )
         assert response.status_code == 400
+        body = response.json()
+        assert body["code"] == "unsubscribe_confirmation_required"
+        assert body["message"] == "Explicit confirmation is required to execute an unsubscribe."
+        assert body["details"] == {}
+        assert body["requestId"]
 
 
 @pytest.mark.asyncio
@@ -683,3 +693,8 @@ async def test_execute_requires_ownership(
             cookies={SESSION_COOKIE_NAME: cookie_a},
         )
         assert cross.status_code == 404
+        body = cross.json()
+        assert body["code"] == "not_found"
+        assert body["message"] == "suggestion not found"
+        assert body["details"] == {}
+        assert body["requestId"]

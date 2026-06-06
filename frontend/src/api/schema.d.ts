@@ -441,6 +441,7 @@ export interface paths {
          *     Args:
          *         suggestion_id: Target suggestion.
          *         body: Confirmation envelope.
+         *         request: Incoming request, used for error correlation.
          *         user_id: Authenticated owner.
          *         session: Active async session.
          *         settings: Cached :class:`Settings`.
@@ -449,8 +450,8 @@ export interface paths {
          *         :class:`UnsubscribeExecuteResponse` describing the outcome.
          *
          *     Raises:
-         *         HTTPException: 404 when the flag is off or the row is not owned;
-         *             400 when ``confirm`` is not true.
+         *         Aegis-compatible error response when the flag is off, the row is not
+         *         owned, or ``confirm`` is not true.
          */
         post: operations["execute_suggestion_api_v1_unsubscribes__suggestion_id__execute_post"];
         delete?: never;
@@ -2403,6 +2404,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnsubscribeExecuteResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Validation Error */
