@@ -192,6 +192,17 @@ class Settings(BaseSettings):
         description="Per-user manual-trigger cap (rolling 24h). Plan §19.16 + §20.2.",
         validation_alias="BRIEFED_MANUAL_RUN_DAILY_CAP",
     )
+    unsubscribe_execute_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0.0,
+        description=(
+            "Per-request timeout (seconds) for the SSRF-hardened unsubscribe "
+            "executor's outbound List-Unsubscribe POST (ADR 0014). Operational "
+            "tunable only — the execute capability itself is gated by "
+            "FeatureConfig.unsubscribe_execute, not by this value."
+        ),
+        validation_alias="BRIEFED_UNSUBSCRIBE_EXECUTE_TIMEOUT_SECONDS",
+    )
 
     # LLM prompt redaction. Presidio was removed in the Phase 2 daily
     # triage revamp; setting this true now fails fast when the chain is built.

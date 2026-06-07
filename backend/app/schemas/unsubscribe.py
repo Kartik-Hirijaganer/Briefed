@@ -69,6 +69,10 @@ class UnsubscribeSuggestionOut(BaseModel):
         last_email_at: Most recent email time from this sender.
         created_at: First-insert timestamp of the suggestion row.
         updated_at: Last aggregate-update timestamp.
+        recent_subjects: Up to six newest-first plaintext subject lines
+            from this sender (already truncated by the aggregator). Empty
+            when the row predates the column or no subjects were captured.
+            Read-only — the UI shows them as recent-activity chips.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -89,6 +93,59 @@ class UnsubscribeSuggestionOut(BaseModel):
     last_email_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    recent_subjects: tuple[str, ...] = Field(
+        default=(),
+        description="Up to six newest-first plaintext recent subject lines.",
+    )
+
+
+class UnsubscribeExecuteRequest(BaseModel):
+    """Body for ``POST /unsubscribes/{id}/execute`` (ADR 0014).
+
+    The explicit ``confirm`` flag is the per-action confirmation gate ADR 0014
+    requires — the endpoint rejects a request without it.
+
+    Attributes:
+        confirm: Must be ``True`` to execute; the frontend sets it only after
+            the user confirms the destructive action.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    confirm: bool = Field(
+        ...,
+        description="Explicit per-action confirmation; must be true to execute.",
+    )
+
+
+class UnsubscribeExecuteResponse(BaseModel):
+    """Result of an execute attempt (ADR 0014).
+
+    Attributes:
+        status: ``unsubscribed`` (one-click POST succeeded), ``manual_required``
+            (the user must open :attr:`manual_url` to finish), or ``failed``.
+        executed_via: ``one_click`` when Briefed sent the request, else
+            ``none``.
+        manual_url: URL/``mailto:`` to open for ``manual_required``; ``None``
+            otherwise.
+        message: Human-readable summary for the UI.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    status: Literal["unsubscribed", "manual_required", "failed"] = Field(
+        ...,
+        description="Execute lifecycle outcome.",
+    )
+    executed_via: Literal["one_click", "none"] = Field(
+        ...,
+        description="How the unsubscribe was performed.",
+    )
+    manual_url: str | None = Field(
+        default=None,
+        description="URL the user must open when a manual step is required.",
+    )
+    message: str = Field(..., description="Human-readable outcome summary.")
 
 
 class UnsubscribeSuggestionsListResponse(BaseModel):
@@ -147,6 +204,8 @@ __all__ = [
     "DomainWasteEntry",
     "HygieneStatsResponse",
     "UnsubscribeActionOut",
+    "UnsubscribeExecuteRequest",
+    "UnsubscribeExecuteResponse",
     "UnsubscribeSuggestionOut",
     "UnsubscribeSuggestionsListResponse",
 ]

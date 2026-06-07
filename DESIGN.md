@@ -222,9 +222,10 @@ reference in this section, (c) tests in [frontend/src/__tests__/](frontend/src/_
   selects, and time controls.
 - **Compact forms:** settings forms use 1 column below `md`, 2 columns at
   `md`, and 3 columns at `lg` / `xl` when the fields are independent.
-- **Sidebar:** 224px wide on desktop and **dark** (the `--sidebar-*` group,
-  §2); collapses to a **light** bottom tab bar below 768px
-  (see [frontend/src/shell/](frontend/src/shell/)).
+- **Sidebar:** a narrow **icon rail** on desktop — 64px wide (`md:w-16`) and
+  **dark** (the `--sidebar-*` group, §2). Each item is icon-only with an
+  `aria-label` + native `title` tooltip; collapses to a **light** bottom tab
+  bar below 768px (see [frontend/src/shell/](frontend/src/shell/)).
 
 ---
 
@@ -255,6 +256,27 @@ Prefer a hairline `--border` over a shadow for separation. Reach for
 
 Easing: `--ease-standard: cubic-bezier(0.2, 0, 0, 1)`. All motion tokens
 collapse to `0ms` under `prefers-reduced-motion: reduce`.
+
+### How to animate in Briefed
+
+This is the single documented home for animation. Follow it exactly — there
+must be no scattered, off-token motion.
+
+- **Always wrap motion in `<Motion>`** (`@briefed/ui`), never a raw
+  `motion.div`. `Motion`'s `pace` prop (`fast` / `base` / `slow`) owns the
+  duration + easing and the `prefers-reduced-motion` collapse — so a caller
+  never sets its own `duration`/`ease`.
+- **Use `MOTION_PRESETS`** (`fadeIn` / `fadeRise` / `listItem`) for entrances:
+  spread one onto a `<Motion>` (`<Motion pace="base" {...MOTION_PRESETS.fadeIn}>`).
+  Presets carry opacity / translate only.
+- **Stagger lists at the call site** by layering a per-item
+  `transition={{ delay: i * LIST_STAGGER_SECONDS }}` onto `listItem`. There is
+  no `StaggerList` component.
+- **`<Spinner>` for processing** (the one spinner primitive — never an ad-hoc
+  `animate-spin`), **`<Skeleton>` for placeholders.**
+- **Never write a bare `transition` / `transition-colors`** (Tailwind's
+  off-token 150ms). When a property needs to transition, drive it from tokens:
+  `duration-[var(--motion-fast)] ease-[var(--ease-standard)]`.
 
 ---
 

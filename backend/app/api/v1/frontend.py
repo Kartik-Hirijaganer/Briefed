@@ -39,6 +39,7 @@ from app.schemas.emails import EmailBucket, EmailRowOut
 from app.schemas.frontend import (
     CategoryDigestGroupOut,
     CategoryDigestOut,
+    ClientConfigResponse,
     DigestCounts,
     DigestTodayResponse,
     ManualRunRequest,
@@ -109,6 +110,32 @@ def _load_app_version() -> str:
 APP_VERSION: str = _load_app_version()
 """Frozen at import time — the same value the FastAPI ``info.version``
 field uses (see ``app.__init__``)."""
+
+
+@router.get(
+    "/config",
+    response_model=ClientConfigResponse,
+    summary="Get runtime client capability flags",
+)
+async def client_config(
+    user_id: UUID = Depends(current_user_id),
+) -> ClientConfigResponse:
+    """Return the runtime capability flags the PWA branches on.
+
+    Reads the single source of truth (``get_app_config()``) so the frontend
+    never guesses whether the execute-unsubscribe capability (ADR 0014) is
+    enabled. Authenticated like the rest of the PWA surface.
+
+    Args:
+        user_id: Authenticated owner (session-gated).
+
+    Returns:
+        :class:`ClientConfigResponse` with the current capability flags.
+    """
+    del user_id  # Auth-gated only; the flags are not user-scoped.
+    return ClientConfigResponse(
+        unsubscribe_execute=_APP_CONFIG.features.unsubscribe_execute,
+    )
 
 
 @router.get(

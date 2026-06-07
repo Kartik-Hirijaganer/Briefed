@@ -1,5 +1,7 @@
 import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type Ref } from 'react';
 
+import { Spinner } from './Spinner';
+
 /**
  * Supported visual variants.
  */
@@ -22,8 +24,7 @@ interface BaseProps {
 }
 
 interface ButtonAsButton
-  extends BaseProps,
-    Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'disabled'> {
+  extends BaseProps, Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'disabled'> {
   readonly variant: Exclude<ButtonVariant, 'link'>;
   readonly href?: never;
 }
@@ -55,7 +56,9 @@ const SIZE_CLASS: Record<ButtonSize, string> = {
 };
 
 const BASE_CLASS =
-  'inline-flex items-center justify-center gap-2 font-medium transition ' +
+  'inline-flex items-center justify-center gap-2 font-medium ' +
+  'transition-[background-color,border-color,color,box-shadow,opacity,transform] ' +
+  'duration-[var(--motion-fast)] ease-[var(--ease-standard)] ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ' +
   'focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -85,6 +88,7 @@ export const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonPr
           className={classes}
           aria-busy={loading || undefined}
         >
+          {loading ? <Spinner size="sm" /> : null}
           {children}
         </a>
       );
@@ -99,6 +103,7 @@ export const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonPr
         aria-busy={loading || undefined}
         disabled={buttonRest.disabled || loading}
       >
+        {loading ? <Spinner size="sm" /> : null}
         {children}
       </button>
     );

@@ -1,6 +1,9 @@
 features:
   jobs: false
   unsubscribe: true
+  # ADR 0014 — execute-unsubscribe capability. Default off; flip to true only
+  # after Track 5 verification passes.
+  unsubscribe_execute: false
   newsletter_clustering: true
   presidio: false
 

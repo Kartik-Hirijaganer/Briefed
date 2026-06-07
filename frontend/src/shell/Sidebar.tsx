@@ -1,12 +1,20 @@
+import { Spinner } from '@briefed/ui';
 import { LogOut } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 import { logoutAndClearBrowserSession } from '../api/session';
 import { NAV_ITEMS } from './navItems';
 
+const ITEM_CLASS =
+  'flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] ' +
+  'duration-[var(--motion-fast)] ease-[var(--ease-standard)]';
+
 /**
- * Desktop left-hand sidebar for primary navigation.
+ * Desktop left-hand navigation as a narrow icon rail. Every item is
+ * icon-only with an `aria-label` + native `title` tooltip so the rail stays
+ * accessible without visible labels. There is no theme toggle — the app ships
+ * a single fixed Notion theme.
  *
  * @returns The rendered sidebar element.
  */
@@ -26,39 +34,54 @@ export function Sidebar(): JSX.Element {
   };
 
   return (
-    <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:border-r border-sidebar-border bg-sidebar">
-      <div className="px-4 py-5 text-lg font-semibold tracking-tight text-sidebar-fg">Briefed</div>
-      <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 px-2">
+    <aside className="hidden border-r border-sidebar-border bg-sidebar md:flex md:w-16 md:shrink-0 md:flex-col md:items-center">
+      <Link
+        to="/"
+        aria-label="Briefed"
+        title="Briefed"
+        className="flex h-14 w-full items-center justify-center font-display text-lg font-semibold text-sidebar-fg"
+      >
+        B
+      </Link>
+      <nav aria-label="Primary" className="flex flex-1 flex-col items-center gap-1 py-2">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            aria-label={item.label}
+            title={item.label}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors ${
+              `${ITEM_CLASS} ${
                 isActive
                   ? 'bg-sidebar-active text-sidebar-fg'
                   : 'text-sidebar-fg-muted hover:bg-sidebar-hover'
               }`
             }
           >
-            <item.icon aria-hidden="true" strokeWidth={1.75} className="h-4 w-4 shrink-0" />
-            <span>{item.label}</span>
+            <item.icon aria-hidden="true" strokeWidth={1.75} className="h-5 w-5" />
           </NavLink>
         ))}
       </nav>
-      <div className="border-t border-sidebar-border p-2">
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={logoutPending}
-          className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm font-medium text-sidebar-fg-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <LogOut aria-hidden="true" strokeWidth={1.75} className="h-4 w-4 shrink-0" />
-          <span>{logoutPending ? 'Logging out...' : 'Logout'}</span>
-        </button>
+      <div className="w-full border-t border-sidebar-border py-2">
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={logoutPending}
+            aria-label="Logout"
+            title="Logout"
+            className={`${ITEM_CLASS} text-sidebar-fg-muted hover:bg-sidebar-hover hover:text-sidebar-fg disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {logoutPending ? (
+              <Spinner size="sm" />
+            ) : (
+              <LogOut aria-hidden="true" strokeWidth={1.75} className="h-5 w-5" />
+            )}
+          </button>
+        </div>
         {logoutError ? (
-          <p role="alert" className="px-3 pt-2 text-xs text-sidebar-fg-muted">
+          <p role="alert" className="sr-only">
             {logoutError}
           </p>
         ) : null}
