@@ -145,11 +145,9 @@ export function ScanNowButton(): JSX.Element {
           aria-label="Start a manual scan"
           className="w-full"
         >
-          <LabelIcon
-            aria-hidden="true"
-            className={`h-4 w-4 ${mode === 'running' ? 'animate-spin' : ''}`}
-            strokeWidth={1.75}
-          />
+          {mode === 'running' ? null : (
+            <LabelIcon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+          )}
           <span>{label}</span>
         </Button>
         {mode === 'running' ? (
@@ -187,11 +185,9 @@ export function ScanNowButton(): JSX.Element {
         title={tooltip}
         aria-label="Start a manual scan"
       >
-        <LabelIcon
-          aria-hidden="true"
-          className={`h-4 w-4 ${mode === 'running' ? 'animate-spin' : ''}`}
-          strokeWidth={1.75}
-        />
+        {mode === 'running' ? null : (
+          <LabelIcon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+        )}
         <span>{label}</span>
       </Button>
       {mode === 'error' && startRun.error instanceof Error ? (

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,10 +19,8 @@ vi.mock('../hooks/useFreshnessState', () => ({
   useFreshnessState: () => ({ state: 'fresh', lastKnownGoodAt: null }),
 }));
 vi.mock('../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
-vi.mock('../hooks/usePullToRefresh', () => ({
-  usePullToRefresh: () => ({}),
-}));
-
+vi.mock('../hooks/usePullToRefresh', () => ({ usePullToRefresh: () => ({}) }));
+vi.mock('../hooks/useBreakpoint', () => ({ useBreakpoint: () => 'lg' }));
 vi.mock('../features/dashboard/ScanNowButton', () => ({
   ScanNowButton: () => <button data-testid="scan-now">scan</button>,
   SCAN_NOW_EVENT: 'scan-now',
@@ -31,7 +29,7 @@ vi.mock('../features/dashboard/ScanNowButton', () => ({
 const recentIso = (): string => new Date(Date.now() - 60 * 60 * 1000).toISOString();
 const oldIso = (): string => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-const baseEmail: Schemas['EmailRow'] = {
+const makeEmail = (overrides: Partial<Schemas['EmailRow']> = {}): Schemas['EmailRow'] => ({
   id: 'e1',
   account_email: 'me@example.com',
   thread_id: 'thread-1',
@@ -44,39 +42,22 @@ const baseEmail: Schemas['EmailRow'] = {
   decision_source: 'rule',
   reasons: ['sender rule'],
   summary_excerpt: 'Confirm the call agenda.',
-};
+  ...overrides,
+});
 
 const digest: Schemas['DigestToday'] = {
   generated_at: recentIso(),
   last_successful_run_at: recentIso(),
   counts: { must_read: 3, good_to_read: 7, ignore: 12 },
   rule_decided: 5,
-  category_summaries: [
-    {
-      category: 'must_read',
-      narrative: '**Three** things need attention.',
-      confidence: 0.91,
-      groups: [{ label: 'People', bullets: ['Reply to the call thread.'], item_refs: ['e1'] }],
-    },
-    {
-      category: 'good_to_read',
-      narrative: 'Newsletter roundup is ready.',
-      confidence: 0.84,
-      groups: [],
-    },
-  ],
+  category_summaries: [],
   cost_cents_today: 47,
   must_read_preview: [],
 };
 
-const emailsResponse = (emails: readonly Schemas['EmailRow'][]): Schemas['EmailsListResponse'] => ({
-  emails: [...emails],
-  total: emails.length,
-});
-
-const renderPage = (initialEntry = '/'): void => {
+const renderPage = (initialEntry = '/'): RenderResult => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <DashboardPage />
@@ -93,7 +74,7 @@ const mockDashboardRequests = (
   } = {},
 ): void => {
   const digestData = options.digest ?? digest;
-  const emailRows = options.emails ?? [baseEmail];
+  const emailRows = options.emails ?? [makeEmail()];
   apiMock.GET.mockImplementation((path: string) => {
     if (path === '/api/v1/digest/today') return Promise.resolve({ data: digestData });
     if (path === '/api/v1/emails') {
@@ -111,32 +92,19 @@ describe('<DashboardPage>', () => {
     apiMock.POST.mockReset();
   });
 
-  it('renders narrative cards, KPI filters, rules-sorted stat, and tagged table rows', async () => {
+  it('renders the overview band: title, synced cost, filter pills, and scan control', async () => {
     mockDashboardRequests();
     renderPage();
 
-    expect(screen.getByText("Today's Digest")).toBeInTheDocument();
-    expect((await screen.findAllByText('Must-Read')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/5 sorted by your rules/)).toBeInTheDocument();
-    expect(screen.getByText(/today's cost: \$0\.47/i)).toBeInTheDocument();
-    expect(screen.getByText('Three')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /all/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getAllByText('Call tomorrow').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Must-Read').length).toBeGreaterThan(1);
-    expect(screen.getAllByText(/double-check/i).length).toBeGreaterThan(0);
+    // The overview band (incl. the title) is skeletoned until the digest loads.
+    expect(await screen.findByText("Today's Digest")).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.47/)).toBeInTheDocument();
+    expect(screen.getByText(/Synced .* ago/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^all/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('scan-now')).toBeInTheDocument();
   });
 
-  it('hides empty narrative summaries while keeping the table visible', async () => {
-    mockDashboardRequests({ digest: { ...digest, category_summaries: [] }, emails: [] });
-    renderPage();
-
-    expect(await screen.findByRole('heading', { name: /all emails/i })).toBeInTheDocument();
-    expect(screen.queryByText('Three')).not.toBeInTheDocument();
-    expect(screen.getByText(/no unread emails in this view/i)).toBeInTheDocument();
-  });
-
-  it('KPI clicks update the email query bucket and clear it for All', async () => {
+  it('filter pills change the email query bucket and clear it for All', async () => {
     const user = userEvent.setup();
     mockDashboardRequests();
     renderPage();
@@ -156,25 +124,12 @@ describe('<DashboardPage>', () => {
     );
   });
 
-  it('uses the loaded table total for the active KPI count', async () => {
-    mockDashboardRequests({
-      digest: { ...digest, counts: { must_read: 3, good_to_read: 7, ignore: 12 } },
-      total: 1,
-    });
-    renderPage('/?bucket=must_read');
-
-    const mustReadKpi = await screen.findByRole('button', { name: /must-read/i });
-
-    expect(within(mustReadKpi).getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('1 unread messages in this view')).toBeInTheDocument();
-  });
-
   it('pagination advances the offset query', async () => {
     const user = userEvent.setup();
     mockDashboardRequests({ total: 50 });
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: /next/i }));
+    await user.click(await screen.findByRole('button', { name: 'Next' }));
     await waitFor(() =>
       expect(apiMock.GET).toHaveBeenCalledWith('/api/v1/emails', {
         params: { query: { offset: 25, limit: 25 } },
@@ -182,20 +137,117 @@ describe('<DashboardPage>', () => {
     );
   });
 
-  it('marks one row read through the mark-read endpoint', async () => {
+  it('selecting a list row updates the reading pane', async () => {
     const user = userEvent.setup();
-    mockDashboardRequests();
-    apiMock.POST.mockResolvedValue({ data: { marked: 1, failed: [] } });
+    mockDashboardRequests({
+      emails: [
+        makeEmail({ id: 'a', subject: 'Call tomorrow', sender: 'lead@example.com' }),
+        makeEmail({
+          id: 'b',
+          subject: 'Weekly newsletter',
+          sender: 'news@example.com',
+          bucket: 'good_to_read',
+          needs_review: false,
+        }),
+      ],
+    });
     renderPage();
 
-    const row = await screen.findByRole('row', { name: /call tomorrow/i });
-    await user.click(within(row).getByRole('button', { name: /mark read/i }));
+    // Default selection is the first row.
+    expect(await screen.findByRole('heading', { name: /call tomorrow/i })).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/emails/mark-read', {
-        body: { email_ids: ['e1'] },
-      }),
-    );
+    await user.click(screen.getByRole('button', { name: /weekly newsletter/i }));
+    expect(await screen.findByRole('heading', { name: /weekly newsletter/i })).toBeInTheDocument();
+  });
+
+  it('shows the why-sorted banner and toggles the review caveat with needs_review', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({
+      emails: [
+        makeEmail({
+          id: 'a',
+          subject: 'Call tomorrow',
+          needs_review: true,
+          reasons: ['sender rule'],
+        }),
+        makeEmail({
+          id: 'b',
+          subject: 'Weekly newsletter',
+          sender: 'news@example.com',
+          bucket: 'good_to_read',
+          needs_review: false,
+          reasons: ['newsletter rule'],
+        }),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findByText(/Marked Must-Read — sender rule/)).toBeInTheDocument();
+    expect(screen.getByText(/double-check before acting/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /weekly newsletter/i }));
+    await screen.findByRole('heading', { name: /weekly newsletter/i });
+    expect(screen.queryByText(/double-check before acting/i)).not.toBeInTheDocument();
+  });
+
+  it('shows reading-pane skeletons while the emails query is pending', async () => {
+    apiMock.GET.mockImplementation((path: string) => {
+      if (path === '/api/v1/digest/today') return Promise.resolve({ data: digest });
+      if (path === '/api/v1/emails') return new Promise(() => undefined);
+      return Promise.resolve({ data: {} });
+    });
+    const { container } = renderPage();
+
+    await screen.findByText("Today's Digest");
+    expect(container.querySelector('.animate-pulse')).not.toBeNull();
+    expect(screen.queryByRole('heading', { name: /call tomorrow/i })).not.toBeInTheDocument();
+  });
+
+  it('advances the selection to the next must-read row', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({
+      emails: [
+        makeEmail({ id: 'a', subject: 'First must read', bucket: 'must_read' }),
+        makeEmail({ id: 'b', subject: 'A quiet note', bucket: 'ignore', needs_review: false }),
+        makeEmail({
+          id: 'c',
+          subject: 'Second must read',
+          bucket: 'must_read',
+          needs_review: false,
+        }),
+      ],
+    });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /first must read/i });
+    await user.click(screen.getByRole('button', { name: /next must-read/i }));
+    expect(await screen.findByRole('heading', { name: /second must read/i })).toBeInTheDocument();
+  });
+
+  it('marks the selected email read, optimistically removes it, and advances selection', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({
+      emails: [
+        makeEmail({ id: 'a', subject: 'Call tomorrow' }),
+        makeEmail({
+          id: 'b',
+          subject: 'Weekly newsletter',
+          bucket: 'good_to_read',
+          needs_review: false,
+        }),
+      ],
+    });
+    apiMock.POST.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('button', { name: /mark read/i }));
+
+    await waitFor(() => expect(screen.queryByText('Call tomorrow')).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: /weekly newsletter/i })).toBeInTheDocument();
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/emails/mark-read', {
+      body: { email_ids: ['a'] },
+    });
   });
 
   it('prompts Gmail reconnect when mark-read needs new authorization', async () => {
@@ -212,31 +264,20 @@ describe('<DashboardPage>', () => {
     });
     renderPage();
 
-    const row = await screen.findByRole('row', { name: /call tomorrow/i });
-    await user.click(within(row).getByRole('button', { name: /mark read/i }));
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('button', { name: /mark read/i }));
 
     expect(await screen.findByText(/reconnect gmail to mark mail read/i)).toBeInTheDocument();
     expect(
       screen.getByText('Gmail re-authorization is required before mark-read.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reconnect gmail/i })).toBeInTheDocument();
-    expect(screen.queryByText(/api request failed with status 409/i)).not.toBeInTheDocument();
   });
 
-  it('bulk select-all optimistically removes selected rows before mark-read settles', async () => {
-    const user = userEvent.setup();
-    mockDashboardRequests();
-    apiMock.POST.mockReturnValue(new Promise(() => undefined));
+  it('renders the empty state when no emails are in the view', async () => {
+    mockDashboardRequests({ emails: [] });
     renderPage();
-
-    await screen.findAllByText('Call tomorrow');
-    await user.click(screen.getByRole('checkbox', { name: /select all visible emails/i }));
-    await user.click(screen.getByRole('button', { name: /mark selected read/i }));
-
-    await waitFor(() => expect(screen.queryByText('Call tomorrow')).not.toBeInTheDocument());
-    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/emails/mark-read', {
-      body: { email_ids: ['e1'] },
-    });
+    expect(await screen.findByText(/no unread emails in this view/i)).toBeInTheDocument();
   });
 
   it('shows the auto-scan-off alert when the last run is older than 7 days', async () => {
@@ -250,7 +291,7 @@ describe('<DashboardPage>', () => {
       if (path === '/api/v1/digest/today') {
         return Promise.resolve({ error: { detail: 'down' }, response: { status: 500 } });
       }
-      return Promise.resolve({ data: emailsResponse([]) });
+      return Promise.resolve({ data: { emails: [], total: 0 } });
     });
     renderPage();
     await waitFor(() =>

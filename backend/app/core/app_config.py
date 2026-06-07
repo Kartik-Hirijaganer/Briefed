@@ -30,6 +30,15 @@ class FeatureConfig(BaseModel):
 
     jobs: bool = Field(default=False, description="Reserved seam for removed job extraction.")
     unsubscribe: bool = Field(default=True, description="Whether unsubscribe suggestions run.")
+    unsubscribe_execute: bool = Field(
+        default=False,
+        description=(
+            "Whether the agent may actually execute unsubscribes (ADR 0014). "
+            "Default off: the unsubscribe page stays recommend-only until this "
+            "is enabled. Single source of truth gating POST "
+            "/unsubscribes/{id}/execute and the frontend execute UX."
+        ),
+    )
     newsletter_clustering: bool = Field(
         default=True,
         description="Whether newsletter clustering and tech-news summaries run.",

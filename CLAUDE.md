@@ -194,7 +194,7 @@ ADR 0007 defines `MailboxProvider` in [backend/app/domain/providers.py](backend/
 `pydantic-settings` `Settings` in [backend/app/core/config.py](backend/app/core/config.py), accessed via `get_settings()` (memoized). In Lambda runtimes it pulls secrets from SSM at cold-start via `_SSM_FIELD_MAP`; missing required secrets fail init hard. Locally it reads `.env` (template at [.env.example](.env.example)). **Never call `os.getenv` in business logic** — route through `Settings` so tests + SSM hydration keep working.
 
 ### Release policy
-Release 1.0.0 is **recommend-only** (ADR 0006): the agent never clicks unsubscribe / archives / sends on the user's behalf. If you add a destructive action path, it must be gated behind an explicit user confirmation flow and documented in a new ADR.
+ADR 0006 made release 1.0.0 **recommend-only**: the agent never clicks unsubscribe / archives / sends on the user's behalf. Two narrow, explicit writes have since superseded it for one action each, each gated and documented in its own ADR: **ADR 0013** permits user-initiated Gmail mark-read (`gmail.modify`), and **ADR 0014** permits user-initiated unsubscribe execution behind the `FeatureConfig.unsubscribe_execute` flag (default off; SSRF-hardened; only via the sender-advertised `List-Unsubscribe`; no new Gmail scope). If you add another destructive action path, it must be gated behind an explicit user confirmation flow and documented in a new ADR.
 
 ---
 

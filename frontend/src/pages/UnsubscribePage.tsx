@@ -1,132 +1,137 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Button,
+  Dialog,
+  EmptyState,
+  ErrorState,
+  FreshnessBadge,
+  Motion,
+  MOTION_PRESETS,
+} from '@briefed/ui';
 import { CircleCheck } from 'lucide-react';
+import { useState } from 'react';
 
-import { Badge, Button, Card, EmptyState, ErrorState, FreshnessBadge, Skeleton } from '@briefed/ui';
-
-import { api, unwrap } from '../api/client';
-import type { Schemas } from '../api/types';
-import { useFreshnessState } from '../hooks/useFreshnessState';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { enqueueMutation } from '../offline/mutations';
-
-const STALE_MS = 10 * 60 * 1000;
+import { LIST_STAGGER_SECONDS } from '../config/presentation';
+import { SenderCard } from '../features/unsubscribe/SenderCard';
+import { SenderCardSkeleton } from '../features/unsubscribe/SenderCardSkeleton';
+import { UnsubscribeSelectionBar } from '../features/unsubscribe/UnsubscribeSelectionBar';
+import { useUnsubscribeData } from '../features/unsubscribe/useUnsubscribeData';
 
 /**
- * Unsubscribe recommendations (`/unsubscribe`). Release 1.0.0 never
- * clicks unsubscribe on the user's behalf per ADR 0006 — the user
- * confirms each suggestion; we record the dismissal only.
+ * Unsubscribe suggestions (`/unsubscribe`). Multi-select sender triage with a
+ * **capability-driven** bulk action: with the execute capability off (the prod
+ * default) it is recommend-only — it opens each sender's unsubscribe link and
+ * marks it handled. With the capability on (ADR 0014) the primary opens a
+ * confirmation dialog and posts real one-click unsubscribes, surfacing
+ * per-result follow-ups for senders that need a manual step or that failed.
  *
  * @returns The rendered page.
  */
 export default function UnsubscribePage(): JSX.Element {
-  const client = useQueryClient();
-  const online = useOnlineStatus();
-  const suggestionsQuery = useQuery({
-    queryKey: ['unsubscribes'],
-    queryFn: async () => unwrap(await api.GET('/api/v1/unsubscribes')),
-    staleTime: STALE_MS,
-  });
-  const freshness = useFreshnessState({ queryKey: ['unsubscribes'], staleTime: STALE_MS });
+  const data = useUnsubscribeData();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [executeDialogBusy, setExecuteDialogBusy] = useState(false);
+  // Only the destructive execute path (capability on) is online-only (§5);
+  // the recommend-only path stays usable offline (links best-effort, the
+  // mark-handled /confirm enqueues for replay).
+  const offlineExecuteBlocked = data.executeEnabled && !data.online;
+  const primaryTooltip = offlineExecuteBlocked ? 'Reconnect to unsubscribe' : undefined;
 
-  const dismiss = useMutation({
-    mutationFn: async (id: string): Promise<void> => {
-      if (!online) {
-        await enqueueMutation({ type: 'unsubscribe_dismiss', suggestionId: id });
-        return;
-      }
-      unwrap(
-        await api.POST('/api/v1/unsubscribes/{suggestion_id}/dismiss', {
-          params: { path: { suggestion_id: id } },
-        }),
-      );
-    },
-    onMutate: (id) => removeSuggestionFromCache(client, id),
-    onSuccess: () => {
-      if (online) void client.invalidateQueries({ queryKey: ['unsubscribes'] });
-    },
-  });
+  const onPrimary = (): void => {
+    if (data.executeEnabled) {
+      setConfirmOpen(true);
+      return;
+    }
+    data.recommendUnsubscribeSelected();
+  };
 
-  const confirm = useMutation({
-    mutationFn: async (id: string): Promise<void> => {
-      if (!online) {
-        await enqueueMutation({ type: 'unsubscribe_confirm', suggestionId: id });
-        return;
-      }
-      unwrap(
-        await api.POST('/api/v1/unsubscribes/{suggestion_id}/confirm', {
-          params: { path: { suggestion_id: id } },
-        }),
-      );
-    },
-    onMutate: (id) => removeSuggestionFromCache(client, id),
-    onSuccess: () => {
-      if (online) void client.invalidateQueries({ queryKey: ['unsubscribes'] });
-    },
-  });
+  const onConfirmExecute = (): void => {
+    setExecuteDialogBusy(true);
+    void data.executeSelected().finally(() => {
+      setExecuteDialogBusy(false);
+      setConfirmOpen(false);
+    });
+  };
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
+      <header className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-xl font-semibold tracking-tight">
             Unsubscribe suggestions
           </h1>
           <FreshnessBadge
-            state={freshness.state}
-            lastKnownGoodAt={freshness.lastKnownGoodAt ?? undefined}
+            state={data.freshnessState}
+            lastKnownGoodAt={data.freshnessLastKnownGoodAt ?? undefined}
           />
         </div>
+        <p className="text-sm text-fg-muted">
+          {data.flaggedCount} senders flagged · ~{data.wastedPerMonth} wasted emails / month
+        </p>
       </header>
 
-      {suggestionsQuery.isPending ? (
-        <Skeleton shape="block" />
-      ) : suggestionsQuery.isError ? (
+      {data.batchSummary ? (
+        <Alert
+          tone="info"
+          title="Unsubscribe results"
+          action={
+            <Button variant="ghost" size="sm" onClick={data.dismissBatchSummary}>
+              Dismiss
+            </Button>
+          }
+        >
+          <p>
+            {data.batchSummary.unsubscribed} unsubscribed · {data.batchSummary.manualRequired} need
+            a manual step · {data.batchSummary.failed} failed
+          </p>
+          <ManualLinkList data={data} />
+        </Alert>
+      ) : null}
+
+      {data.isPending ? (
+        <SenderCardSkeleton />
+      ) : data.isError ? (
         <ErrorState
           title="Could not load suggestions"
-          detail={
-            suggestionsQuery.error instanceof Error ? suggestionsQuery.error.message : undefined
-          }
+          detail={data.error instanceof Error ? data.error.message : undefined}
         />
-      ) : suggestionsQuery.data && suggestionsQuery.data.suggestions.length > 0 ? (
-        <ul className="flex flex-col gap-3">
-          {suggestionsQuery.data.suggestions.map((suggestion) => (
-            <li key={suggestion.id}>
-              <Card className="flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-fg">
-                      {suggestion.sender_email}
-                    </h3>
-                    <p className="truncate text-xs text-fg-muted">{suggestion.sender_domain}</p>
-                  </div>
-                  <Badge tone="warn">score {Number(suggestion.confidence).toFixed(2)}</Badge>
-                </div>
-                <p className="text-xs text-fg-muted">{suggestion.rationale}</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => dismiss.mutate(suggestion.id)}
-                  >
-                    Keep
-                  </Button>
-                  {unsubscribeUrl(suggestion) ? (
-                    <Button variant="link" size="sm" href={unsubscribeUrl(suggestion) ?? '#'}>
-                      Open unsubscribe link
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => confirm.mutate(suggestion.id)}
-                  >
-                    Mark unsubscribed
-                  </Button>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
+      ) : data.suggestions.length > 0 ? (
+        <>
+          <UnsubscribeSelectionBar
+            total={data.totalCount}
+            selectedCount={data.selectedCount}
+            allSelected={data.allSelected}
+            indeterminate={data.someSelected && !data.allSelected}
+            onToggleAll={data.togglePageSelected}
+            onKeep={data.keepSelected}
+            keepDisabled={data.selectedCount === 0}
+            onPrimary={onPrimary}
+            primaryLabel={`Unsubscribe ${data.selectedCount} selected`}
+            primaryDisabled={data.selectedCount === 0 || offlineExecuteBlocked}
+            primaryLoading={data.primaryBusy}
+            primaryTooltip={primaryTooltip}
+          />
+          <ul className="flex flex-col gap-3">
+            {data.suggestions.map((suggestion, index) => (
+              <li key={suggestion.id}>
+                <Motion
+                  pace="base"
+                  {...MOTION_PRESETS.listItem}
+                  transition={{ delay: index * LIST_STAGGER_SECONDS }}
+                >
+                  <SenderCard
+                    suggestion={suggestion}
+                    selected={data.selectedIds.has(suggestion.id)}
+                    onToggle={(checked) => data.toggleSelected(suggestion.id, checked)}
+                    executeResult={data.executeResults.get(suggestion.id) ?? null}
+                    onConfirmManual={() => data.confirmManual(suggestion.id)}
+                    onRetry={() => void data.retryExecute(suggestion.id)}
+                  />
+                </Motion>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
         <EmptyState
           icon={CircleCheck}
@@ -134,22 +139,79 @@ export default function UnsubscribePage(): JSX.Element {
           description="Run a scan — we only recommend when engagement drops below the configured threshold."
         />
       )}
+
+      <Dialog
+        open={confirmOpen}
+        onClose={() => {
+          if (!executeDialogBusy) setConfirmOpen(false);
+        }}
+        title={`Unsubscribe from ${data.selectedCount} senders?`}
+        description="Briefed sends one-click requests where supported; others open for you to finish."
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmOpen(false)}
+              disabled={executeDialogBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onConfirmExecute}
+              loading={executeDialogBusy}
+            >
+              Unsubscribe
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-fg-muted">
+          This sends a one-click unsubscribe to each sender that supports it. Senders that need a
+          manual step will stay listed with a link to finish.
+        </p>
+      </Dialog>
     </section>
   );
 }
 
-function unsubscribeUrl(suggestion: Schemas['UnsubscribeSuggestion']): string | null {
-  return suggestion.list_unsubscribe?.http_urls[0] ?? null;
-}
-
-function removeSuggestionFromCache(
-  client: ReturnType<typeof useQueryClient>,
-  suggestionId: string,
-): void {
-  client.setQueryData<Schemas['UnsubscribesListResponse']>(['unsubscribes'], (current) => {
-    if (!current) return current;
-    return {
-      suggestions: current.suggestions.filter((suggestion) => suggestion.id !== suggestionId),
-    };
+/**
+ * The explicit list of manual-step links from the most recent execute batch
+ * (no auto-opened tabs — the user clicks each).
+ *
+ * @param props - Component props.
+ * @param props.data - The unsubscribe data bundle.
+ * @returns The rendered manual-link list, or null when there are none.
+ */
+function ManualLinkList(props: {
+  data: ReturnType<typeof useUnsubscribeData>;
+}): JSX.Element | null {
+  const { data } = props;
+  const manual = data.suggestions.filter((suggestion) => {
+    const entry = data.executeResults.get(suggestion.id);
+    return entry?.status === 'manual_required' && entry.manualUrl;
   });
+  if (manual.length === 0) return null;
+  return (
+    <ul className="mt-2 flex flex-col gap-1">
+      {manual.map((suggestion) => {
+        const url = data.executeResults.get(suggestion.id)?.manualUrl;
+        return (
+          <li key={suggestion.id} className="text-xs">
+            <span className="text-fg-muted">{suggestion.sender_email}: </span>
+            <a
+              href={url ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-link underline-offset-4 hover:underline"
+            >
+              Open unsubscribe page
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }

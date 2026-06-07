@@ -19,7 +19,7 @@ short, dated, numbered, immutable once accepted.
 | 0003 | AWS Lambda + SnapStart over Fargate                   | Accepted                |
 | 0004 | Supabase for 1.0.0, portable to RDS                   | Accepted                |
 | 0005 | PWA over native iOS                                   | Accepted                |
-| 0006 | Recommend-only in release 1.0.0                       | Accepted                |
+| 0006 | Recommend-only in release 1.0.0                       | Superseded in part by ADR 0013, ADR 0014 |
 | 0007 | `MailboxProvider` interface                           | Accepted                |
 | 0008 | KMS CMK for token-wrap key                            | Accepted                |
 | 0009 | OpenRouter as the LLM routing layer                   | Accepted                |
@@ -27,3 +27,4 @@ short, dated, numbered, immutable once accepted.
 | 0011 | CloudFront OAC over API Gateway for API edge hardening | Accepted                |
 | 0012 | Remove Presidio from prompt redaction                 | Accepted                |
 | 0013 | Gmail mark-read write scope                           | Accepted                |
+| 0014 | Execute unsubscribe in release 2                      | Accepted                |
