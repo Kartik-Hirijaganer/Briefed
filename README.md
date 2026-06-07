@@ -5,7 +5,7 @@
 **Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts without your explicit confirmation.**
 
 [![Live demo](https://img.shields.io/badge/demo-live-success)](https://d2vki955e8ckrc.cloudfront.net/)
-[![Demo video](https://img.shields.io/badge/video-60s%20walkthrough-blue)](https://github.com/Kartik-Hirijaganer/Briefed/raw/refs/heads/feat/page-redisgn/docs/demo/briefed-demo.mp4)
+[![Demo video](https://img.shields.io/badge/video-60s%20walkthrough-blue)](#demo-video)
 [![CI](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml/badge.svg)](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml)
 ![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20gated-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -29,13 +29,9 @@
 
 ## Demo video
 
-<video src="https://github.com/Kartik-Hirijaganer/Briefed/raw/refs/heads/feat/page-redisgn/docs/demo/briefed-demo.mp4" poster="docs/demo/briefed-demo-poster.png" controls muted width="860">
-  Watch the 60-second Briefed product walkthrough.
-</video>
+![Briefed 60-second product walkthrough](docs/demo/briefed-demo.gif)
 
-[![Watch the 60-second Briefed product walkthrough](docs/demo/briefed-demo-poster.png)](https://github.com/Kartik-Hirijaganer/Briefed/raw/refs/heads/feat/page-redisgn/docs/demo/briefed-demo.mp4)
-
-**[▶ Watch the 60-second product walkthrough](https://github.com/Kartik-Hirijaganer/Briefed/raw/refs/heads/feat/page-redisgn/docs/demo/briefed-demo.mp4)** — recorded with Playwright against a synthetic demo inbox, so it shows the real UI and flows without exposing private email data.
+**60-second product walkthrough** — recorded with Playwright against a synthetic demo inbox, so it shows the real UI and flows without exposing private email data.
 
 What it shows:
 
