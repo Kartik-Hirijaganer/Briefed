@@ -2,9 +2,10 @@
 
 # Briefed
 
-**Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts on your behalf.**
+**Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts without your explicit confirmation.**
 
 [![Live demo](https://img.shields.io/badge/demo-live-success)](https://d2vki955e8ckrc.cloudfront.net/)
+[![Demo video](https://img.shields.io/badge/video-real%20session-blue)](#demo-video)
 [![CI](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml/badge.svg)](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml)
 ![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20gated-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -16,7 +17,9 @@
 ![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-SnapStart-FF9900?logo=awslambda&logoColor=white)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 
-**[▶ Live demo](https://d2vki955e8ckrc.cloudfront.net/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
+**[▶ Demo video](#demo-video)**  ·  **[Live demo](https://d2vki955e8ckrc.cloudfront.net/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
+
+**Keywords:** AI email agent · Gmail triage · inbox zero · LLM pipeline · serverless SaaS · FastAPI · React PWA · AWS Lambda · Terraform · Supabase
 
 <br/>
 
@@ -26,13 +29,26 @@
 
 ---
 
+## Demo video
+
+![Briefed real-session product walkthrough](docs/demo/briefed-demo.gif)
+
+**Real-session product walkthrough** — recorded with Playwright against the authenticated live deployment, so it shows the current production UI, real category counts, unsubscribe recommendations, and account settings.
+
+What it shows:
+
+- Daily digest with real freshness, scan entry point, and four-way inbox classification.
+- Per-email rationale, confidence, and summary before opening Gmail.
+- Unsubscribe recommendations with sender volume, engagement, recent subjects, and user-controlled selection.
+- Multi-account settings with the connected Gmail account and Add Gmail entry point, stopping before OAuth.
+
 ## Why Briefed exists
 
 A real inbox gets a few emails a day that actually matter — and a hundred that don't. The signal drowns in newsletters, receipts, and notifications, so triage becomes a daily tax you pay before you've done any real work.
 
 The tools that try to help tend to fall into two camps: the ones that do nothing useful, and the ones that over-automate — auto-archiving and auto-unsubscribing you into regret. Neither is trustworthy enough to actually hand your inbox to.
 
-**Briefed reads your Gmail once a day and hands back a brief:** what's a must-read, what's safe to skim, what to ignore, and which senders are worth unsubscribing from — with a summary of the pile that matters. It **recommends; it never clicks**. You stay in control of every destructive action ([ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md)).
+**Briefed reads your Gmail once a day and hands back a brief:** what's a must-read, what's safe to skim, what to ignore, and which senders are worth unsubscribing from — with a summary of the pile that matters. It stays user-controlled: destructive actions require explicit confirmation, and unsubscribe execution is gated behind a default-off capability ([ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)).
 
 ## What it does
 
@@ -40,17 +56,17 @@ The tools that try to help tend to fall into two camps: the ones that do nothing
 - **Four-way classification** — sorts every email into **must-read / good-to-read / ignore / waste** against a rubric you own and can edit.
 - **Summaries** — condenses the must-read pile so you read the gist, not the thread.
 - **Newsletter clustering** — rolls up newsletter and tech-news clusters into one digest entry instead of thirty rows.
-- **Unsubscribe recommender** — rule-based with a borderline-LLM tiebreaker; it scores senders and explains *why*, then recommends. It never unsubscribes for you.
+- **Unsubscribe recommender** — rule-based with a borderline-LLM tiebreaker; it scores senders and explains *why*, then recommends. In Release 2, an explicit, confirmed action can execute supported one-click unsubscribes when the default-off capability is enabled.
 - **Installable PWA** — a React dashboard that installs on iPhone and works offline (Workbox + Dexie).
 
-> *Recommend-only by design:* Briefed surfaces the suggestion and the reasoning; the click is always yours.
+> *User-confirmed by design:* Briefed surfaces the suggestion and reasoning first. Any destructive click is yours, and execute-unsubscribe remains behind a default-off capability flag.
 
 ## A closer look
 
-The **digest above** is the home view — bucket counts at a glance, the full classified list below, and a one-tap *Scan now*. The other half of the product is the **unsubscribe recommender**: per-sender confidence scores with a plain-English rationale, and Keep / Open-link / Mark-unsubscribed actions you trigger yourself.
+The **digest above** is the home view — bucket filters at a glance, the full classified list on the left, the selected message summary on the right, and a one-tap *Scan now*. The other half of the product is the **unsubscribe recommender**: noisy senders ranked by volume, open-rate, and wasted-email signals, recent-subject context, explicit multi-select controls, Keep / unsubscribe actions you trigger yourself, and gated one-click execution only after explicit confirmation.
 
 <div align="center">
-  <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions: per-sender cards with score, engagement rationale, and user-controlled actions" width="820" />
+  <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions showing sender volume, engagement tags, and user-controlled bulk actions" width="820" />
 </div>
 
 ▶ **Live demo:** https://d2vki955e8ckrc.cloudfront.net/
@@ -92,7 +108,7 @@ flowchart LR
 | Layer | Stack |
 |---|---|
 | **Backend** | Python 3.11 · FastAPI · Pydantic v2 · SQLAlchemy 2.0 (async) · Alembic · Mangum |
-| **AI / LLM** | OpenRouter routing — Gemini 1.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
+| **AI / LLM** | OpenRouter routing — Gemini 2.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
 | **Frontend** | React 18 · TypeScript · Vite · PWA (Workbox + `vite-plugin-pwa`) · Dexie · TanStack Query · Framer Motion |
 | **Data** | Supabase Postgres (asyncpg via the pooler) · two customer-managed KMS CMKs |
 | **Infra & CI** | AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
@@ -122,12 +138,12 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 - **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain, 3 retries (exponential backoff + jitter, retryable-only), a circuit breaker that trips after 5 consecutive failures, per-model hard caps (Haiku at 100 calls/day), and per-call cost/token logging. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
 - **SnapStart cold-start discipline.** Settings and logging hydrate at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
 - **A decoupled pipeline with typed contracts.** SQS fan-out per stage; every message is a frozen, `extra="forbid"` Pydantic discriminated union — no inline message shapes anywhere. → [`workers/messages.py`](backend/app/workers/messages.py)
-- **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; any future destructive path must be gated behind explicit confirmation and a new ADR. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md)
+- **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; later destructive paths are narrow, explicit, gated, and documented in ADRs. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0013](docs/adr/0013-gmail-mark-read-write-scope.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)
 - **Operability rehearsed, not assumed.** Blue/green Lambda alias deploys; rollback is a single `update-alias`; chaos drills cover DLQ replay, secret rotation, KMS-key revocation, and the LLM circuit breaker; restore-from-backup is drilled against a fresh Supabase project; every deploy writes an immutable `release_metadata` audit row. → [`docs/operations/`](docs/operations/), [`deploy-prod.yml`](.github/workflows/deploy-prod.yml)
 - **Quality gates in CI.** `mypy --strict`, Ruff (pydocstyle + type-annotation + more), ESLint (`eslint-config-google`) + Prettier, an 80% coverage floor with critical modules pinned at 100%, dead-code checks (vulture + knip), `gitleaks` secret scanning, and a markdown link-checker. → [Makefile](Makefile), [`pyproject.toml`](pyproject.toml)
-- **Decisions are documented.** **13 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
+- **Decisions are documented.** **14 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
 
-**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **443 backend tests** across 69 files + 40 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 13 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
+**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **504 backend tests** across 70 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 14 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
 
 ## Project internals and reference
 
@@ -149,7 +165,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 ├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
 │                       WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
-│   ├── adr/            Architecture Decision Records (0001–0013)
+│   ├── adr/            Architecture Decision Records (0001–0014)
 │   ├── architecture/   Data model, pipeline, system diagrams
 │   ├── operations/     Runbook, alarms, restore + rollback drills
 │   ├── release/        Release notes + announcement drafts
@@ -172,7 +188,7 @@ All routes are mounted under `/api/v1`. The full interactive spec is at `/docs` 
 | Accounts | `/accounts` | List · update settings · disconnect · remove mailbox |
 | Rubric | `/rubric` | CRUD classification rules |
 | Emails | `/emails` | List classified emails · mark read · override bucket |
-| Unsubscribes | `/unsubscribes` | List recommendations · dismiss · confirm |
+| Unsubscribes | `/unsubscribes` | List recommendations · dismiss · confirm · execute (flagged) |
 | Hygiene | `/hygiene` | Inbox-hygiene summary counters |
 | Profile | `/profile` | Get / update profile · get / update schedule |
 
@@ -220,7 +236,7 @@ The single source of truth for the app version is [`packages/contracts/version.j
 ## Documentation
 
 - [DESIGN.md](DESIGN.md) — canonical design system: a single fixed Notion theme (dark desktop sidebar, light main). Tokens, typography, motion, and contrast numbers all live here. Read before any UI change.
-- [docs/adr/](docs/adr/) — the 13 architecture decision records (0001–0013).
+- [docs/adr/](docs/adr/) — the 14 architecture decision records (0001–0014).
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
 - [docs/operations/](docs/operations/) — runbook, alarms, restore + rollback drills, secrets rotation.
 - [docs/release/](docs/release/) — 1.0.0 release notes + announcement draft.
@@ -236,4 +252,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 13 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>
+<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 14 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>

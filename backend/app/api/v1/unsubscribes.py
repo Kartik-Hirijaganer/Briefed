@@ -28,21 +28,28 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 
 from app.api.deps import current_user_id, db_session
+from app.api.errors import api_error_response
 from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
 from app.db.models import ConnectedAccount, UnsubscribeSuggestion
+from app.schemas.emails import ErrorEnvelope
 from app.schemas.unsubscribe import (
     DomainWasteEntry,
     HygieneStatsResponse,
     UnsubscribeActionOut,
+    UnsubscribeExecuteRequest,
+    UnsubscribeExecuteResponse,
     UnsubscribeSuggestionOut,
     UnsubscribeSuggestionsListResponse,
 )
+from app.services.unsubscribe.executor import execute_unsubscribe
+from app.services.unsubscribe.parser import UnsubscribeAction
 from app.services.unsubscribe.repository import UnsubscribeSuggestionsRepo
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -158,6 +165,7 @@ async def list_suggestions(
             last_email_at=row.last_email_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
+            recent_subjects=tuple(row.recent_subjects),
         )
         for row in rows
     )
@@ -223,6 +231,125 @@ async def confirm_suggestion(
     row.dismissed = True
     row.dismissed_at = utcnow()
     await session.flush()
+
+
+@unsubscribes_router.post(
+    "/{suggestion_id}/execute",
+    response_model=UnsubscribeExecuteResponse,
+    summary="Execute an unsubscribe (ADR 0014, gated)",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorEnvelope},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorEnvelope},
+    },
+)
+async def execute_suggestion(
+    suggestion_id: UUID,
+    body: UnsubscribeExecuteRequest,
+    request: Request,
+    *,
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(db_session),
+    settings: Settings = Depends(get_settings),
+) -> UnsubscribeExecuteResponse | JSONResponse:
+    """Execute (or surface) the sender-advertised unsubscribe for a row.
+
+    Gated behind ``FeatureConfig.unsubscribe_execute`` (ADR 0014): when the
+    flag is off the endpoint 404s so the capability stays invisible. Requires
+    an explicit ``{"confirm": true}`` body. Re-executing an already
+    ``unsubscribed`` row is a no-op. On a successful one-click the row is also
+    dismissed so it drops from the active list; ``manual_required`` / ``failed``
+    rows stay active.
+
+    Args:
+        suggestion_id: Target suggestion.
+        body: Confirmation envelope.
+        request: Incoming request, used for error correlation.
+        user_id: Authenticated owner.
+        session: Active async session.
+        settings: Cached :class:`Settings`.
+
+    Returns:
+        :class:`UnsubscribeExecuteResponse` describing the outcome.
+
+    Raises:
+        Aegis-compatible error response when the flag is off, the row is not
+        owned, or ``confirm`` is not true.
+    """
+    if not _APP_CONFIG.features.unsubscribe_execute:
+        return api_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="not_found",
+            message="not found",
+            request=request,
+        )
+    if not body.confirm:
+        return api_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="unsubscribe_confirmation_required",
+            message="Explicit confirmation is required to execute an unsubscribe.",
+            request=request,
+        )
+
+    row = await _find_owned(session, suggestion_id=suggestion_id, user_id=user_id)
+    if row is None:
+        return api_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="not_found",
+            message="suggestion not found",
+            request=request,
+        )
+    if row.execute_status == "unsubscribed":
+        # Idempotent: never re-POST an already-completed unsubscribe.
+        existing_via: Literal["one_click", "none"] = (
+            "one_click" if row.executed_via == "one_click" else "none"
+        )
+        return UnsubscribeExecuteResponse(
+            status="unsubscribed",
+            executed_via=existing_via,
+            manual_url=None,
+            message="Already unsubscribed.",
+        )
+
+    action_out = _action_from_json(row.list_unsubscribe)
+    action = (
+        UnsubscribeAction(
+            http_urls=action_out.http_urls,
+            mailto=action_out.mailto,
+            one_click=action_out.one_click,
+        )
+        if action_out is not None
+        else UnsubscribeAction()
+    )
+
+    import httpx  # deferred import keeps module load SnapStart-friendly
+
+    # trust_env=False ignores proxy env vars; follow_redirects=False stops a
+    # 3xx-to-internal SSRF bypass (ADR 0014).
+    async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http_client:
+        outcome = await execute_unsubscribe(
+            action,
+            http_client=http_client,
+            timeout=settings.unsubscribe_execute_timeout_seconds,
+        )
+
+    now = utcnow()
+    row.execute_attempted_at = now
+    row.execute_status = outcome.status
+    row.executed_via = outcome.executed_via
+    row.execute_error = outcome.error
+    row.manual_url = outcome.manual_url
+    if outcome.status == "unsubscribed":
+        row.executed_at = now
+        row.dismissed = True
+        row.dismissed_at = now
+    await session.flush()
+
+    return UnsubscribeExecuteResponse(
+        status=outcome.status,
+        executed_via=outcome.executed_via,
+        manual_url=outcome.manual_url,
+        message=outcome.message,
+    )
 
 
 @hygiene_router.get(
@@ -348,6 +475,29 @@ async def _load_owned(
         HTTPException: 404 when the row is absent or owned by someone
             else.
     """
+    row = await _find_owned(session, suggestion_id=suggestion_id, user_id=user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="suggestion not found")
+    return row
+
+
+async def _find_owned(
+    session: AsyncSession,
+    *,
+    suggestion_id: UUID,
+    user_id: UUID,
+) -> UnsubscribeSuggestion | None:
+    """Return the suggestion row when the caller owns it, else ``None``.
+
+    Args:
+        session: Active async session.
+        suggestion_id: Target primary key.
+        user_id: Authenticated owner.
+
+    Returns:
+        The attached :class:`UnsubscribeSuggestion`, or ``None`` when absent or
+        owned by another user.
+    """
     stmt = (
         select(UnsubscribeSuggestion)
         .join(
@@ -360,8 +510,6 @@ async def _load_owned(
         )
     )
     row = (await session.execute(stmt)).scalars().first()
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="suggestion not found")
     return row
 
 

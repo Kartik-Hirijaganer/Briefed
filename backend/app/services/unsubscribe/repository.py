@@ -67,6 +67,10 @@ class UnsubscribeSuggestionWrite:
         tokens_out: Output tokens billed (0 for rule-only).
         last_email_at: UTC timestamp of the most recent email from
             this sender.
+        recent_subjects: Up to six newest-first plaintext subject lines
+            from this sender, already truncated by the aggregator.
+            Defaults to empty so callers that predate the field keep
+            working; the aggregate threads the real list through.
     """
 
     account_id: UUID
@@ -85,6 +89,7 @@ class UnsubscribeSuggestionWrite:
     tokens_in: int
     tokens_out: int
     last_email_at: datetime | None
+    recent_subjects: tuple[str, ...] = ()
 
 
 class UnsubscribeSuggestionsRepo:
@@ -156,6 +161,7 @@ class UnsubscribeSuggestionsRepo:
         existing.tokens_in = payload.tokens_in
         existing.tokens_out = payload.tokens_out
         existing.last_email_at = payload.last_email_at
+        existing.recent_subjects = list(payload.recent_subjects)
         existing.rationale_ct = self._encrypt_rationale(
             rationale=payload.rationale,
             account_id=payload.account_id,
