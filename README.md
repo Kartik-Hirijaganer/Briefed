@@ -19,6 +19,8 @@
 
 **[▶ Demo video](#demo-video)**  ·  **[Live demo](https://d2vki955e8ckrc.cloudfront.net/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
 
+**Keywords:** AI email agent · Gmail triage · inbox zero · LLM pipeline · serverless SaaS · FastAPI · React PWA · AWS Lambda · Terraform · Supabase
+
 <br/>
 
 <img src="docs/screenshots/Dashboard.png" alt="Briefed — Today's Digest dashboard showing classification buckets and the daily email list" width="860" />
