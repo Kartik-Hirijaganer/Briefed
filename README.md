@@ -5,7 +5,7 @@
 **Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts without your explicit confirmation.**
 
 [![Live demo](https://img.shields.io/badge/demo-live-success)](https://d2vki955e8ckrc.cloudfront.net/)
-[![Demo video](https://img.shields.io/badge/video-60s%20walkthrough-blue)](#demo-video)
+[![Demo video](https://img.shields.io/badge/video-real%20session-blue)](#demo-video)
 [![CI](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml/badge.svg)](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml)
 ![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20gated-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -29,16 +29,16 @@
 
 ## Demo video
 
-![Briefed 60-second product walkthrough](docs/demo/briefed-demo.gif)
+![Briefed real-session product walkthrough](docs/demo/briefed-demo.gif)
 
-**60-second product walkthrough** — recorded with Playwright against a synthetic demo inbox, so it shows the real UI and flows without exposing private email data.
+**Real-session product walkthrough** — recorded with Playwright against the authenticated live deployment, so it shows the current production UI, real category counts, unsubscribe recommendations, and account settings.
 
 What it shows:
 
-- Daily digest with freshness, scan entry point, and four-way inbox classification.
+- Daily digest with real freshness, scan entry point, and four-way inbox classification.
 - Per-email rationale, confidence, and summary before opening Gmail.
-- Unsubscribe recommendations with sender scoring, recent subjects, and user-controlled selection.
-- Multi-account settings with the Add Gmail entry point, stopping before OAuth to avoid account exposure.
+- Unsubscribe recommendations with sender volume, engagement, recent subjects, and user-controlled selection.
+- Multi-account settings with the connected Gmail account and Add Gmail entry point, stopping before OAuth.
 
 ## Why Briefed exists
 
@@ -61,10 +61,10 @@ The tools that try to help tend to fall into two camps: the ones that do nothing
 
 ## A closer look
 
-The **digest above** is the home view — bucket counts at a glance, the full classified list below, and a one-tap *Scan now*. The other half of the product is the **unsubscribe recommender**: per-sender confidence scores with a plain-English rationale, Keep / manual actions you trigger yourself, and gated one-click execution only after explicit confirmation.
+The **digest above** is the home view — bucket filters at a glance, the full classified list on the left, the selected message summary on the right, and a one-tap *Scan now*. The other half of the product is the **unsubscribe recommender**: noisy senders ranked by volume, open-rate, and wasted-email signals, recent-subject context, explicit multi-select controls, Keep / unsubscribe actions you trigger yourself, and gated one-click execution only after explicit confirmation.
 
 <div align="center">
-  <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions: per-sender cards with score, engagement rationale, and user-controlled actions" width="820" />
+  <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions showing sender volume, engagement tags, and user-controlled bulk actions" width="820" />
 </div>
 
 ▶ **Live demo:** https://d2vki955e8ckrc.cloudfront.net/
@@ -106,7 +106,7 @@ flowchart LR
 | Layer | Stack |
 |---|---|
 | **Backend** | Python 3.11 · FastAPI · Pydantic v2 · SQLAlchemy 2.0 (async) · Alembic · Mangum |
-| **AI / LLM** | OpenRouter routing — Gemini 1.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
+| **AI / LLM** | OpenRouter routing — Gemini 2.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
 | **Frontend** | React 18 · TypeScript · Vite · PWA (Workbox + `vite-plugin-pwa`) · Dexie · TanStack Query · Framer Motion |
 | **Data** | Supabase Postgres (asyncpg via the pooler) · two customer-managed KMS CMKs |
 | **Infra & CI** | AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
@@ -141,7 +141,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 - **Quality gates in CI.** `mypy --strict`, Ruff (pydocstyle + type-annotation + more), ESLint (`eslint-config-google`) + Prettier, an 80% coverage floor with critical modules pinned at 100%, dead-code checks (vulture + knip), `gitleaks` secret scanning, and a markdown link-checker. → [Makefile](Makefile), [`pyproject.toml`](pyproject.toml)
 - **Decisions are documented.** **14 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
 
-**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **443 backend tests** across 69 files + 40 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 14 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
+**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **504 backend tests** across 70 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 14 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
 
 ## Project internals and reference
 
