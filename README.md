@@ -23,7 +23,7 @@
 
 <br/>
 
-<img src="docs/screenshots/Dashboard.png" alt="Briefed — Today's Digest dashboard showing classification buckets and the daily email list" width="860" />
+<img src="docs/screenshots/Dashboard.png" alt="Briefed — Today's Digest dashboard showing fresh scan status, classification buckets, and a selected email detail" width="860" />
 
 </div>
 
