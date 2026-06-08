@@ -86,6 +86,7 @@ export function ScanNowButton(): JSX.Element {
       if ('vibrate' in navigator) navigator.vibrate(10);
       void client.invalidateQueries({ queryKey: ['digest-today'] });
       void client.invalidateQueries({ queryKey: ['emails'] });
+      void client.invalidateQueries({ queryKey: ['accounts'] });
     } else if (status === 'failed') {
       setActiveRunId(null);
     }

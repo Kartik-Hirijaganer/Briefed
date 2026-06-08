@@ -238,6 +238,58 @@ async def test_summarize_email_happy_path(test_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_email_truncates_overlong_key_points(test_session) -> None:
+    user = User(email="me@example.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    _account, email = await _seed_email(test_session, user)
+    registered, prompt_version_id = await _registered_prompt(test_session)
+
+    llm = LLMClient(
+        primary=_FakeProvider(
+            "gemini",
+            [
+                _call_result(
+                    {
+                        "tldr": "Cofounder asks to confirm the 10a PT call.",
+                        "key_points": ["one", "two", "three", "four", "five", "six"],
+                        "action_items": [],
+                        "entities": [],
+                        "confidence": 0.88,
+                    },
+                ),
+            ],
+        ),
+    )
+    repo = SummariesRepo(cipher=None)
+
+    outcome = await summarize_email(
+        SummarizeInputs(
+            email_id=email.id,
+            user_id=user.id,
+            prompt=registered,
+            prompt_version_id=prompt_version_id,
+            llm=llm,
+            repo=repo,
+        ),
+        session=test_session,
+    )
+
+    assert outcome.ok is True
+    row = (
+        await test_session.execute(
+            select(Summary).where(Summary.email_id == email.id),
+        )
+    ).scalar_one()
+    body = repo.decrypt_email_body(row=row, user_id=user.id)
+    assert "- five" in body
+    assert "- six" not in body
+    calls = (await test_session.execute(select(PromptCallLog))).scalars().all()
+    assert len(calls) == 1
+    assert calls[0].status == "ok"
+
+
+@pytest.mark.asyncio
 async def test_summarize_email_skips_existing_summary(test_session) -> None:
     user = User(email="me@example.com", tz="UTC", status="active")
     test_session.add(user)
