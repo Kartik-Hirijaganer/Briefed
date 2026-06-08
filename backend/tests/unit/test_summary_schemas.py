@@ -58,13 +58,16 @@ def test_email_summary_confidence_range() -> None:
         EmailSummary(tldr="x", confidence=1.5)
 
 
-def test_email_summary_caps_list_length() -> None:
-    with pytest.raises(ValidationError):
-        EmailSummary(
-            tldr="x",
-            key_points=("a", "b", "c", "d", "e", "f"),
-            confidence=0.9,
-        )
+def test_email_summary_truncates_provider_list_overflow() -> None:
+    summary = EmailSummary(
+        tldr="x",
+        key_points=("a", "b", "c", "d", "e", "f"),
+        action_items=("reply", "sign", "attend", "forward"),
+        confidence=0.9,
+    )
+
+    assert summary.key_points == ("a", "b", "c", "d", "e")
+    assert summary.action_items == ("reply", "sign", "attend")
 
 
 def test_tech_news_cluster_summary_happy_path() -> None:
