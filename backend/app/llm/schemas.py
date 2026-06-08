@@ -34,6 +34,15 @@ CategoryDigestCategory = Literal[
 ]
 """Categories that receive run-level digest rollups."""
 
+_EMAIL_KEY_POINTS_LIMIT = 5
+"""Maximum key-point bullets persisted for one email summary."""
+
+_EMAIL_ACTION_ITEMS_LIMIT = 3
+"""Maximum action-item bullets persisted for one email summary."""
+
+_EMAIL_ENTITIES_LIMIT = 20
+"""Maximum entity chips persisted for one email summary."""
+
 
 class TriageDecision(BaseModel):
     """Structured output of the triage prompt (plan §6, §14 Phase 2).
@@ -98,6 +107,24 @@ class EmailSummary(BaseModel):
         if not stripped:
             raise ValueError("tldr must be non-empty")
         return stripped
+
+    @field_validator("key_points", mode="before")
+    @classmethod
+    def _cap_key_points(cls, value: object) -> object:
+        """Trim provider-emitted key-point lists to the schema cap."""
+        return _cap_sequence(value, limit=_EMAIL_KEY_POINTS_LIMIT)
+
+    @field_validator("action_items", mode="before")
+    @classmethod
+    def _cap_action_items(cls, value: object) -> object:
+        """Trim provider-emitted action-item lists to the schema cap."""
+        return _cap_sequence(value, limit=_EMAIL_ACTION_ITEMS_LIMIT)
+
+    @field_validator("entities", mode="before")
+    @classmethod
+    def _cap_entities(cls, value: object) -> object:
+        """Trim provider-emitted entity lists to the schema cap."""
+        return _cap_sequence(value, limit=_EMAIL_ENTITIES_LIMIT)
 
     @field_validator("key_points", "action_items", "entities")
     @classmethod
@@ -196,6 +223,34 @@ UnsubscribeCategory = Literal[
     "other",
 ]
 """Sender archetype enum mirrored from ``unsubscribe_borderline.v1.json``."""
+
+
+def _cap_sequence(value: object, *, limit: int) -> object:
+    """Return at most ``limit`` items from a provider-emitted sequence.
+
+    Args:
+        value: Raw Pydantic field input.
+        limit: Maximum number of non-empty items to preserve.
+
+    Returns:
+        Trimmed tuple when ``value`` is a list/tuple; original value for
+        non-sequences so normal Pydantic validation still reports type errors.
+    """
+    if not isinstance(value, (list, tuple)):
+        return value
+
+    items: list[object] = []
+    for item in value:
+        if isinstance(item, str):
+            stripped = item.strip()
+            if not stripped:
+                continue
+            items.append(stripped)
+        else:
+            items.append(item)
+        if len(items) >= limit:
+            break
+    return tuple(items)
 
 
 class UnsubscribeDecision(BaseModel):
