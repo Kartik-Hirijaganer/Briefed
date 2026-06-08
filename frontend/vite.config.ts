@@ -44,11 +44,12 @@ export default defineConfig({
           {
             urlPattern: ({ request, url }) =>
               request.method === 'GET' && url.pathname.startsWith('/api/v1/digest'),
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'briefed-digests',
               expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
+              networkTimeoutSeconds: 5,
             },
           },
           {
@@ -57,11 +58,12 @@ export default defineConfig({
               ['/api/v1/emails', '/api/v1/news', '/api/v1/unsubscribes', '/api/v1/history'].some(
                 (path) => url.pathname.startsWith(path),
               ),
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'briefed-dashboard-reads',
               expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
+              networkTimeoutSeconds: 5,
             },
           },
           {
