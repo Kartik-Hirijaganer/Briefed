@@ -62,6 +62,9 @@ _LOGIN_PATH = "/login"
 _RETURN_TO_PATTERN = re.compile(r"^/app(/[^/].*)?$")
 """Allowed post-OAuth UI paths."""
 
+_OAUTH_STATE_COOKIE_MAX_AGE_SECONDS = 30 * 60
+"""How long a user may spend in Google consent before callback validation."""
+
 
 def sanitize_return_to(value: str | None) -> str:
     """Normalize an OAuth return path to the app route tree.
@@ -202,7 +205,7 @@ async def start(
     response.set_cookie(
         OAUTH_STATE_COOKIE_NAME,
         cookie_value,
-        max_age=600,
+        max_age=_OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
         httponly=True,
         secure=settings.runtime != "local",
         samesite="lax",

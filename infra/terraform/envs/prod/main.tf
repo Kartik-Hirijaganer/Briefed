@@ -53,7 +53,7 @@ variable "function_url_auth_mode" {
 variable "public_base_url" {
   description = "Browser-facing app origin used for OAuth callback URLs."
   type        = string
-  default     = "https://briefed.email"
+  default     = "https://briefed-six.vercel.app"
 }
 
 variable "domain_name" {

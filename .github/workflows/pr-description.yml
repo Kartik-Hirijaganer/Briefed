@@ -1,0 +1,266 @@
+name: Pull Request Description
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  autofill:
+    name: Autofill PR metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate title and body from PR metadata
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.info("No pull request payload found.");
+              return;
+            }
+
+            const optOutToken = "briefed:auto-pr:off";
+            const autoStart = "<!-- briefed:auto-pr:start -->";
+            const autoEnd = "<!-- briefed:auto-pr:end -->";
+            const currentBody = pr.body || "";
+            if (currentBody.includes(optOutToken)) {
+              core.info(`Skipping because PR body contains ${optOutToken}.`);
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = pr.number;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+
+            const additions = files.reduce((total, file) => total + file.additions, 0);
+            const deletions = files.reduce((total, file) => total + file.deletions, 0);
+
+            const groups = [
+              { name: "Backend", test: (path) => path.startsWith("backend/") },
+              { name: "Frontend", test: (path) => path.startsWith("frontend/") },
+              { name: "Contracts", test: (path) => path.startsWith("packages/contracts/") },
+              { name: "UI package", test: (path) => path.startsWith("packages/ui/") },
+              { name: "Infrastructure", test: (path) => path.startsWith("infra/") },
+              { name: "CI / GitHub", test: (path) => path.startsWith(".github/") },
+              {
+                name: "Docs",
+                test: (path) =>
+                  path.startsWith("docs/") ||
+                  path.endsWith(".md") ||
+                  path === "README.md" ||
+                  path === "CHANGELOG.md",
+              },
+              {
+                name: "Config / release",
+                test: (path) =>
+                  path.startsWith("packages/config/") ||
+                  path === "pyproject.toml" ||
+                  path === "package.json" ||
+                  path === "package-lock.json" ||
+                  path === ".release-please-manifest.json" ||
+                  path === "release-please-config.json" ||
+                  path === ".env.example" ||
+                  path === "vercel.json",
+              },
+            ];
+
+            const claimed = new Set();
+            const groupLines = groups
+              .map((group) => {
+                const matching = files.filter(
+                  (file) => group.test(file.filename) && !claimed.has(file.filename),
+                );
+                matching.forEach((file) => claimed.add(file.filename));
+                if (matching.length === 0) {
+                  return null;
+                }
+                const examples = matching
+                  .slice(0, 5)
+                  .map((file) => `\`${file.filename}\``)
+                  .join(", ");
+                const suffix = matching.length > 5 ? `, +${matching.length - 5} more` : "";
+                return `- ${group.name}: ${matching.length} file(s) changed (${examples}${suffix}).`;
+              })
+              .filter(Boolean);
+
+            const remaining = files.filter((file) => !claimed.has(file.filename));
+            if (remaining.length > 0) {
+              const examples = remaining
+                .slice(0, 5)
+                .map((file) => `\`${file.filename}\``)
+                .join(", ");
+              const suffix = remaining.length > 5 ? `, +${remaining.length - 5} more` : "";
+              groupLines.push(`- Other: ${remaining.length} file(s) changed (${examples}${suffix}).`);
+            }
+
+            const touched = (predicate) => files.some((file) => predicate(file.filename));
+            const riskLevel =
+              touched((path) => path.startsWith("infra/") || path.startsWith(".github/")) ||
+              touched((path) => path.startsWith("backend/app/"))
+                ? "Medium"
+                : "Low";
+            const riskReasons = [];
+            if (touched((path) => path.startsWith("backend/app/"))) {
+              riskReasons.push("backend runtime behavior changed");
+            }
+            if (touched((path) => path.startsWith("infra/"))) {
+              riskReasons.push("infrastructure configuration changed");
+            }
+            if (touched((path) => path.startsWith(".github/"))) {
+              riskReasons.push("CI or repository automation changed");
+            }
+            if (riskReasons.length === 0) {
+              riskReasons.push("changes are limited to tests, docs, generated artifacts, or package metadata");
+            }
+
+            const recentCommits = commits
+              .slice(-5)
+              .map((commit) => {
+                const headline = commit.commit.message.split("\n")[0];
+                return `- ${commit.sha.slice(0, 7)} ${headline}`;
+              })
+              .join("\n");
+
+            const testing = [
+              "- GitHub Actions will run lint, tests, coverage, schema drift, security audit, and Terraform validation where applicable.",
+            ];
+            if (touched((path) => path.startsWith("backend/"))) {
+              testing.push("- Backend coverage is exercised by pytest in CI.");
+            }
+            if (touched((path) => path.startsWith("frontend/") || path.startsWith("packages/ui/"))) {
+              testing.push("- Frontend coverage is exercised by Vitest and the frontend lint gate in CI.");
+            }
+            if (
+              touched(
+                (path) =>
+                  path.startsWith("backend/app/api/") ||
+                  path.startsWith("backend/app/schemas/") ||
+                  path.startsWith("packages/contracts/"),
+              )
+            ) {
+              testing.push("- API contract drift is checked by `make docs` in CI.");
+            }
+
+            const generatedBody = `${autoStart}
+            ## Summary
+
+            This PR updates ${files.length} file(s) with ${additions} additions and ${deletions} deletions. The body was generated from PR metadata so reviewers do not need a manually filled checklist.
+
+            ## Changes
+
+            ${groupLines.join("\n")}
+
+            ## Testing
+
+            ${testing.join("\n")}
+
+            ## Recent commits
+
+            ${recentCommits || "- No commits found."}
+
+            ## Risk
+
+            ${riskLevel}. ${riskReasons.join("; ")}.
+
+            ${autoEnd}`.replace(/^ {12}/gm, "");
+
+            const hasGeneratedBlock = currentBody.includes(autoStart) && currentBody.includes(autoEnd);
+            const looksLikeTemplate =
+              currentBody.trim() === "" ||
+              currentBody.includes("<!-- One or two sentences.") ||
+              currentBody.includes("- [ ] …") ||
+              currentBody.includes("<!-- What's the blast radius");
+
+            let nextBody;
+            if (hasGeneratedBlock) {
+              nextBody = currentBody.replace(
+                new RegExp(`${autoStart}[\\s\\S]*?${autoEnd}`),
+                generatedBody,
+              );
+            } else if (looksLikeTemplate) {
+              nextBody = generatedBody;
+            } else {
+              nextBody = `${generatedBody}\n\n---\n\n${currentBody.trim()}`;
+            }
+
+            const acronymMap = new Map([
+              ["api", "API"],
+              ["aws", "AWS"],
+              ["ci", "CI"],
+              ["db", "DB"],
+              ["gmail", "Gmail"],
+              ["kms", "KMS"],
+              ["llm", "LLM"],
+              ["oauth", "OAuth"],
+              ["pr", "PR"],
+              ["pwa", "PWA"],
+              ["s3", "S3"],
+              ["sqs", "SQS"],
+              ["ssm", "SSM"],
+              ["ui", "UI"],
+              ["url", "URL"],
+              ["vercel", "Vercel"],
+            ]);
+            const branchTail = pr.head.ref.split("/").pop() || pr.head.ref;
+            const titleWords = branchTail
+              .replace(/^\d+-/, "")
+              .split(/[-_]+/)
+              .filter(Boolean);
+            const generatedTitle = titleWords
+              .map((word, index) => {
+                const lower = word.toLowerCase();
+                if (acronymMap.has(lower)) {
+                  return acronymMap.get(lower);
+                }
+                if (index === 0) {
+                  return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+                }
+                return lower;
+              })
+              .join(" ");
+
+            const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+            const normalizedTitle = normalize(pr.title);
+            const titleLooksGenerated =
+              normalizedTitle === normalize(pr.head.ref) ||
+              normalizedTitle === normalize(branchTail) ||
+              normalizedTitle.startsWith("codex ") ||
+              normalizedTitle.startsWith("feature ");
+
+            const update = {};
+            if (nextBody !== currentBody) {
+              update.body = nextBody;
+            }
+            if (generatedTitle && titleLooksGenerated && pr.title !== generatedTitle) {
+              update.title = generatedTitle;
+            }
+
+            if (Object.keys(update).length === 0) {
+              core.info("PR metadata is already up to date.");
+              return;
+            }
+
+            await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number,
+              ...update,
+            });
+            core.info(`Updated PR #${pull_number}: ${Object.keys(update).join(", ")}.`);

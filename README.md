@@ -43,8 +43,8 @@ What it shows:
 - Multi-account settings with the connected Gmail account and Add Gmail entry point, stopping before OAuth.
 
 This is the public product walkthrough, not the Google OAuth verification
-consent-flow video. The verification video must be recorded after
-`briefed.email` is live and the OAuth app remains in Testing; the required flow
+consent-flow video. The verification video should be recorded against the
+current production origin, `https://briefed-six.vercel.app`; the required flow
 is tracked in
 [`docs/operations/google-oauth-verification.md`](docs/operations/google-oauth-verification.md).
 
@@ -239,13 +239,13 @@ Enforced by tooling and documented in [CLAUDE.md](CLAUDE.md):
 
 The frontend deploys to Vercel from the repo root: install with `npm install`, build with `npm run build`, and publish `frontend/dist`. [`vercel.json`](vercel.json) keeps `/api/*` same-origin by rewriting it to the existing CloudFront/Lambda API origin before the SPA fallback to `/index.html`; it also mirrors the CloudFront security headers because the public SPA is no longer served through CloudFront.
 
-The backend still runs on AWS Lambda behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Set `BRIEFED_PUBLIC_BASE_URL` / Terraform `public_base_url` to the Vercel or custom-domain origin so the Google OAuth callback URI is generated as `https://<public-origin>/api/v1/oauth/gmail/callback` and cookies stay scoped to the browser-facing origin. Production backend deploys still go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
+The backend still runs on AWS Lambda behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Set `BRIEFED_PUBLIC_BASE_URL` / Terraform `public_base_url` to the Vercel production origin, currently `https://briefed-six.vercel.app`, so the Google OAuth callback URI is generated as `https://briefed-six.vercel.app/api/v1/oauth/gmail/callback` and cookies stay scoped to the browser-facing origin. Production backend deploys still go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
 
 Google OAuth verification for the public Gmail path is tracked in
 [`docs/operations/google-oauth-verification.md`](docs/operations/google-oauth-verification.md).
-Until custom-domain verification, OAuth approval, and CASA assessment are
-complete, keep the OAuth app in Testing, keep the production Connect Gmail flag
-off, and use the synthetic demo for public review.
+The free Vercel domain can host the live real-user flow, but restricted Gmail
+scope approval may still require Google verification and CASA review before the
+flow is warning-free for broad public use.
 
 ### Version bumps
 

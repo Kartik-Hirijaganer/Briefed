@@ -49,6 +49,8 @@ describe('<LoginPage>', () => {
     expect(screen.getByText(/userinfo\.email, userinfo\.profile, and openid/i)).toBeInTheDocument();
     expect(screen.getByText(/OpenRouter to Google Gemini 2\.5 Flash/i)).toBeInTheDocument();
     expect(screen.getByText(/not for HIPAA-regulated healthcare data/i)).toBeInTheDocument();
+    expect(screen.getByText(/unverified app warning/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose advanced/i)).toBeInTheDocument();
     const privacyLink = screen.getByRole('link', { name: /privacy policy/i });
     const termsLink = screen.getByRole('link', { name: /^terms$/i });
 

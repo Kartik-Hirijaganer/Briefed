@@ -22,7 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
 from app.api.session import OAUTH_STATE_COOKIE_NAME, sign_cookie
-from app.api.v1.oauth import _build_token_cipher, _get_or_create_user, sanitize_return_to
+from app.api.v1.oauth import (
+    _OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
+    _build_token_cipher,
+    _get_or_create_user,
+    sanitize_return_to,
+)
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError
 from app.core.security import EncryptionContext, EnvelopeCipher
@@ -204,6 +209,7 @@ def test_oauth_start_redirects_to_google_and_sets_state_cookie(
         "https://accounts.google.com/o/oauth2/v2/auth?",
     )
     assert OAUTH_STATE_COOKIE_NAME in response.cookies
+    assert f"Max-Age={_OAUTH_STATE_COOKIE_MAX_AGE_SECONDS}" in response.headers["set-cookie"]
 
 
 def test_oauth_start_uses_public_base_url_for_callback(wired_app: TestClient) -> None:
