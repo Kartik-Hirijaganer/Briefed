@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { api, unwrap } from '../api/client';
+import { run } from '../api/queryKeys';
 import type { Schemas } from '../api/types';
 
 /**
@@ -36,7 +37,7 @@ export function useRunProgress(runId: string | null): RunProgress {
   const [lastEvent, setLastEvent] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ['run', runId],
+    queryKey: run(runId),
     queryFn: () => fetchRun(runId as string),
     enabled: runId !== null,
     refetchInterval: (latest): number | false => {

@@ -4,7 +4,9 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge, Button, Card, ErrorState, Skeleton, type BadgeTone } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
+import { run as runQueryKey } from '../api/queryKeys';
 import type { Schemas } from '../api/types';
+import { useAppPath } from '../routing/routeBase';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   complete: 'success',
@@ -20,15 +22,16 @@ interface StageRow {
 }
 
 /**
- * Drilldown for a single digest run (`/history/:runId`). Per plan §10 IA the
+ * Drilldown for a single digest run (`/app/history/:runId`). Per plan §10 IA the
  * detail surface shows the stage timeline and cost breakdown for the run.
  *
  * @returns The rendered detail page.
  */
 export default function HistoryRunDetailPage(): JSX.Element {
+  const appPath = useAppPath();
   const { runId } = useParams<{ runId: string }>();
   const runQuery = useQuery({
-    queryKey: ['run', runId],
+    queryKey: runQueryKey(runId),
     queryFn: async () =>
       unwrap(await api.GET('/api/v1/runs/{run_id}', { params: { path: { run_id: runId ?? '' } } })),
     enabled: Boolean(runId),
@@ -65,7 +68,7 @@ export default function HistoryRunDetailPage(): JSX.Element {
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Button variant="link" href="/history">
+          <Button variant="link" href={appPath('history')}>
             ← Back to history
           </Button>
           <h1 className="mt-1 font-display text-xl font-semibold tracking-tight">
@@ -112,7 +115,7 @@ export default function HistoryRunDetailPage(): JSX.Element {
       ) : null}
 
       <p className="text-xs text-fg-muted">
-        <Link to="/history" className="text-accent underline-offset-4 hover:underline">
+        <Link to={appPath('history')} className="text-accent underline-offset-4 hover:underline">
           Browse other runs
         </Link>
       </p>

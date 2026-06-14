@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Alert, Button, Card, ErrorState, Field, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { schedule } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 
 type Schedule = Schemas['UserSchedule'];
 type SchedulePatch = Schemas['UserSchedulePatchRequest'];
@@ -48,16 +50,17 @@ const FORM_CONTROL_CLASS =
  * @returns The rendered schedule form.
  */
 export default function SchedulePage(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const queryClient = useQueryClient();
   const scheduleQuery = useQuery({
-    queryKey: ['profile', 'schedule'],
+    queryKey: schedule(),
     queryFn: async () => unwrap(await api.GET('/api/v1/profile/me/schedule')),
   });
   const patch = useMutation({
     mutationFn: async (body: SchedulePatch) =>
       unwrap(await api.PATCH('/api/v1/profile/me/schedule', { body })),
     onSuccess: (next) => {
-      queryClient.setQueryData(['profile', 'schedule'], next);
+      queryClient.setQueryData(schedule(), next);
     },
   });
 
@@ -76,8 +79,11 @@ export default function SchedulePage(): JSX.Element {
     <ScheduleForm
       schedule={scheduleQuery.data}
       pending={patch.isPending}
+      disabled={isDemo}
       error={patch.error}
-      onSave={(body) => patch.mutate(body)}
+      onSave={(body) => {
+        if (!isDemo) patch.mutate(body);
+      }}
     />
   );
 }
@@ -85,6 +91,7 @@ export default function SchedulePage(): JSX.Element {
 interface ScheduleFormProps {
   readonly schedule: Schedule;
   readonly pending: boolean;
+  readonly disabled: boolean;
   readonly error: Error | null;
   readonly onSave: (body: SchedulePatch) => void;
 }
@@ -96,7 +103,7 @@ interface ScheduleFormProps {
  * @returns The rendered form.
  */
 function ScheduleForm(props: ScheduleFormProps): JSX.Element {
-  const { schedule, pending, error, onSave } = props;
+  const { schedule, pending, disabled, error, onSave } = props;
   const [frequency, setFrequency] = useState<ScheduleFrequency>(schedule.schedule_frequency);
   const [times, setTimes] = useState<string[]>([...schedule.schedule_times_local]);
   const [timezone, setTimezone] = useState<string>(schedule.schedule_timezone);
@@ -104,6 +111,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
   const nextRun = schedule.next_run_at_utc ? new Date(schedule.next_run_at_utc) : null;
 
   const onFrequencyChange = (next: ScheduleFrequency): void => {
+    if (disabled) return;
     const required = FREQUENCY_OPTIONS.find((option) => option.value === next)?.slots ?? 0;
     const nextTimes = padSlots(times, required);
     setFrequency(next);
@@ -112,6 +120,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
   };
 
   const onTimeChange = (index: number, next: string): void => {
+    if (disabled) return;
     const nextTimes = [...times];
     nextTimes[index] = next;
     setTimes(nextTimes);
@@ -119,6 +128,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
   };
 
   const onTimezoneChange = (next: string): void => {
+    if (disabled) return;
     setTimezone(next);
     onSave({ schedule_timezone: next });
   };
@@ -148,7 +158,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
                   type="radio"
                   name="schedule-frequency"
                   checked={frequency === option.value}
-                  disabled={pending}
+                  disabled={disabled || pending}
                   onChange={() => onFrequencyChange(option.value)}
                 />
                 {option.label}
@@ -168,7 +178,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
                     key={index}
                     type="time"
                     value={time}
-                    disabled={pending}
+                    disabled={disabled || pending}
                     onChange={(event) => onTimeChange(index, event.target.value)}
                     className={FORM_CONTROL_CLASS}
                   />
@@ -180,7 +190,7 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
           <Field label="Timezone">
             <select
               value={timezone}
-              disabled={pending}
+              disabled={disabled || pending}
               onChange={(event) => onTimezoneChange(event.target.value)}
               className={`${FORM_CONTROL_CLASS} w-full`}
             >
@@ -203,7 +213,8 @@ function ScheduleForm(props: ScheduleFormProps): JSX.Element {
           <Button
             variant="secondary"
             size="sm"
-            disabled={pending}
+            disabled={disabled || pending}
+            title={disabled ? 'Disabled in demo' : undefined}
             onClick={() =>
               onSave({
                 schedule_frequency: frequency,

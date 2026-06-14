@@ -28,6 +28,7 @@ from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.app_config import AppConfig, FeatureConfig
 from app.core.config import Settings, get_settings
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, User
 from app.main import app
 from app.services.unsubscribe.executor import ExecuteOutcome
@@ -103,9 +104,13 @@ async def _seed_user(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str,
+    accepted: bool = True,
 ) -> tuple[User, ConnectedAccount]:
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
+        if accepted:
+            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         account = ConnectedAccount(

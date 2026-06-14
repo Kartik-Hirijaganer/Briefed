@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DemoModeProvider } from '../demo/DemoModeProvider';
 import SettingsLayout from '../pages/settings/SettingsLayout';
+import { RouteBaseProvider } from '../routing/routeBase';
 
 const logoutMock = vi.hoisted(() => vi.fn());
 
@@ -15,13 +17,32 @@ const renderAt = (path: string): void => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/settings" element={<SettingsLayout />}>
+        <Route path="/app/settings" element={<SettingsLayout />}>
           <Route path="accounts" element={<div data-testid="child">accounts</div>} />
           <Route path="schedule" element={<div data-testid="child">schedule</div>} />
           <Route path="rules" element={<div data-testid="child">rules</div>} />
           <Route path="preferences" element={<div data-testid="child">prefs</div>} />
         </Route>
       </Routes>
+    </MemoryRouter>,
+  );
+};
+
+const renderDemoAt = (path: string): void => {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <RouteBaseProvider base="/demo">
+        <DemoModeProvider>
+          <Routes>
+            <Route path="/demo/settings" element={<SettingsLayout />}>
+              <Route path="accounts" element={<div data-testid="child">accounts</div>} />
+              <Route path="schedule" element={<div data-testid="child">schedule</div>} />
+              <Route path="rules" element={<div data-testid="child">rules</div>} />
+              <Route path="preferences" element={<div data-testid="child">prefs</div>} />
+            </Route>
+          </Routes>
+        </DemoModeProvider>
+      </RouteBaseProvider>
     </MemoryRouter>,
   );
 };
@@ -33,7 +54,7 @@ describe('<SettingsLayout>', () => {
   });
 
   it('renders the four section tabs and active link', () => {
-    renderAt('/settings/accounts');
+    renderAt('/app/settings/accounts');
     expect(screen.getByRole('heading', { level: 1, name: /settings/i })).toBeInTheDocument();
     for (const label of ['Accounts', 'Schedule', 'Rules', 'Preferences']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
@@ -42,14 +63,28 @@ describe('<SettingsLayout>', () => {
   });
 
   it('renders the matched child outlet', () => {
-    renderAt('/settings/preferences');
+    renderAt('/app/settings/preferences');
     expect(screen.getByTestId('child')).toHaveTextContent('prefs');
   });
 
   it('logs out from the settings header action', async () => {
     const user = userEvent.setup();
-    renderAt('/settings/accounts');
+    renderAt('/app/settings/accounts');
     await user.click(screen.getByRole('button', { name: /logout/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds demo settings links from the shared route base and omits logout', () => {
+    renderDemoAt('/demo/settings/accounts');
+
+    expect(screen.getByRole('link', { name: 'Accounts' })).toHaveAttribute(
+      'href',
+      '/demo/settings/accounts',
+    );
+    expect(screen.getByRole('link', { name: 'Schedule' })).toHaveAttribute(
+      'href',
+      '/demo/settings/schedule',
+    );
+    expect(screen.queryByRole('button', { name: /logout/i })).not.toBeInTheDocument();
   });
 });

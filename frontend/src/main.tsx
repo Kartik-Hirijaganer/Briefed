@@ -8,9 +8,12 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import { queryClient } from './api/queryClient';
+import { legalConsent } from './api/queryKeys';
 import { initSentry, Sentry } from './observability/sentry';
 import { queryPersister } from './offline/queryPersistence';
 import { router } from './router';
+
+const LEGAL_CONSENT_QUERY_ROOT = legalConsent()[0];
 
 // Sentry must initialize before anything else so unhandled exceptions in
 // React render or the router boot path are captured. Plan §14 Phase 8.
@@ -35,7 +38,8 @@ createRoot(rootElement).render(
           maxAge: 7 * 24 * 60 * 60 * 1000,
           buster: 'briefed-pwa-cache-v1',
           dehydrateOptions: {
-            shouldDehydrateQuery: (query) => query.state.status === 'success',
+            shouldDehydrateQuery: (query) =>
+              query.state.status === 'success' && query.queryKey[0] !== LEGAL_CONSENT_QUERY_ROOT,
           },
         }}
       >

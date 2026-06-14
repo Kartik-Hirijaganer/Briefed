@@ -12,13 +12,14 @@ import { CircleCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { LIST_STAGGER_SECONDS } from '../config/presentation';
+import { useDemoMode } from '../demo/DemoModeProvider';
 import { SenderCard } from '../features/unsubscribe/SenderCard';
 import { SenderCardSkeleton } from '../features/unsubscribe/SenderCardSkeleton';
 import { UnsubscribeSelectionBar } from '../features/unsubscribe/UnsubscribeSelectionBar';
 import { useUnsubscribeData } from '../features/unsubscribe/useUnsubscribeData';
 
 /**
- * Unsubscribe suggestions (`/unsubscribe`). Multi-select sender triage with a
+ * Unsubscribe suggestions (`/app/unsubscribe`). Multi-select sender triage with a
  * **capability-driven** bulk action: with the execute capability off (the prod
  * default) it is recommend-only — it opens each sender's unsubscribe link and
  * marks it handled. With the capability on (ADR 0014) the primary opens a
@@ -28,6 +29,7 @@ import { useUnsubscribeData } from '../features/unsubscribe/useUnsubscribeData';
  * @returns The rendered page.
  */
 export default function UnsubscribePage(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const data = useUnsubscribeData();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [executeDialogBusy, setExecuteDialogBusy] = useState(false);
@@ -35,7 +37,11 @@ export default function UnsubscribePage(): JSX.Element {
   // the recommend-only path stays usable offline (links best-effort, the
   // mark-handled /confirm enqueues for replay).
   const offlineExecuteBlocked = data.executeEnabled && !data.online;
-  const primaryTooltip = offlineExecuteBlocked ? 'Reconnect to unsubscribe' : undefined;
+  const primaryTooltip = isDemo
+    ? 'Disabled in demo'
+    : offlineExecuteBlocked
+      ? 'Reconnect to unsubscribe'
+      : undefined;
 
   const onPrimary = (): void => {
     if (data.executeEnabled) {
@@ -104,12 +110,13 @@ export default function UnsubscribePage(): JSX.Element {
             indeterminate={data.someSelected && !data.allSelected}
             onToggleAll={data.togglePageSelected}
             onKeep={data.keepSelected}
-            keepDisabled={data.selectedCount === 0}
+            keepDisabled={isDemo || data.selectedCount === 0}
             onPrimary={onPrimary}
             primaryLabel={`Unsubscribe ${data.selectedCount} selected`}
-            primaryDisabled={data.selectedCount === 0 || offlineExecuteBlocked}
+            primaryDisabled={isDemo || data.selectedCount === 0 || offlineExecuteBlocked}
             primaryLoading={data.primaryBusy}
             primaryTooltip={primaryTooltip}
+            disabled={isDemo}
           />
           <ul className="flex flex-col gap-3">
             {data.suggestions.map((suggestion, index) => (
@@ -126,6 +133,7 @@ export default function UnsubscribePage(): JSX.Element {
                     executeResult={data.executeResults.get(suggestion.id) ?? null}
                     onConfirmManual={() => data.confirmManual(suggestion.id)}
                     onRetry={() => void data.retryExecute(suggestion.id)}
+                    disabled={isDemo}
                   />
                 </Motion>
               </li>

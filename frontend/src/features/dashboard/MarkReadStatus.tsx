@@ -2,6 +2,7 @@ import { Alert, Button } from '@briefed/ui';
 
 import { ApiError } from '../../api/client';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import type { MarkReadMutation } from './useDashboardData';
 
@@ -24,6 +25,7 @@ export interface MarkReadStatusProps {
  */
 export function MarkReadStatus(props: MarkReadStatusProps): JSX.Element | null {
   const { mutation, reconnectReturnTo } = props;
+  const { isDemo } = useDemoMode();
   const reconnect = useAddGmailFlow({ link: true, returnTo: reconnectReturnTo });
   const errorEnvelope = mutation.error ? apiErrorEnvelope(mutation.error) : null;
   if (errorEnvelope?.code === 'gmail_reauthorization_required') {
@@ -32,8 +34,14 @@ export function MarkReadStatus(props: MarkReadStatusProps): JSX.Element | null {
         <div className="flex flex-col gap-3">
           <p>{errorEnvelope.message}</p>
           <div>
-            <Button variant="secondary" size="sm" onClick={reconnect.start}>
-              Reconnect Gmail
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={reconnect.start}
+              disabled={isDemo}
+              title={isDemo ? 'Disabled in demo' : undefined}
+            >
+              {isDemo ? 'Disabled in demo' : 'Reconnect Gmail'}
             </Button>
           </div>
         </div>

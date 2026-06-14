@@ -1,6 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '../api/client';
+import {
+  accounts,
+  digestToday,
+  emails,
+  hygiene,
+  preferences,
+  unsubscribes,
+} from '../api/queryKeys';
 import type { Schemas } from '../api/types';
 
 import {
@@ -155,19 +163,19 @@ async function executePendingMutation(record: PendingMutationRecord): Promise<vo
 function invalidateAfterReplay(queryClient: QueryClient, record: PendingMutationRecord): void {
   switch (record.payload.type) {
     case 'account_patch':
-      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      void queryClient.invalidateQueries({ queryKey: accounts() });
       return;
     case 'email_bucket_update':
-      void queryClient.invalidateQueries({ queryKey: ['digest-today'] });
-      void queryClient.invalidateQueries({ queryKey: ['emails'] });
+      void queryClient.invalidateQueries({ queryKey: digestToday() });
+      void queryClient.invalidateQueries({ queryKey: emails() });
       return;
     case 'preferences_patch':
-      void queryClient.invalidateQueries({ queryKey: ['preferences'] });
+      void queryClient.invalidateQueries({ queryKey: preferences() });
       return;
     case 'unsubscribe_confirm':
     case 'unsubscribe_dismiss':
-      void queryClient.invalidateQueries({ queryKey: ['unsubscribes'] });
-      void queryClient.invalidateQueries({ queryKey: ['hygiene'] });
+      void queryClient.invalidateQueries({ queryKey: unsubscribes() });
+      void queryClient.invalidateQueries({ queryKey: hygiene() });
       return;
   }
 }

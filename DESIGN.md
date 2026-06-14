@@ -355,7 +355,37 @@ do not change `__version__` strings in scattered files.
 
 ---
 
-## 12. Agent prompt guide
+## 12. Brand mark & public surfaces
+
+The Briefed brand mark is the ranked-brief bar symbol implemented by
+[frontend/src/components/brand/BriefedLogo.tsx](frontend/src/components/brand/BriefedLogo.tsx).
+It uses a `0 0 100 100` viewBox with four rounded horizontal bars:
+`x=23`, `h=11`, `rx=5.5`, `y=25/43/61/79`, widths `54/42/30/18`,
+and opacities `1/.78/.54/.32`. The SVG fills with `currentColor`; use
+`--accent` for the purple mark and do not introduce a separate brand color.
+
+`BriefedWordmark` pairs that mark with the "Briefed" word in
+`--font-display`, semibold weight, and `--tracking-tighter`. Public headers,
+legal pages, login, and the homepage use the wordmark as their first brand
+signal. The desktop app sidebar uses the mark alone because the rail is
+icon-only.
+
+Public surfaces are:
+
+- `/` — public homepage.
+- `/about`, `/privacy`, `/terms` — public content and legal pages.
+- `/login` — pre-OAuth informed-consent page.
+- `/demo/*` — synthetic demo workspace with a persistent demo-data badge.
+
+These surfaces use the light canvas, tokenized public-page chrome, relative
+links, and no authenticated app sidebar except inside the demo workspace.
+`/`, `/about`, `/privacy`, and `/terms` must not make authenticated API calls.
+`/demo/*` must render from seeded synthetic data and block every `/api/*`
+request.
+
+---
+
+## 13. Agent prompt guide
 
 Briefed ships a **single fixed Notion theme.** The desktop sidebar uses the
 `--sidebar-*` tokens (dark); all other surfaces use `--bg-*` (light); the

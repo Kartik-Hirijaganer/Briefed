@@ -35,13 +35,34 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown before network when demo routes attempt any `/api/*` request.
+ */
+export class DemoDisabledError extends Error {
+  /** API path that was blocked. */
+  public readonly path: string;
+
+  /**
+   * Build a demo API block error.
+   *
+   * @param path - Blocked API request path.
+   */
+  public constructor(path: string) {
+    super(`API requests are disabled in demo mode: ${path}`);
+    this.path = path;
+    this.name = 'DemoDisabledError';
+  }
+}
+
 const CSRF_HEADER = 'X-CSRF-Token';
 const CSRF_COOKIE = 'briefed_csrf';
 const LOGIN_PATH = '/login';
+const APP_CHILD_PATH_PATTERN = /^\/app\/[^/]/;
 
 const buildLoginRedirectPath = (): string => {
-  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  if (!currentPath || currentPath === '/') return LOGIN_PATH;
+  const pathname = window.location.pathname;
+  if (!APP_CHILD_PATH_PATTERN.test(pathname)) return LOGIN_PATH;
+  const currentPath = `${pathname}${window.location.search}${window.location.hash}`;
   const params = new URLSearchParams({ next: currentPath });
   return `${LOGIN_PATH}?${params.toString()}`;
 };
@@ -53,6 +74,23 @@ const readCookie = (name: string): string | undefined => {
     if (key === name) return decodeURIComponent(rest.join('='));
   }
   return undefined;
+};
+
+const isDemoRoute = (): boolean => window.location.pathname.startsWith('/demo');
+
+const requestPath = (request: Request): string => {
+  const url = new URL(request.url, window.location.origin);
+  return url.pathname;
+};
+
+const demoBlockMiddleware: Middleware = {
+  async onRequest({ request }) {
+    const path = requestPath(request);
+    if (isDemoRoute() && path.startsWith('/api/')) {
+      throw new DemoDisabledError(path);
+    }
+    return request;
+  },
 };
 
 const csrfMiddleware: Middleware = {
@@ -101,6 +139,7 @@ export const api = createClient<paths>({
   headers: { Accept: 'application/json' },
 });
 
+api.use(demoBlockMiddleware);
 api.use(csrfMiddleware);
 api.use(payloadHashMiddleware);
 

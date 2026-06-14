@@ -6,10 +6,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Motion } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { accounts, digestToday, emails } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useRunProgress } from '../../hooks/useRunProgress';
+import { useAppPath } from '../../routing/routeBase';
 
 /** Browser event used by dashboard pull-to-refresh to trigger Scan Now. */
 export const SCAN_NOW_EVENT = 'briefed-scan-now';
@@ -27,16 +30,18 @@ type ScanMode = 'idle' | 'running' | 'success' | 'error';
  * @returns The rendered control.
  */
 export function ScanNowButton(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const online = useOnlineStatus();
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'sm';
   const client = useQueryClient();
   const navigate = useNavigate();
+  const appPath = useAppPath();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [justFinishedCount, setJustFinishedCount] = useState<number | null>(null);
 
   const accountsQuery = useQuery({
-    queryKey: ['accounts'],
+    queryKey: accounts(),
     queryFn: async () => unwrap(await api.GET('/api/v1/accounts')),
     staleTime: 60 * 1000,
   });
@@ -66,7 +71,7 @@ export function ScanNowButton(): JSX.Element {
 
   const progress = useRunProgress(activeRunId);
   const triggerScan = (): void => {
-    if (!online || activeRunId || startRun.isPending) return;
+    if (isDemo || !online || activeRunId || startRun.isPending) return;
     startRun.mutate();
   };
 
@@ -84,9 +89,9 @@ export function ScanNowButton(): JSX.Element {
       setJustFinishedCount(progress.status?.stats?.new_must_read ?? 0);
       setActiveRunId(null);
       if ('vibrate' in navigator) navigator.vibrate(10);
-      void client.invalidateQueries({ queryKey: ['digest-today'] });
-      void client.invalidateQueries({ queryKey: ['emails'] });
-      void client.invalidateQueries({ queryKey: ['accounts'] });
+      void client.invalidateQueries({ queryKey: digestToday() });
+      void client.invalidateQueries({ queryKey: emails() });
+      void client.invalidateQueries({ queryKey: accounts() });
     } else if (status === 'failed') {
       setActiveRunId(null);
     }
@@ -118,14 +123,19 @@ export function ScanNowButton(): JSX.Element {
       case 'error':
         return 'Retry';
       default:
-        return 'Scan now';
+        return isDemo ? 'Disabled in demo' : 'Scan now';
     }
   })();
   const LabelIcon = mode === 'success' ? Check : mode === 'error' ? TriangleAlert : RefreshCw;
 
-  const tooltip = !online ? 'Connect to the internet to scan.' : undefined;
+  const disabled = isDemo || !online || mode === 'running';
+  const tooltip = isDemo
+    ? 'Disabled in demo'
+    : !online
+      ? 'Connect to the internet to scan.'
+      : undefined;
   const handleSuccessTap = (): void => {
-    if (mode === 'success') navigate('/?bucket=must_read');
+    if (mode === 'success') navigate(appPath('?bucket=must_read'));
   };
 
   if (isMobile) {
@@ -140,7 +150,7 @@ export function ScanNowButton(): JSX.Element {
           variant="primary"
           size="lg"
           onClick={triggerScan}
-          disabled={!online || mode === 'running'}
+          disabled={disabled}
           loading={mode === 'running'}
           title={tooltip}
           aria-label="Start a manual scan"
@@ -181,7 +191,7 @@ export function ScanNowButton(): JSX.Element {
         variant="primary"
         size="lg"
         onClick={triggerScan}
-        disabled={!online || mode === 'running'}
+        disabled={disabled}
         loading={mode === 'running'}
         title={tooltip}
         aria-label="Start a manual scan"
