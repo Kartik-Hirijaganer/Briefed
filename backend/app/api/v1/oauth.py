@@ -17,6 +17,7 @@ Secrets access: the OAuth client id + secret come from SSM via
 
 from __future__ import annotations
 
+import re
 import secrets
 from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode
@@ -57,6 +58,26 @@ router = APIRouter(prefix="/oauth/gmail", tags=["oauth"])
 
 _LOGIN_PATH = "/login"
 """SPA route shown to unauthenticated users; OAuth denials bounce here."""
+
+_RETURN_TO_PATTERN = re.compile(r"^/app(/[^/].*)?$")
+"""Allowed post-OAuth UI paths."""
+
+
+def sanitize_return_to(value: str | None) -> str:
+    """Normalize an OAuth return path to the app route tree.
+
+    Args:
+        value: User-supplied return path from the OAuth start request or
+            signed state cookie.
+
+    Returns:
+        ``value`` when it is an internal ``/app`` path, otherwise ``/app``.
+    """
+    if not value or "\\" in value:
+        return "/app"
+    if _RETURN_TO_PATTERN.fullmatch(value):
+        return value
+    return "/app"
 
 
 def _compute_redirect_uri(request: Request, settings: Settings) -> str:
@@ -143,7 +164,7 @@ async def start(
     Args:
         request: FastAPI request (used to compute the callback URL).
         return_to: Optional post-callback UI path (must be an internal
-            absolute path, e.g. ``/settings/accounts``).
+            absolute path under ``/app``, e.g. ``/app/settings/accounts``).
         session_cookie: Existing signed session, when the caller is
             connecting another mailbox to the same user.
         settings: Cached :class:`Settings`.
@@ -159,7 +180,7 @@ async def start(
     cookie_payload = {
         "state": state,
         "code_verifier": verifier,
-        "return_to": return_to if return_to and return_to.startswith("/") else None,
+        "return_to": sanitize_return_to(return_to),
     }
     if session_cookie:
         try:
@@ -218,7 +239,7 @@ async def callback(
         settings: Cached :class:`Settings`.
 
     Returns:
-        A 302 redirect back to the UI (``return_to`` or ``/``) on success,
+        A 302 redirect back to the UI (``return_to`` or ``/app``) on success,
         or to ``/login`` carrying an ``auth_error`` code on denial / a
         malformed callback.
 
@@ -314,7 +335,8 @@ async def callback(
         await session.commit()
         user_id = user.id
 
-    return_to = cookie.get("return_to") or "/"
+    cookie_return_to = cookie.get("return_to")
+    return_to = sanitize_return_to(cookie_return_to if isinstance(cookie_return_to, str) else None)
     response = RedirectResponse(str(return_to), status_code=status.HTTP_302_FOUND)
     response.delete_cookie(OAUTH_STATE_COOKIE_NAME)
     response.set_cookie(

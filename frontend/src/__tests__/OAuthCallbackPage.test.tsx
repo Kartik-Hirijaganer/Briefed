@@ -12,8 +12,11 @@ const renderAt = (path: string): void => {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-          <Route path="/settings/accounts" element={<div data-testid="redirected">accounts</div>} />
-          <Route path="/somewhere" element={<div data-testid="redirected">somewhere</div>} />
+          <Route
+            path="/app/settings/accounts"
+            element={<div data-testid="redirected">accounts</div>}
+          />
+          <Route path="/app/history" element={<div data-testid="redirected">history</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -21,7 +24,7 @@ const renderAt = (path: string): void => {
 };
 
 describe('<OAuthCallbackPage>', () => {
-  it('shows the success state and redirects to /settings/accounts after 800ms', async () => {
+  it('shows the success state and redirects to /app/settings/accounts after 800ms', async () => {
     renderAt('/oauth/callback');
     expect(screen.getByText(/account connected/i)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('redirected')).toBeInTheDocument(), {
@@ -30,8 +33,15 @@ describe('<OAuthCallbackPage>', () => {
   });
 
   it('honors the next= search param when redirecting', async () => {
-    renderAt('/oauth/callback?status=ok&next=/somewhere');
-    await waitFor(() => expect(screen.getByTestId('redirected')).toHaveTextContent('somewhere'), {
+    renderAt('/oauth/callback?status=ok&next=/app/history');
+    await waitFor(() => expect(screen.getByTestId('redirected')).toHaveTextContent('history'), {
+      timeout: 1500,
+    });
+  });
+
+  it('falls back when next= is outside /app', async () => {
+    renderAt('/oauth/callback?status=ok&next=//evil.example');
+    await waitFor(() => expect(screen.getByTestId('redirected')).toHaveTextContent('accounts'), {
       timeout: 1500,
     });
   });

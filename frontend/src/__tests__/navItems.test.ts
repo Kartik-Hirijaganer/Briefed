@@ -5,17 +5,17 @@ import { NAV_ITEMS } from '../shell/navItems';
 describe('NAV_ITEMS', () => {
   it('exposes the primary routes', () => {
     expect(NAV_ITEMS.map((item) => item.to)).toEqual([
-      '/',
-      '/unsubscribe',
-      '/history',
-      '/settings/accounts',
+      '',
+      'unsubscribe',
+      'history',
+      'settings/accounts',
     ]);
   });
 
   it('marks three entries as mobile tabs', () => {
     const mobile = NAV_ITEMS.filter((item) => item.mobile);
     expect(mobile).toHaveLength(3);
-    expect(mobile.map((item) => item.to)).toEqual(['/', '/history', '/settings/accounts']);
+    expect(mobile.map((item) => item.to)).toEqual(['', 'history', 'settings/accounts']);
   });
 
   it('does not expose removed bucket or jobs routes', () => {

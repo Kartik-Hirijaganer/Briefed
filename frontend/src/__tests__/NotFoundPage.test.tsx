@@ -14,6 +14,6 @@ describe('<NotFoundPage>', () => {
     expect(screen.getByRole('heading', { level: 1, name: '404' })).toBeInTheDocument();
     expect(screen.getByText(/not in the release 1.0.0 plan/i)).toBeInTheDocument();
     const back = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(back).toHaveAttribute('href', '/');
+    expect(back).toHaveAttribute('href', '/app');
   });
 });

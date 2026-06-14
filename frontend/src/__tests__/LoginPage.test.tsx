@@ -9,7 +9,7 @@ const startMock = vi.hoisted(() => vi.fn());
 const useAddGmailFlowMock = vi.hoisted(() =>
   vi.fn(() => ({
     start: startMock,
-    startUrl: '/api/v1/oauth/gmail/start?return_to=%2F',
+    startUrl: '/api/v1/oauth/gmail/start?return_to=%2Fapp',
     opensInNewTab: false,
   })),
 );
@@ -49,11 +49,11 @@ describe('<LoginPage>', () => {
 
   it('uses the login next parameter as the OAuth return path', () => {
     render(
-      <MemoryRouter initialEntries={['/login?next=%2Fsettings%2Faccounts']}>
+      <MemoryRouter initialEntries={['/login?next=%2Fapp%2Fsettings%2Faccounts']}>
         <LoginPage />
       </MemoryRouter>,
     );
-    expect(useAddGmailFlowMock).toHaveBeenCalledWith({ returnTo: '/settings/accounts' });
+    expect(useAddGmailFlowMock).toHaveBeenCalledWith({ returnTo: '/app/settings/accounts' });
   });
 
   it('falls back to the dashboard for unsafe next parameters', () => {
@@ -62,7 +62,7 @@ describe('<LoginPage>', () => {
         <LoginPage />
       </MemoryRouter>,
     );
-    expect(useAddGmailFlowMock).toHaveBeenCalledWith({ returnTo: '/' });
+    expect(useAddGmailFlowMock).toHaveBeenCalledWith({ returnTo: '/app' });
   });
 
   it('surfaces a friendly error when the OAuth callback reports access_denied', () => {

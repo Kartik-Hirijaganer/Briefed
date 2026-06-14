@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
 from app.api.session import OAUTH_STATE_COOKIE_NAME, sign_cookie
-from app.api.v1.oauth import _build_token_cipher, _get_or_create_user
+from app.api.v1.oauth import _build_token_cipher, _get_or_create_user, sanitize_return_to
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError
 from app.core.security import EncryptionContext, EnvelopeCipher
@@ -234,6 +234,21 @@ def test_oauth_start_uses_forwarded_host_for_callback(wired_app: TestClient) -> 
     )
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("//evil.example", "/app"),
+        ("https://evil", "/app"),
+        ("/app", "/app"),
+        ("/app/settings/accounts", "/app/settings/accounts"),
+        ("/etc", "/app"),
+        ("", "/app"),
+    ],
+)
+def test_sanitize_return_to_allows_only_app_paths(raw: str, expected: str) -> None:
+    assert sanitize_return_to(raw) == expected
+
+
 def test_oauth_callback_persists_account_and_sets_session_cookie(
     wired_app: TestClient,
 ) -> None:
@@ -242,7 +257,7 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
     cookie_payload = {
         "state": "STATE-123",
         "code_verifier": "V" * 50,
-        "return_to": "/settings/accounts",
+        "return_to": "/app/settings/accounts",
     }
     cookie_value = sign_cookie(cookie_payload, secret="test-key")
     wired_app.cookies.set(OAUTH_STATE_COOKIE_NAME, cookie_value)
@@ -253,13 +268,34 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
         follow_redirects=False,
     )
     assert response.status_code == 302, response.text
-    assert response.headers["location"] == "/settings/accounts"
+    assert response.headers["location"] == "/app/settings/accounts"
     # The session cookie is now set; /accounts should return our new row.
     list_response = wired_app.get("/api/v1/accounts")
     assert list_response.status_code == 200, list_response.text
     payload = list_response.json()
     assert len(payload["accounts"]) == 1
     assert payload["accounts"][0]["email"] == "user@example.com"
+
+
+def test_oauth_callback_sanitizes_return_to_cookie(wired_app: TestClient) -> None:
+    cookie_value = sign_cookie(
+        {
+            "state": "STATE-123",
+            "code_verifier": "V" * 50,
+            "return_to": "//evil.example",
+        },
+        secret="test-key",
+    )
+    wired_app.cookies.set(OAUTH_STATE_COOKIE_NAME, cookie_value)
+
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "xyz", "state": "STATE-123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == "/app"
 
 
 async def test_get_or_create_user_seeds_default_rubric_rules(

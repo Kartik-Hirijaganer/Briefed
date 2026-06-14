@@ -130,6 +130,8 @@ Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · 
 
 The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
 
+The public homepage lives at `/` with a primary Try Demo path at `/demo`; the Connect Gmail path points to `/login` only when Gmail connect is enabled. Public content routes `/about`, `/privacy`, and `/terms` render without authenticated API calls. The authenticated app lives under `/app/*`.
+
 ## Engineering highlights
 
 The parts of this project I'd point a reviewer at — each links to the code or the decision record that backs it.
