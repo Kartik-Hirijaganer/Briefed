@@ -39,7 +39,8 @@ describe('<HomePage>', () => {
 
     expect(screen.getByRole('link', { name: /try demo/i })).toHaveAttribute('href', '/demo');
     expect(screen.getByRole('link', { name: /connect gmail/i })).toHaveAttribute('href', '/login');
-    expect(screen.getByText(/after reviewing the policies/i)).toBeInTheDocument();
+    expect(screen.getByText(/unverified app warning/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose advanced/i)).toBeInTheDocument();
   });
 
   it('uses only public links and does not call authenticated APIs', () => {

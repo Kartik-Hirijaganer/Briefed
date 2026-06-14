@@ -120,6 +120,13 @@ export default function LoginPage(): JSX.Element {
             </p>
           </Alert>
 
+          <Alert tone="warn" title="Google verification warning">
+            <p>
+              Google will show an unverified app warning while Briefed is pending verification.
+              Choose Advanced, then proceed to continue.
+            </p>
+          </Alert>
+
           <p className="text-[length:var(--fs-sm)] leading-[var(--lh-sm)] text-fg-muted">
             Review the{' '}
             <a

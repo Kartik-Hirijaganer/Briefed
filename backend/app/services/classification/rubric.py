@@ -11,6 +11,7 @@ escalates to the LLM.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -67,10 +68,21 @@ _LABEL_PRIORITY: dict[str, int] = {
 """Tie-breaker used when two rules match the same email; mirrors the
 prompt contract."""
 
-_DEFAULT_SEED_PATH = (
-    Path(__file__).resolve().parents[4] / "packages" / "config" / "seeds" / "rubric_rules.yml"
-)
-"""Repository-owned default rubric seed path."""
+
+def default_rubric_seed_path() -> Path:
+    """Return the packaged or repo-relative default rubric seed path.
+
+    Returns:
+        Absolute path to ``packages/config/seeds/rubric_rules.yml``.
+    """
+    raw_task_root = os.environ.get("LAMBDA_TASK_ROOT")
+    if raw_task_root:
+        lambda_path = Path(raw_task_root) / "packages" / "config" / "seeds" / "rubric_rules.yml"
+        if lambda_path.exists():
+            return lambda_path
+    return (
+        Path(__file__).resolve().parents[4] / "packages" / "config" / "seeds" / "rubric_rules.yml"
+    )
 
 
 class RubricSeedRule(BaseModel):
@@ -424,7 +436,7 @@ def default_rubric_seed(path: Path | None = None) -> tuple[dict[str, object], ..
     Raises:
         ValueError: If the seed YAML is missing or malformed.
     """
-    seed_path = path if path is not None else _DEFAULT_SEED_PATH
+    seed_path = path if path is not None else default_rubric_seed_path()
     try:
         config = RubricSeedConfig.model_validate(safe_load_yaml_file(seed_path))
     except (YamlConfigError, ValidationError) as exc:
@@ -446,5 +458,6 @@ __all__ = [
     "RuleEngine",
     "RuleMatch",
     "default_rubric_seed",
+    "default_rubric_seed_path",
     "load_default_rules",
 ]
