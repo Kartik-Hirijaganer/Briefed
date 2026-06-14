@@ -4,7 +4,7 @@
 
 **Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts without your explicit confirmation.**
 
-[![Live demo](https://img.shields.io/badge/demo-live-success)](https://d2vki955e8ckrc.cloudfront.net/)
+[![Live demo](https://img.shields.io/badge/demo-live-success)](https://briefed.vercel.app/)
 [![Demo video](https://img.shields.io/badge/video-real%20session-blue)](#demo-video)
 [![CI](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml/badge.svg)](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml)
 ![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20gated-success)
@@ -17,7 +17,7 @@
 ![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-SnapStart-FF9900?logo=awslambda&logoColor=white)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 
-**[▶ Demo video](#demo-video)**  ·  **[Live demo](https://d2vki955e8ckrc.cloudfront.net/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
+**[▶ Demo video](#demo-video)**  ·  **[Live demo](https://briefed.vercel.app/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
 
 **Keywords:** AI email agent · Gmail triage · inbox zero · LLM pipeline · serverless SaaS · FastAPI · React PWA · AWS Lambda · Terraform · Supabase
 
@@ -69,7 +69,7 @@ The **digest above** is the home view — bucket filters at a glance, the full c
   <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions showing sender volume, engagement tags, and user-controlled bulk actions" width="820" />
 </div>
 
-▶ **Live demo:** https://d2vki955e8ckrc.cloudfront.net/
+▶ **Live demo:** https://briefed.vercel.app/
 
 ## How it works
 
@@ -84,11 +84,12 @@ flowchart LR
   C --> J["jobs<br/>extract + corroborate"]
 ```
 
-**One image, three runtimes.** The same backend image ships an API and two worker entrypoints, selected by `BRIEFED_RUNTIME`. The API runs as a Lambda behind CloudFront; the workers run off SQS.
+**One image, three runtimes.** The same backend image ships an API and two worker entrypoints, selected by `BRIEFED_RUNTIME`. The frontend is hosted by Vercel; `/api/*` is proxied to the CloudFront-protected Lambda API origin, and the workers run off SQS.
 
 ```mermaid
 flowchart LR
-  B["Browser / PWA"] --> CF["CloudFront + WAF<br/>OAC + SigV4"]
+  B["Browser / PWA"] --> V["Vercel<br/>static frontend + /api proxy"]
+  V --> CF["CloudFront + WAF<br/>API origin"]
   CF --> FU["Lambda Function URL<br/>AWS_IAM only"]
   FU --> API["FastAPI via Mangum"]
   API --> PG[("Supabase<br/>Postgres")]
@@ -111,7 +112,7 @@ flowchart LR
 | **AI / LLM** | OpenRouter routing — Gemini 2.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
 | **Frontend** | React 18 · TypeScript · Vite · PWA (Workbox + `vite-plugin-pwa`) · Dexie · TanStack Query · Framer Motion |
 | **Data** | Supabase Postgres (asyncpg via the pooler) · two customer-managed KMS CMKs |
-| **Infra & CI** | AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
+| **Infra & CI** | Vercel · AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
 
 ## Quick start
 
@@ -130,7 +131,7 @@ Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · 
 
 The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
 
-The public homepage lives at `/` with a primary Try Demo path at `/demo`; the Connect Gmail path points to `/login` only when Gmail connect is enabled. Public content routes `/about`, `/privacy`, and `/terms` render without authenticated API calls. The authenticated app lives under `/app/*`.
+The public homepage lives at `/` with a primary Try Demo path at `/demo`; the Connect Gmail path points to `/login` only when Gmail connect is enabled. Public content routes `/about`, `/privacy`, and `/terms` render without authenticated API calls. The authenticated app lives under `/app/*`. Vercel serves deep links through the SPA fallback in [`vercel.json`](vercel.json), and keeps `/api/*` same-origin by proxying to the CloudFront API origin.
 
 ## Engineering highlights
 
@@ -224,7 +225,9 @@ Enforced by tooling and documented in [CLAUDE.md](CLAUDE.md):
 
 ### Deployment
 
-Release 1.0.0 runs on AWS Lambda + SnapStart behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Terraform sources live under [infra/terraform/](infra/terraform/). Production deploys go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → CloudFront invalidation → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
+The frontend deploys to Vercel from the repo root: install with `npm install`, build with `npm run build`, and publish `frontend/dist`. [`vercel.json`](vercel.json) keeps `/api/*` same-origin by rewriting it to the existing CloudFront/Lambda API origin before the SPA fallback to `/index.html`; it also mirrors the CloudFront security headers because the public SPA is no longer served through CloudFront.
+
+The backend still runs on AWS Lambda behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Set `BRIEFED_PUBLIC_BASE_URL` / Terraform `public_base_url` to the Vercel or custom-domain origin so the Google OAuth callback URI is generated as `https://<public-origin>/api/v1/oauth/gmail/callback` and cookies stay scoped to the browser-facing origin. Production backend deploys still go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
 
 ### Version bumps
 
