@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
-from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, Email, OAuthToken, User
 from app.domain.providers import MarkReadResult, MessageId, ProviderCredentials
 from app.main import app
@@ -289,51 +288,22 @@ async def test_mark_read_requires_gmail_modify_reconsent(
     assert provider.calls == []
 
 
-@pytest.mark.asyncio
-async def test_mark_read_requires_legal_consent(
-    api_session: async_sessionmaker[AsyncSession],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = await _seed_user(api_session, accepted=False)
-    await _seed_email_rows(api_session, user=user)
-    email = await _email_by_subject(api_session, "Quarterly planning")
-    provider = _FakeProvider()
-    _patch_mark_read_deps(monkeypatch=monkeypatch, provider=provider)
-    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/emails/mark-read",
-            json={"email_ids": [str(email.id)]},
-            cookies={SESSION_COOKIE_NAME: cookie},
-        )
-
-    assert response.status_code == 451, response.text
-    assert response.json() == {"detail": "legal_consent_required"}
-    assert provider.calls == []
-
-
 async def _seed_user(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str = "me@example.com",
-    accepted: bool = True,
 ) -> User:
     """Insert a user and one active Gmail account.
 
     Args:
         factory: Async session factory.
         email: User and connected account email.
-        accepted: Whether to seed current legal consent.
 
     Returns:
         Persisted user row.
     """
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
-        if accepted:
-            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
-            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         session.add(

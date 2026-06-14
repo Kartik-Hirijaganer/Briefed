@@ -28,7 +28,6 @@ from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.app_config import AppConfig, FeatureConfig
 from app.core.config import Settings, get_settings
-from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, User
 from app.main import app
 from app.services.unsubscribe.executor import ExecuteOutcome
@@ -104,13 +103,9 @@ async def _seed_user(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str,
-    accepted: bool = True,
 ) -> tuple[User, ConnectedAccount]:
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
-        if accepted:
-            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
-            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         account = ConnectedAccount(
@@ -517,81 +512,6 @@ async def test_execute_requires_explicit_confirmation(
         assert body["message"] == "Explicit confirmation is required to execute an unsubscribe."
         assert body["details"] == {}
         assert body["requestId"]
-
-
-@pytest.mark.asyncio
-async def test_dismiss_and_confirm_require_legal_consent(
-    api_session: async_sessionmaker[AsyncSession],
-) -> None:
-    user, account = await _seed_user(
-        api_session,
-        email="no-consent@x.example",
-        accepted=False,
-    )
-    await _write_suggestion(
-        api_session,
-        user=user,
-        account=account,
-        sender_email="weekly@news.example",
-        sender_domain="news.example",
-        confidence=Decimal("0.90"),
-        frequency=8,
-    )
-    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
-    with TestClient(app) as client:
-        target = client.get(
-            "/api/v1/unsubscribes",
-            cookies={SESSION_COOKIE_NAME: cookie},
-        ).json()["suggestions"][0]
-        dismiss = client.post(
-            f"/api/v1/unsubscribes/{target['id']}/dismiss",
-            cookies={SESSION_COOKIE_NAME: cookie},
-        )
-        confirm = client.post(
-            f"/api/v1/unsubscribes/{target['id']}/confirm",
-            cookies={SESSION_COOKIE_NAME: cookie},
-        )
-
-    assert dismiss.status_code == 451, dismiss.text
-    assert dismiss.json() == {"detail": "legal_consent_required"}
-    assert confirm.status_code == 451, confirm.text
-    assert confirm.json() == {"detail": "legal_consent_required"}
-
-
-@pytest.mark.asyncio
-async def test_execute_requires_legal_consent(
-    api_session: async_sessionmaker[AsyncSession],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _enable_execute(monkeypatch)
-    user, account = await _seed_user(
-        api_session,
-        email="execute-no-consent@x.example",
-        accepted=False,
-    )
-    await _write_suggestion(
-        api_session,
-        user=user,
-        account=account,
-        sender_email="deals@promo.example",
-        sender_domain="promo.example",
-        confidence=Decimal("0.92"),
-        frequency=22,
-    )
-    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
-    with TestClient(app) as client:
-        sid = client.get(
-            "/api/v1/unsubscribes",
-            cookies={SESSION_COOKIE_NAME: cookie},
-        ).json()["suggestions"][0]["id"]
-        response = client.post(
-            f"/api/v1/unsubscribes/{sid}/execute",
-            json={"confirm": True},
-            cookies={SESSION_COOKIE_NAME: cookie},
-        )
-
-    assert response.status_code == 451, response.text
-    assert response.json() == {"detail": "legal_consent_required"}
 
 
 @pytest.mark.asyncio
