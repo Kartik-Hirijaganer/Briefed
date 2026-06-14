@@ -4,6 +4,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Alert, Card } from '@briefed/ui';
 
+import { accounts } from '../api/queryKeys';
+
+const APP_RETURN_TO_PATTERN = /^\/app(?:\/[^/].*)?$/;
+
+const sanitizeReturnTo = (value: string | null): string => {
+  if (!value || value.includes('\\')) return '/app/settings/accounts';
+  return APP_RETURN_TO_PATTERN.test(value) ? value : '/app/settings/accounts';
+};
+
 /**
  * OAuth callback landing (`/oauth/callback`). Backend has already set the
  * session cookie by the time we arrive; we just display a status, invalidate
@@ -14,14 +23,14 @@ import { Alert, Card } from '@briefed/ui';
 export default function OAuthCallbackPage(): JSX.Element {
   const [params] = useSearchParams();
   const status = params.get('status') ?? 'ok';
-  const next = params.get('next') ?? '/settings/accounts';
+  const next = sanitizeReturnTo(params.get('next'));
   const error = params.get('error');
   const navigate = useNavigate();
   const client = useQueryClient();
 
   useEffect(() => {
     if (status === 'ok') {
-      void client.invalidateQueries({ queryKey: ['accounts'] });
+      void client.invalidateQueries({ queryKey: accounts() });
       const timer = window.setTimeout(() => navigate(next, { replace: true }), 800);
       return () => window.clearTimeout(timer);
     }

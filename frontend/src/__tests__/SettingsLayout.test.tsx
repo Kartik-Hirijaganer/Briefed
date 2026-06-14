@@ -15,7 +15,7 @@ const renderAt = (path: string): void => {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/settings" element={<SettingsLayout />}>
+        <Route path="/app/settings" element={<SettingsLayout />}>
           <Route path="accounts" element={<div data-testid="child">accounts</div>} />
           <Route path="schedule" element={<div data-testid="child">schedule</div>} />
           <Route path="rules" element={<div data-testid="child">rules</div>} />
@@ -33,7 +33,7 @@ describe('<SettingsLayout>', () => {
   });
 
   it('renders the four section tabs and active link', () => {
-    renderAt('/settings/accounts');
+    renderAt('/app/settings/accounts');
     expect(screen.getByRole('heading', { level: 1, name: /settings/i })).toBeInTheDocument();
     for (const label of ['Accounts', 'Schedule', 'Rules', 'Preferences']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
@@ -42,13 +42,13 @@ describe('<SettingsLayout>', () => {
   });
 
   it('renders the matched child outlet', () => {
-    renderAt('/settings/preferences');
+    renderAt('/app/settings/preferences');
     expect(screen.getByTestId('child')).toHaveTextContent('prefs');
   });
 
   it('logs out from the settings header action', async () => {
     const user = userEvent.setup();
-    renderAt('/settings/accounts');
+    renderAt('/app/settings/accounts');
     await user.click(screen.getByRole('button', { name: /logout/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);
   });

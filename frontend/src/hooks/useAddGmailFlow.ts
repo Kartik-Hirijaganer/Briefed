@@ -52,7 +52,7 @@ export function isIOSStandalone(): boolean {
 export function useAddGmailFlow(options: AddGmailFlowOptions = {}): AddGmailFlow {
   const params = new URLSearchParams();
   if (options.link) params.set('link', 'true');
-  params.set('return_to', options.returnTo ?? '/settings/accounts');
+  params.set('return_to', options.returnTo ?? '/app/settings/accounts');
   const startUrl = `/api/v1/oauth/gmail/start?${params.toString()}`;
   const opensInNewTab = isIOSStandalone();
 

@@ -81,10 +81,11 @@ export default defineConfig({
       manifest: {
         name: 'Briefed',
         short_name: 'Briefed',
-        description: 'Personal AI email agent',
+        description:
+          'Briefed is an AI inbox triage PWA for Gmail that helps prioritize mail, summarize context, and manage inbox hygiene.',
         display: 'standalone',
-        theme_color: '#fafaf9',
-        background_color: '#fafaf9',
+        theme_color: '#5645d4',
+        background_color: '#5645d4',
         start_url: '/',
         scope: '/',
         icons: [

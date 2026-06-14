@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, Field, Skeleton, Switch } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { preferences } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { enqueueMutation } from '../../offline/mutations';
 
@@ -14,10 +16,11 @@ import { enqueueMutation } from '../../offline/mutations';
  * @returns The rendered preferences form.
  */
 export default function PreferencesPage(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const client = useQueryClient();
   const online = useOnlineStatus();
   const preferencesQuery = useQuery({
-    queryKey: ['preferences'],
+    queryKey: preferences(),
     queryFn: async () => unwrap(await api.GET('/api/v1/preferences')),
   });
 
@@ -30,12 +33,12 @@ export default function PreferencesPage(): JSX.Element {
       return unwrap(await api.PATCH('/api/v1/preferences', { body }));
     },
     onMutate: (body) => {
-      client.setQueryData<Schemas['UserPreferences']>(['preferences'], (current) =>
+      client.setQueryData<Schemas['UserPreferences']>(preferences(), (current) =>
         current ? applyPreferencesPatch(current, body) : current,
       );
     },
     onSuccess: () => {
-      if (online) void client.invalidateQueries({ queryKey: ['preferences'] });
+      if (online) void client.invalidateQueries({ queryKey: preferences() });
     },
   });
   if (preferencesQuery.isPending) return <Skeleton shape="block" />;
@@ -61,7 +64,10 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.auto_execution_enabled}
-            onCheckedChange={(next) => patchPreferences.mutate({ auto_execution_enabled: next })}
+            disabled={isDemo || patchPreferences.isPending}
+            onCheckedChange={(next) => {
+              if (!isDemo) patchPreferences.mutate({ auto_execution_enabled: next });
+            }}
             ariaLabel="Automatic daily scans"
           />
         </Field>
@@ -73,7 +79,10 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.redact_pii}
-            onCheckedChange={(next) => patchPreferences.mutate({ redact_pii: next })}
+            disabled={isDemo || patchPreferences.isPending}
+            onCheckedChange={(next) => {
+              if (!isDemo) patchPreferences.mutate({ redact_pii: next });
+            }}
             ariaLabel="Redact PII before sending to the LLM"
           />
         </Field>
@@ -85,7 +94,10 @@ export default function PreferencesPage(): JSX.Element {
         >
           <Switch
             checked={prefs.secure_offline_mode}
-            onCheckedChange={(next) => patchPreferences.mutate({ secure_offline_mode: next })}
+            disabled={isDemo || patchPreferences.isPending}
+            onCheckedChange={(next) => {
+              if (!isDemo) patchPreferences.mutate({ secure_offline_mode: next });
+            }}
             ariaLabel="Enable secure offline mode"
           />
         </Field>

@@ -6,7 +6,9 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Field, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { rubric } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 
 type Bucket = Schemas['EmailRow']['bucket'];
 type MatchField =
@@ -96,11 +98,12 @@ const EMPTY_FORM: RuleFormState = {
  * @returns The rendered rules editor.
  */
 export default function RulesPage(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<RuleFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const rubricQuery = useQuery({
-    queryKey: ['rubric'],
+    queryKey: rubric(),
     queryFn: async () => unwrap(await api.GET('/api/v1/rubric')),
   });
 
@@ -119,7 +122,7 @@ export default function RulesPage(): JSX.Element {
     onSuccess: () => {
       setForm(EMPTY_FORM);
       setFormError(null);
-      void queryClient.invalidateQueries({ queryKey: ['rubric'] });
+      void queryClient.invalidateQueries({ queryKey: rubric() });
     },
   });
 
@@ -133,11 +136,12 @@ export default function RulesPage(): JSX.Element {
       }
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['rubric'] });
+      void queryClient.invalidateQueries({ queryKey: rubric() });
     },
   });
 
   const submit = (): void => {
+    if (isDemo) return;
     const validation = validateForm(form);
     if (validation) {
       setFormError(validation);
@@ -190,6 +194,7 @@ export default function RulesPage(): JSX.Element {
             <input
               type="text"
               value={form.name}
+              disabled={isDemo}
               onChange={(event) => setFormField(setForm, { name: event.target.value })}
               className={FORM_CONTROL_CLASS}
             />
@@ -198,6 +203,7 @@ export default function RulesPage(): JSX.Element {
           <Field label="Match">
             <select
               value={form.matchField}
+              disabled={isDemo}
               onChange={(event) =>
                 setFormField(setForm, { matchField: event.target.value as MatchField })
               }
@@ -216,6 +222,7 @@ export default function RulesPage(): JSX.Element {
               type="text"
               value={form.matchValue}
               placeholder={matchPlaceholder(form.matchField)}
+              disabled={isDemo}
               onChange={(event) => setFormField(setForm, { matchValue: event.target.value })}
               className={FORM_CONTROL_CLASS}
             />
@@ -224,6 +231,7 @@ export default function RulesPage(): JSX.Element {
           <Field label="Category">
             <select
               value={form.category}
+              disabled={isDemo}
               onChange={(event) =>
                 setFormField(setForm, { category: event.target.value as Bucket })
               }
@@ -244,6 +252,7 @@ export default function RulesPage(): JSX.Element {
               max="1"
               step="0.01"
               value={form.confidence}
+              disabled={isDemo}
               onChange={(event) => setFormField(setForm, { confidence: event.target.value })}
               className={FORM_CONTROL_CLASS}
             />
@@ -256,6 +265,7 @@ export default function RulesPage(): JSX.Element {
               max="100000"
               step="10"
               value={form.priority}
+              disabled={isDemo}
               onChange={(event) => setFormField(setForm, { priority: event.target.value })}
               className={FORM_CONTROL_CLASS}
             />
@@ -267,6 +277,7 @@ export default function RulesPage(): JSX.Element {
             <input
               type="checkbox"
               checked={form.active}
+              disabled={isDemo}
               onChange={(event) => setFormField(setForm, { active: event.target.checked })}
             />
             Active
@@ -282,9 +293,10 @@ export default function RulesPage(): JSX.Element {
               size="sm"
               onClick={submit}
               loading={saveRule.isPending}
-              disabled={saveRule.isPending}
+              disabled={isDemo || saveRule.isPending}
+              title={isDemo ? 'Disabled in demo' : undefined}
             >
-              {form.id ? 'Save rule' : 'Create rule'}
+              {isDemo ? 'Disabled in demo' : form.id ? 'Save rule' : 'Create rule'}
             </Button>
           </div>
         </div>
@@ -303,8 +315,13 @@ export default function RulesPage(): JSX.Element {
               <RuleCard
                 rule={rule}
                 deletePending={deleteRule.isPending}
-                onEdit={() => setForm(ruleToForm(rule))}
-                onDelete={() => deleteRule.mutate(rule.id)}
+                demoDisabled={isDemo}
+                onEdit={() => {
+                  if (!isDemo) setForm(ruleToForm(rule));
+                }}
+                onDelete={() => {
+                  if (!isDemo) deleteRule.mutate(rule.id);
+                }}
               />
             </li>
           ))}
@@ -317,6 +334,7 @@ export default function RulesPage(): JSX.Element {
 interface RuleCardProps {
   readonly rule: Schemas['RubricRule'];
   readonly deletePending: boolean;
+  readonly demoDisabled: boolean;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
 }
@@ -328,7 +346,7 @@ interface RuleCardProps {
  * @returns The rendered rule card.
  */
 function RuleCard(props: RuleCardProps): JSX.Element {
-  const { rule, deletePending, onEdit, onDelete } = props;
+  const { rule, deletePending, demoDisabled, onEdit, onDelete } = props;
   const label = String(rule.action.label ?? 'ignore') as Bucket;
   return (
     <Card className="flex h-full flex-col gap-3">
@@ -349,10 +367,22 @@ function RuleCard(props: RuleCardProps): JSX.Element {
         <Badge tone="neutral">{formatConfidence(rule.action.confidence)} confidence</Badge>
       </div>
       <div className="mt-auto flex items-center justify-end gap-2">
-        <Button variant="secondary" size="sm" onClick={onEdit}>
-          Edit
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onEdit}
+          disabled={demoDisabled}
+          title={demoDisabled ? 'Disabled in demo' : undefined}
+        >
+          {demoDisabled ? 'Disabled in demo' : 'Edit'}
         </Button>
-        <Button variant="destructive" size="sm" onClick={onDelete} disabled={deletePending}>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={onDelete}
+          disabled={demoDisabled || deletePending}
+          title={demoDisabled ? 'Disabled in demo' : undefined}
+        >
           Delete
         </Button>
       </div>

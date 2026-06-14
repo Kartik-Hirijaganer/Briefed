@@ -53,7 +53,7 @@
           "oauth"
         ],
         "summary": "Start Google OAuth authorization-code flow",
-        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path, e.g. ``/settings/accounts``).\n    session_cookie: Existing signed session, when the caller is\n        connecting another mailbox to the same user.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
+        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path under ``/app``, e.g. ``/app/settings/accounts``).\n    session_cookie: Existing signed session, when the caller is\n        connecting another mailbox to the same user.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
         "operationId": "gmail_oauth_start_api_v1_oauth_gmail_start_get",
         "parameters": [
           {
@@ -117,7 +117,7 @@
           "oauth"
         ],
         "summary": "Google OAuth callback \u2014 exchange code, persist account",
-        "description": "Handle the Google consent-screen redirect.\n\nGoogle redirects here with either ``code`` (success) or ``error`` (the\nuser cancelled / denied consent \u2014 RFC 6749 \u00a74.1.2.1). Both success\nparameters are optional so a denial never fails request validation with\na raw 422; the error path bounces to the login page instead.\n\nArgs:\n    request: FastAPI request.\n    code: Authorization code from Google, present on success.\n    state: State parameter Google echoed back, present on success.\n    error: OAuth error code (e.g. ``access_denied``) on user denial.\n    oauth_state_cookie: Pre-authorize cookie set by :func:`start`.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect back to the UI (``return_to`` or ``/``) on success,\n    or to ``/login`` carrying an ``auth_error`` code on denial / a\n    malformed callback.\n\nRaises:\n    HTTPException: 400 on state mismatch / missing cookie; 503 when\n        server OAuth configuration is missing.",
+        "description": "Handle the Google consent-screen redirect.\n\nGoogle redirects here with either ``code`` (success) or ``error`` (the\nuser cancelled / denied consent \u2014 RFC 6749 \u00a74.1.2.1). Both success\nparameters are optional so a denial never fails request validation with\na raw 422; the error path bounces to the login page instead.\n\nArgs:\n    request: FastAPI request.\n    code: Authorization code from Google, present on success.\n    state: State parameter Google echoed back, present on success.\n    error: OAuth error code (e.g. ``access_denied``) on user denial.\n    oauth_state_cookie: Pre-authorize cookie set by :func:`start`.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect back to the UI (``return_to`` or ``/app``) on success,\n    or to ``/login`` carrying an ``auth_error`` code on denial / a\n    malformed callback.\n\nRaises:\n    HTTPException: 400 on state mismatch / missing cookie; 503 when\n        server OAuth configuration is missing.",
         "operationId": "gmail_oauth_callback_api_v1_oauth_gmail_callback_get",
         "parameters": [
           {
@@ -2047,7 +2047,7 @@
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "Unprocessable Content"
           }
         }
       }

@@ -4,7 +4,9 @@ import { Mail } from 'lucide-react';
 import { Button, EmptyState, ErrorState, Skeleton } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { accounts } from '../../api/queryKeys';
 import { AppVersion } from '../../components/AppVersion';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { AccountCard } from '../../features/settings/AccountCard';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -18,13 +20,17 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
  * @returns The rendered page.
  */
 export default function AccountsPage(): JSX.Element {
+  const { isDemo } = useDemoMode();
   const accountsQuery = useQuery({
-    queryKey: ['accounts'],
+    queryKey: accounts(),
     queryFn: async () => unwrap(await api.GET('/api/v1/accounts')),
   });
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'sm';
-  const addGmail = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
+  const addGmail = useAddGmailFlow({ link: true, returnTo: '/app/settings/accounts' });
+  const startAddGmail = (): void => {
+    if (!isDemo) addGmail.start();
+  };
 
   return (
     <section className="flex flex-col gap-6 pb-24 md:pb-0">
@@ -41,10 +47,12 @@ export default function AccountsPage(): JSX.Element {
             <Button
               variant="primary"
               size="md"
-              onClick={addGmail.start}
+              onClick={startAddGmail}
+              disabled={isDemo}
+              title={isDemo ? 'Disabled in demo' : undefined}
               aria-label="Add Gmail account"
             >
-              + Add Gmail
+              {isDemo ? 'Disabled in demo' : '+ Add Gmail'}
             </Button>
           ) : null}
         </div>
@@ -74,8 +82,14 @@ export default function AccountsPage(): JSX.Element {
           title="No Gmail accounts yet"
           description="Connect your first inbox. Briefed requests read-only Gmail access and never sends, archives, or unsubscribes on your behalf."
           cta={
-            <Button variant="primary" onClick={addGmail.start} aria-label="Add Gmail account">
-              Add Gmail
+            <Button
+              variant="primary"
+              onClick={startAddGmail}
+              disabled={isDemo}
+              title={isDemo ? 'Disabled in demo' : undefined}
+              aria-label="Add Gmail account"
+            >
+              {isDemo ? 'Disabled in demo' : 'Add Gmail'}
             </Button>
           }
         />
@@ -88,11 +102,13 @@ export default function AccountsPage(): JSX.Element {
           <Button
             variant="primary"
             size="lg"
-            onClick={addGmail.start}
+            onClick={startAddGmail}
+            disabled={isDemo}
+            title={isDemo ? 'Disabled in demo' : undefined}
             aria-label="Add Gmail account"
             className="w-full"
           >
-            + Add Gmail
+            {isDemo ? 'Disabled in demo' : '+ Add Gmail'}
           </Button>
         </div>
       ) : null}

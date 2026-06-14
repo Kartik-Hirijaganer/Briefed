@@ -23,8 +23,8 @@ const renderAt = (path: string): void => {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/history/:runId" element={<HistoryRunDetailPage />} />
-          <Route path="/history" element={<div>history</div>} />
+          <Route path="/app/history/:runId" element={<HistoryRunDetailPage />} />
+          <Route path="/app/history" element={<div>history</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -48,7 +48,7 @@ describe('<HistoryRunDetailPage>', () => {
         cost_cents: 87,
       },
     });
-    renderAt('/history/11111111-1111-1111-1111-111111111111');
+    renderAt('/app/history/11111111-1111-1111-1111-111111111111');
     await waitFor(() => expect(screen.getByText('Stage timeline')).toBeInTheDocument());
     expect(screen.getByText('Ingested')).toBeInTheDocument();
     expect(screen.getAllByText('47')).toHaveLength(2);
@@ -70,7 +70,7 @@ describe('<HistoryRunDetailPage>', () => {
         error: 'Gmail rate-limited',
       },
     });
-    renderAt('/history/abc');
+    renderAt('/app/history/abc');
     await waitFor(() => expect(screen.getByText('Gmail rate-limited')).toBeInTheDocument());
   });
 });

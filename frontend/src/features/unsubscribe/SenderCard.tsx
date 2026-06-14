@@ -29,6 +29,8 @@ export interface SenderCardProps {
   readonly onConfirmManual?: () => void;
   /** Retry a failed execute. */
   readonly onRetry?: () => void;
+  /** Disable selectable and follow-up actions for read-only demo mode. */
+  readonly disabled?: boolean;
 }
 
 /**
@@ -40,7 +42,15 @@ export interface SenderCardProps {
  * @returns The rendered sender card.
  */
 export function SenderCard(props: SenderCardProps): JSX.Element {
-  const { suggestion, selected, onToggle, executeResult, onConfirmManual, onRetry } = props;
+  const {
+    suggestion,
+    selected,
+    onToggle,
+    executeResult,
+    onConfirmManual,
+    onRetry,
+    disabled = false,
+  } = props;
   const recent = suggestion.recent_subjects.slice(0, RECENT_SUBJECTS_DISPLAY);
   const tags = senderTags(suggestion);
   const initial = (suggestion.sender_email[0] ?? '?').toUpperCase();
@@ -54,6 +64,8 @@ export function SenderCard(props: SenderCardProps): JSX.Element {
       <input
         type="checkbox"
         checked={selected}
+        disabled={disabled}
+        title={disabled ? 'Disabled in demo' : undefined}
         onChange={(event) => onToggle(event.target.checked)}
         aria-label={`Select ${suggestion.sender_email}`}
         className="mt-1 shrink-0"
@@ -112,7 +124,13 @@ export function SenderCard(props: SenderCardProps): JSX.Element {
                       Open unsubscribe page
                     </a>
                   ) : null}
-                  <Button variant="secondary" size="sm" onClick={onConfirmManual}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onConfirmManual}
+                    disabled={disabled}
+                    title={disabled ? 'Disabled in demo' : undefined}
+                  >
                     I&apos;ve unsubscribed
                   </Button>
                 </div>
@@ -123,7 +141,13 @@ export function SenderCard(props: SenderCardProps): JSX.Element {
                   {executeResult.message}
                 </p>
                 <div>
-                  <Button variant="secondary" size="sm" onClick={onRetry}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onRetry}
+                    disabled={disabled}
+                    title={disabled ? 'Disabled in demo' : undefined}
+                  >
                     Retry
                   </Button>
                 </div>
