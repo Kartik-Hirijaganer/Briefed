@@ -50,6 +50,8 @@ The tools that try to help tend to fall into two camps: the ones that do nothing
 
 **Briefed reads your Gmail once a day and hands back a brief:** what's a must-read, what's safe to skim, what to ignore, and which senders are worth unsubscribing from — with a summary of the pile that matters. It stays user-controlled: destructive actions require explicit confirmation, and unsubscribe execution is gated behind a default-off capability ([ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)).
 
+Public review is deliberately split from real Gmail access: `/demo` uses synthetic data for recruiters and reviewers, while the real `/app/*` path requires current Privacy Policy and Terms acceptance before Gmail-derived processing starts ([ADR 0015](docs/adr/0015-public-homepage-demo-and-enforced-consent.md)).
+
 ## What it does
 
 - **Daily pipeline** — ingests new Gmail on a schedule and runs the whole brief end to end, unattended.
@@ -133,6 +135,8 @@ The frontend is an npm workspace — `make bootstrap` runs `npm install` at the 
 
 The public homepage lives at `/` with a primary Try Demo path at `/demo`; the Connect Gmail path points to `/login` only when Gmail connect is enabled. Public content routes `/about`, `/privacy`, and `/terms` render without authenticated API calls. The authenticated app lives under `/app/*`. Vercel serves deep links through the SPA fallback in [`vercel.json`](vercel.json), and keeps `/api/*` same-origin by proxying to the CloudFront API origin.
 
+The real Gmail path is gated by versioned legal consent. A stale or missing consent record blocks `/app/*` before dashboard routes mount, and the backend independently rejects manual scans, scheduled ingest work, and Gmail-affecting mutations until the current Privacy Policy and Terms versions have been accepted.
+
 ## Engineering highlights
 
 The parts of this project I'd point a reviewer at — each links to the code or the decision record that backs it.
@@ -141,12 +145,13 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 - **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain, 3 retries (exponential backoff + jitter, retryable-only), a circuit breaker that trips after 5 consecutive failures, per-model hard caps (Haiku at 100 calls/day), and per-call cost/token logging. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
 - **SnapStart cold-start discipline.** Settings and logging hydrate at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
 - **A decoupled pipeline with typed contracts.** SQS fan-out per stage; every message is a frozen, `extra="forbid"` Pydantic discriminated union — no inline message shapes anywhere. → [`workers/messages.py`](backend/app/workers/messages.py)
+- **Public demo, real consent.** `/`, `/about`, `/privacy`, and `/terms` are public no-API surfaces; `/demo` is seeded synthetic data with `/api/*` blocked; `/app/*` is server-gated by versioned Privacy Policy and Terms acceptance before real Gmail processing. → [ADR 0015](docs/adr/0015-public-homepage-demo-and-enforced-consent.md)
 - **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; later destructive paths are narrow, explicit, gated, and documented in ADRs. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0013](docs/adr/0013-gmail-mark-read-write-scope.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)
 - **Operability rehearsed, not assumed.** Blue/green Lambda alias deploys; rollback is a single `update-alias`; chaos drills cover DLQ replay, secret rotation, KMS-key revocation, and the LLM circuit breaker; restore-from-backup is drilled against a fresh Supabase project; every deploy writes an immutable `release_metadata` audit row. → [`docs/operations/`](docs/operations/), [`deploy-prod.yml`](.github/workflows/deploy-prod.yml)
 - **Quality gates in CI.** `mypy --strict`, Ruff (pydocstyle + type-annotation + more), ESLint (`eslint-config-google`) + Prettier, an 80% coverage floor with critical modules pinned at 100%, dead-code checks (vulture + knip), `gitleaks` secret scanning, and a markdown link-checker. → [Makefile](Makefile), [`pyproject.toml`](pyproject.toml)
-- **Decisions are documented.** **14 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
+- **Decisions are documented.** **15 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, public demo access, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
 
-**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **504 backend tests** across 70 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 14 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
+**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **504 backend tests** across 70 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 15 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
 
 ## Project internals and reference
 
@@ -168,7 +173,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 ├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
 │                       WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
-│   ├── adr/            Architecture Decision Records (0001–0014)
+│   ├── adr/            Architecture Decision Records (0001–0015)
 │   ├── architecture/   Data model, pipeline, system diagrams
 │   ├── operations/     Runbook, alarms, restore + rollback drills
 │   ├── release/        Release notes + announcement drafts
@@ -193,6 +198,7 @@ All routes are mounted under `/api/v1`. The full interactive spec is at `/docs` 
 | Emails | `/emails` | List classified emails · mark read · override bucket |
 | Unsubscribes | `/unsubscribes` | List recommendations · dismiss · confirm · execute (flagged) |
 | Hygiene | `/hygiene` | Inbox-hygiene summary counters |
+| Legal consent | `/legal/consent` | Get current/accepted policy versions · accept Privacy Policy and Terms |
 | Profile | `/profile` | Get / update profile · get / update schedule |
 
 ### Developer commands
@@ -229,9 +235,17 @@ The frontend deploys to Vercel from the repo root: install with `npm install`, b
 
 The backend still runs on AWS Lambda behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Set `BRIEFED_PUBLIC_BASE_URL` / Terraform `public_base_url` to the Vercel or custom-domain origin so the Google OAuth callback URI is generated as `https://<public-origin>/api/v1/oauth/gmail/callback` and cookies stay scoped to the browser-facing origin. Production backend deploys still go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
 
+Google OAuth verification for the public Gmail path is tracked in
+[`docs/operations/google-oauth-verification.md`](docs/operations/google-oauth-verification.md).
+Until custom-domain verification, OAuth approval, and CASA assessment are
+complete, keep the OAuth app in Testing, keep the production Connect Gmail flag
+off, and use the synthetic demo for public review.
+
 ### Version bumps
 
-The single source of truth for the app version is [`packages/contracts/version.json`](packages/contracts/version.json). Bump it in one place — backend and frontend both read from it — then run `make docs` (or `/make-docs`) to regenerate the OpenAPI spec with a matching `info.version` pin.
+**App version.** The single source of truth for the app version is [`packages/contracts/version.json`](packages/contracts/version.json). Bump it in one place — backend and frontend both read from it — then run `make docs` (or `/make-docs`) to regenerate the OpenAPI spec with a matching `info.version` pin.
+
+**Legal policy versions.** When Privacy Policy or Terms text materially changes, bump the backend enforcement constants in [`backend/app/core/consent.py`](backend/app/core/consent.py): `CURRENT_PRIVACY_POLICY_VERSION` and `CURRENT_TERMS_VERSION`. Mirror the same values in [`frontend/src/content/legal.ts`](frontend/src/content/legal.ts): `PRIVACY_POLICY_VERSION` and `TERMS_VERSION`, and set `POLICY_EFFECTIVE_DATE` to the deploy date for the published policy text. Then verify with `make test` and `make link-check`; run `make docs` as well if the consent API schema changed.
 
 ### Git workflow
 
@@ -241,7 +255,7 @@ The single source of truth for the app version is [`packages/contracts/version.j
 ## Documentation
 
 - [DESIGN.md](DESIGN.md) — canonical design system: a single fixed Notion theme (dark desktop sidebar, light main). Tokens, typography, motion, and contrast numbers all live here. Read before any UI change.
-- [docs/adr/](docs/adr/) — the 14 architecture decision records (0001–0014).
+- [docs/adr/](docs/adr/) — the 15 architecture decision records (0001–0015).
 - [docs/architecture/](docs/architecture/) — system diagrams + data model.
 - [docs/operations/](docs/operations/) — runbook, alarms, restore + rollback drills, secrets rotation.
 - [docs/release/](docs/release/) — 1.0.0 release notes + announcement draft.
@@ -257,4 +271,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 14 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>
+<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 15 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>

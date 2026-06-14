@@ -656,8 +656,10 @@ export interface paths {
          *
          *     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
          *     per user per rolling 24h window; the limiter raises ``429`` with a
-         *     ``Retry-After`` header when exhausted. Legal consent is checked first so
-         *     rejected requests do not consume a manual-run quota slot.
+         *     ``Retry-After`` header when exhausted.
+         *
+         *     Legal consent is checked before the quota limiter so a gated user does
+         *     not burn a manual-run allowance.
          */
         post: operations["start_manual_run_api_v1_runs_post"];
         delete?: never;

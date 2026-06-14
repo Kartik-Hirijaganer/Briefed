@@ -40,6 +40,7 @@ from app.core.config import Settings, get_settings
 from app.core.consent import enforce_legal_consent
 from app.db.models import ConnectedAccount, UnsubscribeSuggestion, User
 from app.schemas.emails import ErrorEnvelope
+from app.schemas.legal import LegalConsentRequiredError
 from app.schemas.unsubscribe import (
     DomainWasteEntry,
     HygieneStatsResponse,
@@ -177,6 +178,12 @@ async def list_suggestions(
     "/{suggestion_id}/dismiss",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Dismiss an unsubscribe suggestion",
+    responses={
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
+    },
 )
 async def dismiss_suggestion(
     suggestion_id: UUID,
@@ -208,6 +215,12 @@ async def dismiss_suggestion(
     "/{suggestion_id}/confirm",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Confirm the user acted on the unsubscribe suggestion",
+    responses={
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
+    },
 )
 async def confirm_suggestion(
     suggestion_id: UUID,
@@ -243,6 +256,10 @@ async def confirm_suggestion(
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": ErrorEnvelope},
         status.HTTP_404_NOT_FOUND: {"model": ErrorEnvelope},
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
     },
 )
 async def execute_suggestion(

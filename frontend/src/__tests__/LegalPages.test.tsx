@@ -2,14 +2,20 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import AboutPage from '../pages/AboutPage';
 import { api } from '../api/client';
+import AboutPage from '../pages/AboutPage';
 import PrivacyPolicyPage from '../pages/PrivacyPolicyPage';
 import TermsOfServicePage from '../pages/TermsOfServicePage';
 
 const renderPage = (page: JSX.Element): void => {
   render(<MemoryRouter>{page}</MemoryRouter>);
 };
+
+const PUBLIC_PAGE_CASES: ReadonlyArray<[string, () => JSX.Element]> = [
+  ['privacy policy', () => <PrivacyPolicyPage />],
+  ['terms of service', () => <TermsOfServicePage />],
+  ['about page', () => <AboutPage />],
+];
 
 describe('public legal pages', () => {
   afterEach(() => {
@@ -48,10 +54,10 @@ describe('public legal pages', () => {
     expect(screen.getByText(/real Gmail path/i)).toBeInTheDocument();
   });
 
-  it('uses public chrome links and does not create API links', () => {
+  it.each(PUBLIC_PAGE_CASES)('uses public chrome links and no API calls on %s', (_label, page) => {
     const apiGetSpy = vi.spyOn(api, 'GET');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    renderPage(<PrivacyPolicyPage />);
+    renderPage(page());
 
     const navigation = screen.getByRole('navigation', { name: /public pages/i });
     expect(within(navigation).getByRole('link', { name: /about/i })).toHaveAttribute(

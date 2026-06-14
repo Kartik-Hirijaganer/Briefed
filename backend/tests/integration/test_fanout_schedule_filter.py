@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, User
 from app.workers.handlers.fanout import FanoutDeps, run_fanout
 
@@ -47,6 +48,8 @@ async def _seed(
         last_run_finished_at=last_run_finished_at,
         current_run_id=current_run_id,
         current_run_started_at=current_run_started_at,
+        privacy_policy_version_accepted=CURRENT_PRIVACY_POLICY_VERSION,
+        terms_version_accepted=CURRENT_TERMS_VERSION,
     )
     session.add(user)
     await session.flush()

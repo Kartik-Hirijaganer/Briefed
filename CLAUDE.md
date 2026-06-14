@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Briefed — Project Rules
 
-Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 1.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · React · PWA · AWS Lambda + SnapStart · Terraform.
+Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 2.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · React · PWA · AWS Lambda + SnapStart · Terraform.
 
 Monorepo layout:
 - [backend/](backend/) — FastAPI + Pydantic + LLM pipeline (Python 3.11+); also hosts the Lambda handlers
@@ -174,7 +174,7 @@ Queue URLs are injected via env (`BRIEFED_*_QUEUE_URL`). The ingest handler oppo
 ### LLM abstraction — one client, many providers
 Every LLM call goes through [backend/app/llm/client.py](backend/app/llm/client.py) `LLMClient`, which owns:
 
-- **Fallback chain** — catalog-driven `[CATALOG primary, *CATALOG fallbacks]` from [backend/app/llm/catalog.py](backend/app/llm/catalog.py) (Gemini Flash primary, Claude Haiku 4.5 fallback, both routed via OpenRouter per ADR 0009).
+- **Fallback chain** — catalog-driven `[CATALOG primary, *CATALOG fallbacks]` from [backend/app/llm/catalog.py](backend/app/llm/catalog.py) (Gemini 2.5 Flash primary, Claude Haiku 4.5 fallback, both routed via OpenRouter per ADR 0009).
 - **Retries** — 3 attempts, exponential backoff + jitter, only on `retryable=True` errors.
 - **Circuit breaker** — trips after 5 consecutive failures; fallback kicks in while open.
 - **Cost + token logging** — one `PromptCallLog` row per call.
