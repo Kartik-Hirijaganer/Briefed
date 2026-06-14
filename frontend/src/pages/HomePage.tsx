@@ -103,7 +103,8 @@ export default function HomePage(): JSX.Element {
                 Connect Gmail
               </Link>
               <p className="max-w-[var(--measure)] text-[length:var(--fs-sm)] leading-[var(--lh-sm)] text-fg-muted">
-                Connect your own mailbox after reviewing the policies.
+                Google will show an unverified app warning while Briefed is pending verification.
+                Choose Advanced, then proceed to continue.
               </p>
             </div>
           ) : null}

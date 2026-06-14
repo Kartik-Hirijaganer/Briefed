@@ -5,12 +5,17 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from app.db.models import KnownWasteSender, RubricRule
 from app.domain.providers import EmailAddress, EmailMessage, UnsubscribeInfo
-from app.services.classification.rubric import RuleEngine, default_rubric_seed
+from app.services.classification.rubric import (
+    RuleEngine,
+    default_rubric_seed,
+    default_rubric_seed_path,
+)
 
 
 def _email(
@@ -123,6 +128,18 @@ def test_default_rubric_seed_loads_yaml() -> None:
 
     assert "Gmail important" in names
     assert any(seed["match"] == {"subject_contains": "receipt"} for seed in seeds)
+
+
+def test_default_rubric_seed_path_prefers_lambda_task_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lambda_seed_path = tmp_path / "packages" / "config" / "seeds" / "rubric_rules.yml"
+    lambda_seed_path.parent.mkdir(parents=True)
+    lambda_seed_path.write_text("rules: []\n", encoding="utf-8")
+    monkeypatch.setenv("LAMBDA_TASK_ROOT", str(tmp_path))
+
+    assert default_rubric_seed_path() == lambda_seed_path
 
 
 def test_subject_regex_matches() -> None:
