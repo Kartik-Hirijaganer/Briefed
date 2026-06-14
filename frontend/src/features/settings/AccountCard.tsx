@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Badge, Button, Card, Dialog, Motion, Sheet, Switch, type BadgeTone } from '@briefed/ui';
 
 import { api, ApiError, unwrap } from '../../api/client';
+import { accounts } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useAddGmailFlow } from '../../hooks/useAddGmailFlow';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -34,7 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
- * Per-account tile rendered on `/settings/accounts`. Owns the three
+ * Per-account tile rendered on `/app/settings/accounts`. Owns the three
  * controls specified in plan §19.16 §1: auto-scan switch, scan-this-now
  * button, overflow menu (rename / exclude / reconnect / disconnect).
  *
@@ -43,11 +45,12 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export function AccountCard(props: AccountCardProps): JSX.Element {
   const { account } = props;
+  const { isDemo } = useDemoMode();
   const client = useQueryClient();
   const online = useOnlineStatus();
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'sm';
-  const reconnect = useAddGmailFlow({ link: true, returnTo: '/settings/accounts' });
+  const reconnect = useAddGmailFlow({ link: true, returnTo: '/app/settings/accounts' });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'disconnect' | 'remove' | null>(null);
   const [swipeRevealed, setSwipeRevealed] = useState(false);
@@ -66,7 +69,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
       );
     },
     onMutate: (body) => {
-      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+      client.setQueryData<Schemas['AccountsListResponse']>(accounts(), (current) => {
         if (!current) return current;
         return {
           accounts: current.accounts.map((row) =>
@@ -76,7 +79,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
       });
     },
     onSuccess: () => {
-      if (online) void client.invalidateQueries({ queryKey: ['accounts'] });
+      if (online) void client.invalidateQueries({ queryKey: accounts() });
     },
   });
 
@@ -90,13 +93,13 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
     },
     onSuccess: (updated) => {
       setConfirmAction(null);
-      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+      client.setQueryData<Schemas['AccountsListResponse']>(accounts(), (current) => {
         if (!current) return current;
         return {
           accounts: current.accounts.map((row) => (row.id === updated.id ? updated : row)),
         };
       });
-      void client.invalidateQueries({ queryKey: ['accounts'] });
+      void client.invalidateQueries({ queryKey: accounts() });
     },
   });
 
@@ -112,16 +115,30 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
     },
     onSuccess: () => {
       setConfirmAction(null);
-      client.setQueryData<Schemas['AccountsListResponse']>(['accounts'], (current) => {
+      client.setQueryData<Schemas['AccountsListResponse']>(accounts(), (current) => {
         if (!current) return current;
         return { accounts: current.accounts.filter((row) => row.id !== account.id) };
       });
-      void client.invalidateQueries({ queryKey: ['accounts'] });
+      void client.invalidateQueries({ queryKey: accounts() });
     },
   });
 
   const effectiveAutoScan = account.auto_scan_enabled ?? true;
   const isDisconnected = account.status === 'revoked';
+  const actionDisabled = isDemo;
+  const actionTitle = isDemo ? 'Disabled in demo' : undefined;
+
+  const patchAccount = (body: Schemas['AccountPatchRequest']): void => {
+    if (!isDemo) patch.mutate(body);
+  };
+
+  const startReconnect = (): void => {
+    if (!isDemo) reconnect.start();
+  };
+
+  const openConfirm = (action: 'disconnect' | 'remove'): void => {
+    if (!isDemo) setConfirmAction(action);
+  };
 
   const cardBody = (
     <Card className="flex flex-col gap-3">
@@ -158,8 +175,8 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <span>Auto-scan</span>
           <Switch
             checked={effectiveAutoScan}
-            onCheckedChange={(next) => patch.mutate({ auto_scan_enabled: next })}
-            disabled={patch.isPending || isDisconnected}
+            onCheckedChange={(next) => patchAccount({ auto_scan_enabled: next })}
+            disabled={actionDisabled || patch.isPending || isDisconnected}
             ariaLabel={`Toggle auto-scan for ${account.email}`}
           />
           {account.auto_scan_enabled === null ? (
@@ -169,13 +186,21 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
         <div className="flex items-center gap-2">
           {isDisconnected ? (
             <>
-              <Button variant="secondary" size="sm" onClick={reconnect.start}>
-                Reconnect
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={startReconnect}
+                disabled={actionDisabled}
+                title={actionTitle}
+              >
+                {isDemo ? 'Disabled in demo' : 'Reconnect'}
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => setConfirmAction('remove')}
+                onClick={() => openConfirm('remove')}
+                disabled={actionDisabled}
+                title={actionTitle}
                 aria-label={`Remove ${account.email}`}
               >
                 Remove
@@ -187,14 +212,18 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
                 variant="secondary"
                 size="sm"
                 onClick={() => setSheetOpen(true)}
+                disabled={actionDisabled}
+                title={actionTitle}
                 aria-label={`More actions for ${account.email}`}
               >
-                More…
+                More...
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => setConfirmAction('disconnect')}
+                onClick={() => openConfirm('disconnect')}
+                disabled={actionDisabled}
+                title={actionTitle}
                 aria-label={`Disconnect ${account.email}`}
               >
                 Disconnect
@@ -212,11 +241,13 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
         <div aria-hidden="true" className="absolute inset-y-0 right-0 flex w-[160px] items-stretch">
           <button
             type="button"
+            disabled={actionDisabled}
+            title={actionTitle}
             onClick={() => {
               if (isDisconnected) {
-                reconnect.start();
+                startReconnect();
               } else {
-                patch.mutate({ auto_scan_enabled: false });
+                patchAccount({ auto_scan_enabled: false });
               }
               setSwipeRevealed(false);
             }}
@@ -228,8 +259,10 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           </button>
           <button
             type="button"
+            disabled={actionDisabled}
+            title={actionTitle}
             onClick={() => {
-              setConfirmAction(isDisconnected ? 'remove' : 'disconnect');
+              openConfirm(isDisconnected ? 'remove' : 'disconnect');
               setSwipeRevealed(false);
             }}
             className="flex flex-1 items-center justify-center bg-danger text-xs font-semibold text-accent-contrast"
@@ -241,6 +274,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
       {isMobile ? (
         <Motion
           drag="x"
+          dragListener={!actionDisabled}
           dragConstraints={{ left: -SWIPE_REVEAL_PX, right: 0 }}
           dragElastic={0.1}
           animate={{ x: swipeRevealed ? -SWIPE_REVEAL_PX : 0 }}
@@ -261,11 +295,13 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <Button
             variant="secondary"
             onClick={() => {
-              patch.mutate({
+              patchAccount({
                 exclude_from_global_digest: !account.exclude_from_global_digest,
               });
               setSheetOpen(false);
             }}
+            disabled={actionDisabled}
+            title={actionTitle}
           >
             {account.exclude_from_global_digest
               ? 'Include in global digest'
@@ -274,9 +310,11 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
           <Button
             variant="secondary"
             onClick={() => {
-              reconnect.start();
+              startReconnect();
               setSheetOpen(false);
             }}
+            disabled={actionDisabled}
+            title={actionTitle}
           >
             Reconnect account
           </Button>
@@ -308,6 +346,7 @@ export function AccountCard(props: AccountCardProps): JSX.Element {
                   disconnect.mutate();
                 }
               }}
+              disabled={actionDisabled}
               loading={disconnect.isPending || remove.isPending}
             >
               {confirmAction === 'remove' ? 'Remove' : 'Disconnect'}

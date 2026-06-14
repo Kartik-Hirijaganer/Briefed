@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import type { FreshnessState } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { clientConfig, hygiene, unsubscribes } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useFreshnessState } from '../../hooks/useFreshnessState';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { enqueueMutation } from '../../offline/mutations';
@@ -47,7 +49,7 @@ export interface ExecuteBatchSummary {
  * @param suggestionId - Row to drop from the cache.
  */
 export function removeSuggestionFromCache(client: QueryClient, suggestionId: string): void {
-  client.setQueryData<Schemas['UnsubscribesListResponse']>(['unsubscribes'], (current) => {
+  client.setQueryData<Schemas['UnsubscribesListResponse']>(unsubscribes(), (current) => {
     if (!current) return current;
     return {
       suggestions: current.suggestions.filter((suggestion) => suggestion.id !== suggestionId),
@@ -132,6 +134,7 @@ export interface UnsubscribeData {
  * @returns The {@link UnsubscribeData} bundle consumed by the page shell.
  */
 export function useUnsubscribeData(): UnsubscribeData {
+  const { isDemo } = useDemoMode();
   const client = useQueryClient();
   const online = useOnlineStatus();
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set<string>());
@@ -141,16 +144,16 @@ export function useUnsubscribeData(): UnsubscribeData {
   const [batchSummary, setBatchSummary] = useState<ExecuteBatchSummary | null>(null);
 
   const suggestionsQuery = useQuery({
-    queryKey: ['unsubscribes'],
+    queryKey: unsubscribes(),
     queryFn: async () => unwrap(await api.GET('/api/v1/unsubscribes')),
     staleTime: STALE_MS,
   });
   const configQuery = useQuery({
-    queryKey: ['client-config'],
+    queryKey: clientConfig(),
     queryFn: async () => unwrap(await api.GET('/api/v1/config')),
     staleTime: Infinity,
   });
-  const freshness = useFreshnessState({ queryKey: ['unsubscribes'], staleTime: STALE_MS });
+  const freshness = useFreshnessState({ queryKey: unsubscribes(), staleTime: STALE_MS });
 
   const dismiss = useMutation({
     mutationFn: async (id: string): Promise<void> => {
@@ -218,6 +221,7 @@ export function useUnsubscribeData(): UnsubscribeData {
     suggestions.filter((s) => selectedIds.has(s.id));
 
   const keepSelected = (): void => {
+    if (isDemo) return;
     const ids = selectedSuggestions().map((s) => s.id);
     if (ids.length === 0) return;
     clearSelection();
@@ -225,6 +229,7 @@ export function useUnsubscribeData(): UnsubscribeData {
   };
 
   const recommendUnsubscribeSelected = (): void => {
+    if (isDemo) return;
     const selected = selectedSuggestions();
     if (selected.length === 0) return;
     // Open tabs synchronously with the user gesture so the popup blocker does
@@ -238,6 +243,7 @@ export function useUnsubscribeData(): UnsubscribeData {
   };
 
   const executeSelected = async (): Promise<void> => {
+    if (isDemo) return;
     const ids = selectedSuggestions().map((s) => s.id);
     if (ids.length === 0) return;
     const outcomes = await Promise.all(
@@ -266,6 +272,7 @@ export function useUnsubscribeData(): UnsubscribeData {
   };
 
   const confirmManual = (id: string): void => {
+    if (isDemo) return;
     confirm.mutate(id);
     setExecuteResults((current) => {
       const next = new Map(current);
@@ -275,6 +282,7 @@ export function useUnsubscribeData(): UnsubscribeData {
   };
 
   const retryExecute = async (id: string): Promise<void> => {
+    if (isDemo) return;
     let result: Awaited<ReturnType<typeof execute.mutateAsync>> | null = null;
     try {
       result = await execute.mutateAsync(id);
@@ -299,7 +307,7 @@ export function useUnsubscribeData(): UnsubscribeData {
     freshnessState: freshness.state,
     freshnessLastKnownGoodAt: freshness.lastKnownGoodAt,
     online,
-    executeEnabled: configQuery.data?.unsubscribe_execute ?? false,
+    executeEnabled: isDemo ? false : (configQuery.data?.unsubscribe_execute ?? false),
     selectedIds,
     selectedCount,
     totalCount,
@@ -313,7 +321,7 @@ export function useUnsubscribeData(): UnsubscribeData {
     keepSelected,
     keepBusy: dismiss.isPending,
     recommendUnsubscribeSelected,
-    primaryBusy: execute.isPending || confirm.isPending,
+    primaryBusy: isDemo ? false : execute.isPending || confirm.isPending,
     executeResults,
     batchSummary,
     executeSelected,
@@ -331,8 +339,8 @@ export function useUnsubscribeData(): UnsubscribeData {
  */
 function invalidateUnsubscribe(client: QueryClient, online: boolean): void {
   if (!online) return;
-  void client.invalidateQueries({ queryKey: ['unsubscribes'] });
-  void client.invalidateQueries({ queryKey: ['hygiene'] });
+  void client.invalidateQueries({ queryKey: unsubscribes() });
+  void client.invalidateQueries({ queryKey: hygiene() });
 }
 
 /**
