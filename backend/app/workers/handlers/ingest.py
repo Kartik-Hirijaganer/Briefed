@@ -21,9 +21,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from app.core.clock import utcnow
+from app.core.consent import has_current_legal_consent
 from app.core.logging import get_logger
 from app.core.security import EncryptedBlob, EnvelopeCipher, token_context
-from app.db.models import OAuthToken
+from app.db.models import OAuthToken, User
 from app.domain.providers import ProviderCredentials
 from app.services.gmail.oauth import expires_at_from_bundle, refresh_access_token
 from app.services.ingestion.pipeline import IngestStats, run_ingest
@@ -90,6 +91,14 @@ async def handle_ingest(
     Raises:
         LookupError: When the account no longer has OAuth credentials.
     """
+    user = await deps.session.get(User, message.user_id)
+    if user is None:
+        logger.warning("ingest.skip_missing_user", user_id=str(message.user_id))
+        return IngestStats(0, 0, 0, 0, False)
+    if not has_current_legal_consent(user):
+        logger.warning("ingest.skip_no_consent", user_id=str(message.user_id))
+        return IngestStats(0, 0, 0, 0, False)
+
     tokens = (
         (
             await deps.session.execute(

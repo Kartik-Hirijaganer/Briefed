@@ -112,6 +112,13 @@ class User(Base, TimestampMixin):
         presidio_enabled: Legacy profile toggle retained for API
             compatibility. Presidio itself was removed in Phase 2 of
             the daily-triage revamp; only identity + regex scrubbers run.
+        privacy_policy_version_accepted: Highest privacy policy version
+            accepted by the user; ``0`` means never accepted.
+        terms_version_accepted: Highest terms of service version accepted
+            by the user; ``0`` means never accepted.
+        legal_accepted_at: UTC timestamp of the latest legal acceptance.
+        legal_accepted_user_agent: User-agent captured at latest legal
+            acceptance, when supplied.
         last_run_finished_at: Schedule cursor — clears the per-user
             "ran in the last hour" lockout.
         current_run_id: Idempotency lock; set when fanout enqueues
@@ -164,6 +171,20 @@ class User(Base, TimestampMixin):
         default="America/New_York",
     )
     presidio_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    privacy_policy_version_accepted: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    terms_version_accepted: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    legal_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    legal_accepted_user_agent: Mapped[str | None] = mapped_column(Text)
     last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_run_id: Mapped[str | None] = mapped_column(Text)
     current_run_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

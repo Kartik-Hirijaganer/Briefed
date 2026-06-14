@@ -37,8 +37,10 @@ from app.api.errors import api_error_response
 from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
-from app.db.models import ConnectedAccount, UnsubscribeSuggestion
+from app.core.consent import enforce_legal_consent
+from app.db.models import ConnectedAccount, UnsubscribeSuggestion, User
 from app.schemas.emails import ErrorEnvelope
+from app.schemas.legal import LegalConsentRequiredError
 from app.schemas.unsubscribe import (
     DomainWasteEntry,
     HygieneStatsResponse,
@@ -176,6 +178,12 @@ async def list_suggestions(
     "/{suggestion_id}/dismiss",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Dismiss an unsubscribe suggestion",
+    responses={
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
+    },
 )
 async def dismiss_suggestion(
     suggestion_id: UUID,
@@ -196,6 +204,7 @@ async def dismiss_suggestion(
     Raises:
         HTTPException: 404 when the row does not belong to the caller.
     """
+    await _enforce_current_consent(session=session, user_id=user_id)
     row = await _load_owned(session, suggestion_id=suggestion_id, user_id=user_id)
     row.dismissed = True
     row.dismissed_at = utcnow()
@@ -206,6 +215,12 @@ async def dismiss_suggestion(
     "/{suggestion_id}/confirm",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Confirm the user acted on the unsubscribe suggestion",
+    responses={
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
+    },
 )
 async def confirm_suggestion(
     suggestion_id: UUID,
@@ -227,6 +242,7 @@ async def confirm_suggestion(
     Raises:
         HTTPException: 404 when the row does not belong to the caller.
     """
+    await _enforce_current_consent(session=session, user_id=user_id)
     row = await _load_owned(session, suggestion_id=suggestion_id, user_id=user_id)
     row.dismissed = True
     row.dismissed_at = utcnow()
@@ -240,6 +256,10 @@ async def confirm_suggestion(
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": ErrorEnvelope},
         status.HTTP_404_NOT_FOUND: {"model": ErrorEnvelope},
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+        },
     },
 )
 async def execute_suggestion(
@@ -289,6 +309,8 @@ async def execute_suggestion(
             message="Explicit confirmation is required to execute an unsubscribe.",
             request=request,
         )
+
+    await _enforce_current_consent(session=session, user_id=user_id)
 
     row = await _find_owned(session, suggestion_id=suggestion_id, user_id=user_id)
     if row is None:
@@ -453,6 +475,23 @@ async def hygiene_stats(
         average_frequency=avg_freq_decimal,
         top_domains=top_domains,
     )
+
+
+async def _enforce_current_consent(*, session: AsyncSession, user_id: UUID) -> None:
+    """Require current legal consent before Gmail-affecting mutations.
+
+    Args:
+        session: Active async session.
+        user_id: Authenticated owner.
+
+    Raises:
+        HTTPException: 404 when the user row is missing, or 451 when legal
+            consent is absent or stale.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="user not found")
+    enforce_legal_consent(user)
 
 
 async def _load_owned(

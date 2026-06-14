@@ -28,3 +28,4 @@ short, dated, numbered, immutable once accepted.
 | 0012 | Remove Presidio from prompt redaction                 | Accepted                |
 | 0013 | Gmail mark-read write scope                           | Accepted                |
 | 0014 | Execute unsubscribe in release 2                      | Accepted                |
+| 0015 | Public homepage, demo, and enforced consent           | Accepted                |

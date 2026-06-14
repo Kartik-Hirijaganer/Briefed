@@ -32,6 +32,7 @@ export const POLICY_EFFECTIVE_DATE = '2026-06-13';
 
 export const CONSENT_SUMMARY = [
   'Briefed requests gmail.readonly to ingest Gmail messages and gmail.modify only for user-initiated mark-read actions.',
+  'Briefed also requests userinfo.email, userinfo.profile, and openid to identify the connected Google account and keep your Briefed session tied to that account.',
   'OAuth tokens and stored email bodies, summaries, and rationales are KMS-envelope encrypted; metadata needed for sorting and display is stored in the database.',
   'LLM processing is routed through OpenRouter to Google Gemini 2.5 Flash first, with Anthropic Claude Haiku 4.5 as fallback.',
   'Optional prompt redaction is best-effort identity and pattern-based removal; it reduces obvious sensitive tokens but does not guarantee PII removal.',

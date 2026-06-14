@@ -39,4 +39,6 @@ export interface Schemas {
   RubricRuleInput: Components['RubricRuleIn'];
   RubricListResponse: Components['RubricRulesListResponse'];
   RunsListResponse: Components['RunsListResponse'];
+  LegalConsentRequest: Components['LegalConsentRequest'];
+  LegalConsentStatus: Components['LegalConsentStatusOut'];
 }

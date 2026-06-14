@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import (
     ConnectedAccount,
     DigestRun,
@@ -256,10 +257,14 @@ async def _seed_user_with_account(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str,
+    accepted: bool = True,
 ) -> User:
     """Insert one user with one active connected account."""
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
+        if accepted:
+            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         session.add(

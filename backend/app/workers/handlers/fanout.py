@@ -28,6 +28,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.core.clock import utcnow
+from app.core.consent import has_current_legal_consent
 from app.core.ids import new_uuid
 from app.core.logging import get_logger
 from app.core.scheduling import LOCK_STALE_AFTER, UserScheduleView, is_due
@@ -145,6 +146,10 @@ async def run_fanout(
     skipped_locked = 0
     stale_locks = 0
     for user in users:
+        if not has_current_legal_consent(user):
+            logger.warning("fanout.skip_no_consent", user_id=str(user.id))
+            continue
+
         stale_lock = _has_stale_lock(now_utc=now_utc, user=user)
         if user.current_run_id is not None and stale_lock:
             stale_locks += 1
