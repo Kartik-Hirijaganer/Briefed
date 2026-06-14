@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AboutPage from '../pages/AboutPage';
+import { api } from '../api/client';
 import PrivacyPolicyPage from '../pages/PrivacyPolicyPage';
 import TermsOfServicePage from '../pages/TermsOfServicePage';
 
@@ -48,6 +49,7 @@ describe('public legal pages', () => {
   });
 
   it('uses public chrome links and does not create API links', () => {
+    const apiGetSpy = vi.spyOn(api, 'GET');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     renderPage(<PrivacyPolicyPage />);
 
@@ -64,6 +66,7 @@ describe('public legal pages', () => {
       'href',
       '/terms',
     );
+    expect(apiGetSpy).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
     for (const link of screen.getAllByRole('link')) {
       expect(link.getAttribute('href') ?? '').not.toMatch(/^\/api\//);

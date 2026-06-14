@@ -189,6 +189,27 @@ async def test_post_legal_consent_rejects_version_mismatch(
     }
 
 
+async def test_post_legal_consent_rejects_malformed_payload(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """Malformed consent payloads fail validation before persistence."""
+    user = await _seed_user(api_session)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/legal/consent",
+            cookies={SESSION_COOKIE_NAME: _cookie_for(user)},
+            json={
+                "privacy_policy_version": 0,
+                "terms_version": CURRENT_TERMS_VERSION,
+                "unexpected": True,
+            },
+        )
+
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["detail"]
+
+
 async def test_get_legal_consent_missing_cookie_returns_401(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:

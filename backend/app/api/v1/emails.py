@@ -15,9 +15,10 @@ from app.api.deps import current_user_id, db_session
 from app.api.errors import api_error_response
 from app.core.app_config import get_app_config
 from app.core.config import Settings, get_settings
+from app.core.consent import enforce_legal_consent
 from app.core.errors import CryptoError, ProviderError, QuotaExceededError
 from app.core.security import EncryptedBlob, EnvelopeCipher, token_context
-from app.db.models import Classification, ConnectedAccount, Email, OAuthToken, Summary
+from app.db.models import Classification, ConnectedAccount, Email, OAuthToken, Summary, User
 from app.domain.providers import ProviderCredentials
 from app.schemas.emails import (
     DecisionSource,
@@ -283,6 +284,11 @@ async def mark_read_emails(
     Returns:
         Count of successfully processed messages and per-email failures.
     """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="user not found")
+    enforce_legal_consent(user)
+
     try:
         if body.account_id is not None:
             await _ensure_account_owned(

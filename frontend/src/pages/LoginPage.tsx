@@ -65,7 +65,7 @@ export default function LoginPage(): JSX.Element {
   const continueDisabled = !gmailConnectEnabled || !acceptedPreConsent;
   const continueLabel = gmailConnectEnabled
     ? 'Continue with Google'
-    : 'Available soon — try the demo';
+    : 'Available soon — try the demo.';
 
   const handlePreConsentChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setAcceptedPreConsent(event.target.checked);
@@ -110,10 +110,6 @@ export default function LoginPage(): JSX.Element {
               {CONSENT_SUMMARY.map((item) => (
                 <li key={item}>{item}</li>
               ))}
-              <li>
-                Briefed also requests userinfo.email, userinfo.profile, and openid to identify the
-                connected Google account and keep your Briefed session tied to that account.
-              </li>
             </ul>
           </section>
 

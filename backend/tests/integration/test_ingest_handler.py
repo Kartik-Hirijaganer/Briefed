@@ -10,6 +10,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.core.security import EncryptionContext, EnvelopeCipher, token_context
 from app.db.models import ConnectedAccount, DigestRun, DigestRunEmail, Email, OAuthToken, User
 from app.domain.providers import (
@@ -87,7 +88,13 @@ async def test_handle_ingest_decrypts_tokens_and_inserts_emails(
     test_session: AsyncSession,
 ) -> None:
     # Seed user + account + tokens (wrapped by fake KMS).
-    user = User(email="u@x.com", tz="UTC", status="active")
+    user = User(
+        email="u@x.com",
+        tz="UTC",
+        status="active",
+        privacy_policy_version_accepted=CURRENT_PRIVACY_POLICY_VERSION,
+        terms_version_accepted=CURRENT_TERMS_VERSION,
+    )
     test_session.add(user)
     await test_session.flush()
     account = ConnectedAccount(
@@ -166,14 +173,58 @@ async def test_handle_ingest_decrypts_tokens_and_inserts_emails(
 async def test_handle_ingest_missing_tokens_raises(test_session: AsyncSession) -> None:
     import pytest
 
+    user = User(
+        email="missing-token@example.com",
+        tz="UTC",
+        status="active",
+        privacy_policy_version_accepted=CURRENT_PRIVACY_POLICY_VERSION,
+        terms_version_accepted=CURRENT_TERMS_VERSION,
+    )
+    test_session.add(user)
+    await test_session.flush()
+    account = ConnectedAccount(
+        user_id=user.id,
+        provider="gmail",
+        email=user.email,
+        status="active",
+    )
+    test_session.add(account)
+    await test_session.commit()
+
     cipher = EnvelopeCipher(key_id="alias/test", client=_FakeKms())
     provider = _DummyProvider()
     deps = IngestDeps(session=test_session, provider=provider, cipher=cipher)
     with pytest.raises(LookupError):
         await handle_ingest(
-            IngestMessage(user_id=uuid4(), account_id=uuid4()),
+            IngestMessage(user_id=user.id, account_id=account.id),
             deps=deps,
         )
+
+
+async def test_handle_ingest_skips_without_current_consent(test_session: AsyncSession) -> None:
+    user = User(email="no-consent@example.com", tz="UTC", status="active")
+    test_session.add(user)
+    await test_session.flush()
+    account = ConnectedAccount(
+        user_id=user.id,
+        provider="gmail",
+        email=user.email,
+        status="active",
+    )
+    test_session.add(account)
+    await test_session.commit()
+
+    cipher = EnvelopeCipher(key_id="alias/test", client=_FakeKms())
+    provider = _DummyProvider()
+    deps = IngestDeps(session=test_session, provider=provider, cipher=cipher)
+
+    stats = await handle_ingest(
+        IngestMessage(user_id=user.id, account_id=account.id),
+        deps=deps,
+    )
+
+    assert stats.new == 0
+    assert stats.email_ids == ()
 
 
 def test_encryption_context_object() -> None:

@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, DigestRun, User
 from app.workers.handlers.fanout import FanoutDeps, parse_ingest_body, run_fanout
 from app.workers.messages import IngestMessage
@@ -34,6 +35,8 @@ async def _seed(session: AsyncSession, *, count: int = 3) -> list[ConnectedAccou
         schedule_frequency="once_daily",
         schedule_times_local=["08:00"],
         schedule_timezone="UTC",
+        privacy_policy_version_accepted=CURRENT_PRIVACY_POLICY_VERSION,
+        terms_version_accepted=CURRENT_TERMS_VERSION,
     )
     session.add(user)
     await session.flush()

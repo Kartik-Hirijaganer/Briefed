@@ -21,6 +21,7 @@ from app.api.deps import current_user_id, db_session
 from app.core.app_config import get_app_config
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
+from app.core.consent import enforce_legal_consent
 from app.core.rate_limit import enforce_manual_run
 from app.db.models import (
     Classification,
@@ -195,7 +196,14 @@ async def start_manual_run(
     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
     per user per rolling 24h window; the limiter raises ``429`` with a
     ``Retry-After`` header when exhausted.
+
+    Legal consent is checked before the quota limiter so a gated user does
+    not burn a manual-run allowance.
     """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="user not found")
+    enforce_legal_consent(user)
     enforce_manual_run(user_id)
     accounts = await _selected_accounts(
         session=session,
