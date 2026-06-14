@@ -1,8 +1,9 @@
 # packages/contracts
 
 Canonical API contract: the FastAPI app exports the OpenAPI spec to
-`openapi.json` (pinned to version `1.0.0` per `/make-docs`); the frontend
-regenerates `frontend/src/api/schema.d.ts` from it via `openapi-typescript`.
+`openapi.json` with `info.version` pinned to `packages/contracts/version.json`;
+the frontend regenerates `frontend/src/api/schema.d.ts` from it via
+`openapi-typescript`.
 
 ## Files
 
