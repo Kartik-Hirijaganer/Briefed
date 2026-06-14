@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom';
 
+import { useAppPath } from '../routing/routeBase';
+
 import { NAV_ITEMS } from './navItems';
 
 /**
@@ -9,6 +11,7 @@ import { NAV_ITEMS } from './navItems';
  * @returns The rendered tab bar.
  */
 export function BottomTabBar(): JSX.Element {
+  const appPath = useAppPath();
   const tabs = NAV_ITEMS.filter((item) => item.mobile);
   return (
     <nav
@@ -18,10 +21,10 @@ export function BottomTabBar(): JSX.Element {
     >
       <ul className="grid grid-cols-4 gap-0">
         {tabs.map((tab) => (
-          <li key={tab.to}>
+          <li key={tab.label}>
             <NavLink
-              to={tab.to}
-              end={tab.to === '/'}
+              to={appPath(tab.to)}
+              end={tab.to === ''}
               className={({ isActive }) =>
                 `flex min-h-[56px] flex-col items-center justify-center gap-1 text-xs ${
                   isActive ? 'text-accent' : 'text-fg-muted'
