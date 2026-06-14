@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 
 import { useAddGmailFlow } from '../hooks/useAddGmailFlow';
 
+const APP_RETURN_TO_PATTERN = /^\/app(?:\/[^/].*)?$/;
+
 const sanitizeReturnTo = (value: string | null): string => {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
-  return value;
+  if (!value || value.includes('\\')) return '/app';
+  return APP_RETURN_TO_PATTERN.test(value) ? value : '/app';
 };
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {

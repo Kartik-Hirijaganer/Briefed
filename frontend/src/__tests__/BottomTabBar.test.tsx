@@ -7,7 +7,7 @@ import { BottomTabBar } from '../shell/BottomTabBar';
 describe('<BottomTabBar>', () => {
   it('renders only the three mobile-flagged tabs', () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <BottomTabBar />
       </MemoryRouter>,
     );
@@ -15,15 +15,15 @@ describe('<BottomTabBar>', () => {
     const links = within(nav).getAllByRole('link');
     expect(links).toHaveLength(3);
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
-      '/',
-      '/history',
-      '/settings/accounts',
+      '/app',
+      '/app/history',
+      '/app/settings/accounts',
     ]);
   });
 
   it('highlights the active tab', () => {
     render(
-      <MemoryRouter initialEntries={['/history']}>
+      <MemoryRouter initialEntries={['/app/history']}>
         <BottomTabBar />
       </MemoryRouter>,
     );

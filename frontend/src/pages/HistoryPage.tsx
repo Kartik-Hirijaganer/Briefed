@@ -13,7 +13,9 @@ import {
 } from '@briefed/ui';
 
 import { api, unwrap } from '../api/client';
+import { history as historyQueryKey } from '../api/queryKeys';
 import { useFreshnessState } from '../hooks/useFreshnessState';
+import { useAppPath } from '../routing/routeBase';
 
 const STALE_MS = 60 * 1000;
 
@@ -25,18 +27,19 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 };
 
 /**
- * Run history (`/history`). Detail drilldown is a follow-up Phase 7 surface;
+ * Run history (`/app/history`). Detail drilldown is a follow-up Phase 7 surface;
  * today we list rows so operators can eyeball cost + outcome.
  *
  * @returns The rendered page.
  */
 export default function HistoryPage(): JSX.Element {
+  const appPath = useAppPath();
   const runsQuery = useQuery({
-    queryKey: ['history'],
+    queryKey: historyQueryKey(),
     queryFn: async () => unwrap(await api.GET('/api/v1/history')),
     staleTime: STALE_MS,
   });
-  const freshness = useFreshnessState({ queryKey: ['history'], staleTime: STALE_MS });
+  const freshness = useFreshnessState({ queryKey: historyQueryKey(), staleTime: STALE_MS });
 
   return (
     <section className="flex flex-col gap-4">
@@ -62,7 +65,7 @@ export default function HistoryPage(): JSX.Element {
           {runsQuery.data.runs.map((run) => (
             <li key={run.id}>
               <Link
-                to={`/history/${run.id}`}
+                to={appPath(`history/${run.id}`)}
                 className="block rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
               >
                 <Card className="flex flex-col gap-2">
