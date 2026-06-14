@@ -70,7 +70,7 @@ export interface paths {
          *     Args:
          *         request: FastAPI request (used to compute the callback URL).
          *         return_to: Optional post-callback UI path (must be an internal
-         *             absolute path, e.g. ``/settings/accounts``).
+         *             absolute path under ``/app``, e.g. ``/app/settings/accounts``).
          *         session_cookie: Existing signed session, when the caller is
          *             connecting another mailbox to the same user.
          *         settings: Cached :class:`Settings`.
@@ -112,7 +112,7 @@ export interface paths {
          *         settings: Cached :class:`Settings`.
          *
          *     Returns:
-         *         A 302 redirect back to the UI (``return_to`` or ``/``) on success,
+         *         A 302 redirect back to the UI (``return_to`` or ``/app``) on success,
          *         or to ``/login`` carrying an ``auth_error`` code on denial / a
          *         malformed callback.
          *
@@ -3025,7 +3025,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Unprocessable Entity */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
