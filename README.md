@@ -42,6 +42,12 @@ What it shows:
 - Unsubscribe recommendations with sender volume, engagement, recent subjects, and user-controlled selection.
 - Multi-account settings with the connected Gmail account and Add Gmail entry point, stopping before OAuth.
 
+This is the public product walkthrough, not the Google OAuth verification
+consent-flow video. The verification video must be recorded after
+`briefed.email` is live and the OAuth app remains in Testing; the required flow
+is tracked in
+[`docs/operations/google-oauth-verification.md`](docs/operations/google-oauth-verification.md).
+
 ## Why Briefed exists
 
 A real inbox gets a few emails a day that actually matter — and a hundred that don't. The signal drowns in newsletters, receipts, and notifications, so triage becomes a daily tax you pay before you've done any real work.
