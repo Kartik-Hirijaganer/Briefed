@@ -1,6 +1,9 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { getLegalConsent } from '../api/legal';
+import { legalConsent } from '../api/queryKeys';
+import type { Schemas } from '../api/types';
 import { replayPendingMutations } from '../offline/mutations';
 
 import { useOnlineStatus } from './useOnlineStatus';
@@ -17,11 +20,19 @@ export function useSyncQueueDrain(): {
 } {
   const online = useOnlineStatus();
   const queryClient = useQueryClient();
+  const drainingRef = useRef<boolean>(false);
   const [draining, setDraining] = useState(false);
   const [lastReplayError, setLastReplayError] = useState<string | null>(null);
+  const consent = useQuery<Schemas['LegalConsentStatus'], Error>({
+    queryKey: legalConsent(),
+    queryFn: getLegalConsent,
+    enabled: false,
+  });
+  const consentRequired = consent.data?.consent_required === true;
 
-  const drainNow = async (): Promise<void> => {
-    if (!online || draining) return;
+  const drainNow = useCallback(async (): Promise<void> => {
+    if (!online || drainingRef.current || consentRequired) return;
+    drainingRef.current = true;
     setDraining(true);
     setLastReplayError(null);
     try {
@@ -30,17 +41,15 @@ export function useSyncQueueDrain(): {
     } catch (error) {
       setLastReplayError(error instanceof Error ? error.message : 'Queued action sync failed.');
     } finally {
+      drainingRef.current = false;
       setDraining(false);
     }
-  };
+  }, [consentRequired, online, queryClient]);
 
   useEffect(() => {
-    if (!online) return;
+    if (!online || consentRequired) return;
     void drainNow();
-    // Drain when `online` flips true; `draining` intentionally stays outside
-    // the dependency list so a state change does not start a second replay.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online]);
+  }, [consentRequired, drainNow, online]);
 
   return { draining, lastReplayError, drainNow };
 }

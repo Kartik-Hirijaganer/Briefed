@@ -30,6 +30,7 @@ from app.schemas.emails import (
     MarkReadRequest,
     MarkReadResponse,
 )
+from app.schemas.legal import LegalConsentRequiredError
 from app.services.classification.repository import ClassificationsRepo, ClassificationWrite
 from app.services.email_labels import drop_unread_label, unread_email_filter
 from app.services.gmail.client import GmailClient
@@ -255,6 +256,10 @@ async def list_emails(
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ErrorEnvelope},
         status.HTTP_409_CONFLICT: {"model": ErrorEnvelope},
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail processing.",
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorEnvelope},
     },
 )

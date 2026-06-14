@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, DigestRun, User
 from app.workers.handlers.fanout import FanoutDeps, parse_ingest_body, run_fanout
 from app.workers.messages import IngestMessage
@@ -26,7 +27,22 @@ class _FakeSqs:
         return {"MessageId": str(len(self.sent))}
 
 
-async def _seed(session: AsyncSession, *, count: int = 3) -> list[ConnectedAccount]:
+async def _seed(
+    session: AsyncSession,
+    *,
+    count: int = 3,
+    accepted: bool = True,
+) -> list[ConnectedAccount]:
+    """Insert one scheduled user with connected accounts.
+
+    Args:
+        session: Active async database session.
+        count: Number of accounts to insert.
+        accepted: Whether to seed current legal consent.
+
+    Returns:
+        Connected account rows for the seeded user.
+    """
     user = User(
         email="o@x.com",
         tz="UTC",
@@ -35,6 +51,9 @@ async def _seed(session: AsyncSession, *, count: int = 3) -> list[ConnectedAccou
         schedule_times_local=["08:00"],
         schedule_timezone="UTC",
     )
+    if accepted:
+        user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+        user.terms_version_accepted = CURRENT_TERMS_VERSION
     session.add(user)
     await session.flush()
     accounts: list[ConnectedAccount] = []
@@ -79,6 +98,28 @@ async def test_fanout_enqueues_only_auto_scan_accounts(
     assert runs[0].stats["account_ids"] == [str(accounts[0].id), str(accounts[2].id)]
     payload = parse_ingest_body(sqs.sent[0]["MessageBody"])
     assert payload.run_id == runs[0].id
+
+
+async def test_fanout_skips_user_without_legal_consent(
+    test_session: AsyncSession,
+) -> None:
+    """Scheduled fanout must not enqueue accounts for unconsented users."""
+    await _seed(test_session, accepted=False)
+    sqs = _FakeSqs()
+    deps = FanoutDeps(
+        session=test_session,
+        sqs=sqs,
+        ingest_queue_url="https://sqs.local/ingest",
+    )
+    with patch(
+        "app.workers.handlers.fanout.utcnow",
+        return_value=datetime(2026, 4, 25, 8, 5, tzinfo=ZoneInfo("UTC")),
+    ):
+        enqueued = await run_fanout(deps=deps)
+    assert enqueued == 0
+    assert sqs.sent == []
+    runs = (await test_session.execute(select(DigestRun))).scalars().all()
+    assert runs == []
 
 
 async def test_parse_ingest_body_roundtrips() -> None:

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import (
     ConnectedAccount,
     DigestRun,
@@ -156,6 +157,50 @@ async def test_manual_run_rate_limit_returns_429(
 
 
 @pytest.mark.asyncio
+async def test_manual_run_requires_legal_consent_before_rate_limit(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """A consent rejection must not consume the manual-run quota slot."""
+    from app.core import rate_limit as rate_limit_module
+    from app.core.rate_limit import ManualRunRateLimiter, reset_manual_run_limiter
+
+    reset_manual_run_limiter()
+    rate_limit_module._LIMITER = ManualRunRateLimiter(capacity=1)
+    user = await _seed_user_with_account(
+        api_session,
+        email="consent@x.example",
+        accepted=False,
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    try:
+        with TestClient(app) as client:
+            blocked = client.post(
+                "/api/v1/runs",
+                json={"kind": "manual"},
+                cookies={SESSION_COOKIE_NAME: cookie},
+            )
+            assert blocked.status_code == 451, blocked.text
+            assert blocked.json() == {"detail": "legal_consent_required"}
+
+            async with api_session() as session:
+                persisted = await session.get(User, user.id)
+                assert persisted is not None
+                persisted.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+                persisted.terms_version_accepted = CURRENT_TERMS_VERSION
+                await session.commit()
+
+            allowed = client.post(
+                "/api/v1/runs",
+                json={"kind": "manual"},
+                cookies={SESSION_COOKIE_NAME: cookie},
+            )
+            assert allowed.status_code == 202, allowed.text
+    finally:
+        reset_manual_run_limiter()
+
+
+@pytest.mark.asyncio
 async def test_reclassify_recent_stamps_membership_and_skips_overrides(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -256,10 +301,23 @@ async def _seed_user_with_account(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str,
+    accepted: bool = True,
 ) -> User:
-    """Insert one user with one active connected account."""
+    """Insert one user with one active connected account.
+
+    Args:
+        factory: Async session factory.
+        email: User and account email.
+        accepted: Whether to seed current legal consent.
+
+    Returns:
+        Persisted user row.
+    """
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
+        if accepted:
+            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         session.add(

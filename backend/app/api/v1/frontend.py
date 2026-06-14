@@ -52,6 +52,7 @@ from app.schemas.frontend import (
     RunStatusResponse,
     UserPreferencesOut,
 )
+from app.schemas.legal import LegalConsentRequiredError
 from app.services.classification.repository import ClassificationsRepo
 from app.services.email_labels import unread_email_filter
 from app.services.runs import maybe_finalize_run, stamp_run_membership
@@ -177,6 +178,12 @@ async def patch_preferences(
     response_model=ManualRunResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Start a manual digest run",
+    responses={
+        status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS: {
+            "model": LegalConsentRequiredError,
+            "description": "Current legal consent is required before Gmail processing.",
+        },
+    },
 )
 async def start_manual_run(
     payload: ManualRunRequest,
