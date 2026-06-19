@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.3.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.2.0...v1.3.0) (2026-06-19)
+
+
+### Features
+
+* add initial Vercel configuration files with project details and… ([a8a8e74](https://github.com/Kartik-Hirijaganer/Briefed/commit/a8a8e74a31f9510936b2a6b1d7e42d3e6528a6c8))
+* implement bulk selection and mark-read functionality in EmailLi… ([7735bb3](https://github.com/Kartik-Hirijaganer/Briefed/commit/7735bb303404c0a58a1248960cc793a59ea45f0f))
+* implement bulk selection and mark-read functionality in EmailListPane and EmailListRow ([5fab95a](https://github.com/Kartik-Hirijaganer/Briefed/commit/5fab95a16b0d68b6107e0c9e95842622f7f5fe51))
+
 ## [1.2.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.1.2...v1.2.0) (2026-06-14)
 
 
