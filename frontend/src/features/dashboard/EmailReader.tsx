@@ -39,6 +39,15 @@ export function EmailReader(props: EmailReaderProps): JSX.Element {
       hasNextPage={data.hasNextPage}
       onNextPage={() => data.setOffset(data.offset + data.pageSize)}
       onPreviousPage={() => data.setOffset(Math.max(0, data.offset - data.pageSize))}
+      selectedIds={data.selectedIds}
+      onToggleBulk={data.toggleSelected}
+      selectedCount={data.selectedCount}
+      allSelected={data.allSelected}
+      someSelected={data.someSelected}
+      onToggleAll={data.toggleAllSelected}
+      onMarkRead={data.markSelectedRead}
+      markReadLoading={data.markRead.isPending}
+      online={data.online}
     />
   );
   const readingPane = (
@@ -49,6 +58,7 @@ export function EmailReader(props: EmailReaderProps): JSX.Element {
       markReadPending={data.markRead.isPending}
       hasNextMustRead={data.hasNextMustRead}
       onNextMustRead={data.selectNextMustRead}
+      online={data.online}
     />
   );
 

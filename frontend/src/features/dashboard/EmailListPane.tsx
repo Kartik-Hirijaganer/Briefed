@@ -5,6 +5,7 @@ import type { Schemas } from '../../api/types';
 import { LIST_STAGGER_SECONDS, SORT_OPTIONS } from '../../config/presentation';
 import { DashboardSkeletons } from './DashboardSkeletons';
 import { EmailListRow } from './EmailListRow';
+import { EmailSelectionBar } from './EmailSelectionBar';
 
 /**
  * Props for {@link EmailListPane}.
@@ -34,6 +35,24 @@ export interface EmailListPaneProps {
   readonly onNextPage: () => void;
   /** Go back one page. */
   readonly onPreviousPage: () => void;
+  /** Set of ids checked for bulk mark-read. */
+  readonly selectedIds: ReadonlySet<string>;
+  /** Toggle one row's bulk-selection checkbox. */
+  readonly onToggleBulk: (emailId: string, checked: boolean) => void;
+  /** Number of checked rows. */
+  readonly selectedCount: number;
+  /** Whether every visible row is checked. */
+  readonly allSelected: boolean;
+  /** Whether at least one visible row is checked. */
+  readonly someSelected: boolean;
+  /** Check or clear every visible row. */
+  readonly onToggleAll: (checked: boolean) => void;
+  /** Mark the checked rows read. */
+  readonly onMarkRead: () => void;
+  /** Whether a mark-read request is in flight. */
+  readonly markReadLoading: boolean;
+  /** Live online status (mark-read is disabled offline). */
+  readonly online: boolean;
 }
 
 /**
@@ -59,6 +78,15 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
     hasNextPage,
     onNextPage,
     onPreviousPage,
+    selectedIds,
+    onToggleBulk,
+    selectedCount,
+    allSelected,
+    someSelected,
+    onToggleAll,
+    onMarkRead,
+    markReadLoading,
+    online,
   } = props;
 
   return (
@@ -77,6 +105,22 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
         />
       ) : emails.length > 0 ? (
         <>
+          <EmailSelectionBar
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            indeterminate={someSelected && !allSelected}
+            onToggleAll={onToggleAll}
+            onMarkRead={onMarkRead}
+            markReadDisabled={selectedCount === 0 || !online || markReadLoading}
+            markReadLoading={markReadLoading}
+            markReadTooltip={
+              !online
+                ? "You're offline"
+                : selectedCount === 0
+                  ? 'Select emails to mark read'
+                  : undefined
+            }
+          />
           <ul className="flex flex-col gap-1">
             {emails.map((email, index) => (
               <li key={email.id}>
@@ -89,6 +133,8 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
                     email={email}
                     selected={email.id === selectedId}
                     onSelect={onSelect}
+                    bulkSelected={selectedIds.has(email.id)}
+                    onToggleBulk={onToggleBulk}
                   />
                 </Motion>
               </li>
