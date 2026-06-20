@@ -45,8 +45,8 @@ def _resolve_database_url() -> str:
     url = settings.database_url
     if not url:
         raise RuntimeError(
-            "database_url is not configured. Set BRIEFED_DATABASE_URL in .env "
-            "or the corresponding SSM parameter before running migrations.",
+            "database_url is not configured. Store BRIEFED_DATABASE_URL in Infisical "
+            "and run migrations through `make migrate`.",
         )
     return url.replace("+asyncpg", "")
 

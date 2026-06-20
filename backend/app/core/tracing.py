@@ -61,7 +61,7 @@ def configure_tracing(settings: Settings | None = None) -> None:
     Args:
         settings: Optional pre-resolved :class:`Settings`. When ``None``
             the cached :func:`get_settings` value is used. Tests pass a
-            stubbed instance to avoid the SSM round-trip.
+            stubbed instance to avoid mutating process environment.
     """
     global _CONFIGURED  # noqa: PLW0603 — module-level guard, intentional.
     if _CONFIGURED:
