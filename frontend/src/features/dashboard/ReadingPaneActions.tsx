@@ -18,6 +18,8 @@ export interface ReadingPaneActionsProps {
   readonly hasNextMustRead: boolean;
   /** Advance the selection to the next must-read row. */
   readonly onNextMustRead: () => void;
+  /** Live online status (mark-read is disabled offline). */
+  readonly online: boolean;
 }
 
 /**
@@ -29,13 +31,15 @@ export interface ReadingPaneActionsProps {
  * @returns The rendered action row.
  */
 export function ReadingPaneActions(props: ReadingPaneActionsProps): JSX.Element {
-  const { email, onMarkRead, markReadPending, hasNextMustRead, onNextMustRead } = props;
+  const { email, onMarkRead, markReadPending, hasNextMustRead, onNextMustRead, online } = props;
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button
         variant="primary"
         size="sm"
         loading={markReadPending}
+        disabled={!online}
+        title={online ? undefined : "You're offline"}
         onClick={() => onMarkRead(email.id)}
       >
         Mark read
