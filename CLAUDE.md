@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Briefed — Project Rules
 
-Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 1.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · React · PWA · AWS Lambda + SnapStart · Terraform.
+Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 1.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · Infisical · React · PWA · AWS Lambda + SnapStart · Terraform.
 
 Monorepo layout:
 - [backend/](backend/) — FastAPI + Pydantic + LLM pipeline (Python 3.11+); also hosts the Lambda handlers
 - [frontend/](frontend/) — React PWA dashboard (Vite + TypeScript)
 - [packages/](packages/) — shared contracts (OpenAPI), versioned prompt bundles + JSON Schemas, seed config, UI primitives
-- [infra/terraform/](infra/terraform/) — Lambda + SnapStart + SQS + SSM + S3 + CloudFront + KMS CMKs
+- [infra/terraform/](infra/terraform/) — Lambda + SnapStart + SQS + S3 + CloudFront + KMS CMKs
 - [docs/adr/](docs/adr/) — ADRs 0001–0008 (immutable once accepted; supersede by a new ADR, never edit in place)
 - [.claude/](/.claude/) — Claude Code configuration (commands, plans)
 
@@ -146,7 +146,8 @@ The [Makefile](Makefile) is the single source of truth — CI calls the same tar
 - **Frontend:** Lint/test targets silently skip until `frontend/package-lock.json` exists (`FRONTEND_READY` gate in the Makefile). When adding frontend code, run `make bootstrap` first to materialize the lockfile.
 - **OpenAPI regen:** Always via `make docs` or [/make-docs](.claude/commands/make-docs.md) — it pins `info.version` to `1.0.0` and regenerates `frontend/src/api/schema.d.ts`. Never hand-edit [packages/contracts/openapi.json](packages/contracts/openapi.json).
 - **Alembic revision:** `make migrate-rev MSG="add foo table"`. Always run `make migrate` locally before committing a new revision to confirm it upgrades + downgrades cleanly.
-- **Local services:** `docker compose up -d` brings up Postgres (5432) and LocalStack (4566, serves SQS/SSM/S3/KMS/events/scheduler). `make bootstrap` does this for you.
+- **Local services:** `docker compose up -d` brings up Postgres (5432) and LocalStack (4566, serves SQS/S3/KMS/events/scheduler). `make bootstrap` does this for you.
+- **Secrets:** Briefed uses Infisical only. `make dev`, `make migrate`, and `make migrate-rev` must run through the Makefile so secret-bearing processes execute under `infisical run`. Do not add `.env`, Akeyless, SSM, direct shell exports, or another secret source for application credentials. `.env` may contain only Infisical selector metadata (`BRIEFED_INFISICAL_*`).
 
 ---
 
@@ -159,7 +160,7 @@ The backend image ships three entrypoints selected by `BRIEFED_RUNTIME` (see [ba
 - `lambda-api` — [backend/app/lambda_api.py](backend/app/lambda_api.py) wraps the FastAPI app with Mangum behind a Lambda Function URL + CloudFront (ADR 0003).
 - `lambda-worker` / `lambda-fanout` — [backend/app/lambda_worker.py](backend/app/lambda_worker.py) exposes `sqs_dispatcher` (routes by source queue ARN to handlers in [backend/app/workers/handlers/](backend/app/workers/handlers/)) and `fanout_handler`.
 
-**SnapStart-friendly init matters.** Settings hydration (SSM) and `structlog.configure` run at module import, not inside a factory, so SnapStart snapshots a fully-initialized process. Keep module-level imports minimal in lambda_api/lambda_worker; defer heavy imports (boto3, httpx, `google.generativeai`) to the handler body — the existing per-file `ruff` ignores (`PLC0415`) document where this is intentional.
+**SnapStart-friendly init matters.** Settings validation and `structlog.configure` run at module import, not inside a factory, so SnapStart snapshots a fully-initialized process after Infisical has injected environment variables. Keep module-level imports minimal in lambda_api/lambda_worker; defer heavy imports (boto3, httpx, `google.generativeai`) to the handler body — the existing per-file `ruff` ignores (`PLC0415`) document where this is intentional.
 
 ### The daily pipeline (SQS fan-out)
 EventBridge Scheduler → `fanout_handler` → enumerates `connected_accounts` → enqueues one `IngestMessage` per account → downstream workers fan out per stage. Each stage has its own SQS queue and its own handler; discriminated-union payloads live in [backend/app/workers/messages.py](backend/app/workers/messages.py):
@@ -191,7 +192,7 @@ Providers implement [backend/app/llm/providers/base.py](backend/app/llm/provider
 ADR 0007 defines `MailboxProvider` in [backend/app/domain/providers.py](backend/app/domain/providers.py). Gmail is the only concrete implementation today ([backend/app/services/gmail/](backend/app/services/gmail/)). If you add IMAP/Outlook, implement the interface — do not special-case Gmail further in pipelines.
 
 ### Config & secrets
-`pydantic-settings` `Settings` in [backend/app/core/config.py](backend/app/core/config.py), accessed via `get_settings()` (memoized). In Lambda runtimes it pulls secrets from SSM at cold-start via `_SSM_FIELD_MAP`; missing required secrets fail init hard. Locally it reads `.env` (template at [.env.example](.env.example)). **Never call `os.getenv` in business logic** — route through `Settings` so tests + SSM hydration keep working.
+`pydantic-settings` `Settings` in [backend/app/core/config.py](backend/app/core/config.py), accessed via `get_settings()` (memoized). Briefed uses Infisical as the only source for application secrets. Locally, Make targets wrap secret-bearing commands in `infisical run` using project `cbd87e9b-3963-4906-b8cc-d479ff5192ed`, env `dev`, path `/development` by default; production uses env `prod`, path `/production`. In Lambda runtimes, missing required Infisical-injected secrets fail init hard. `.env` is not read by the backend and may contain only Infisical selector metadata for local Make targets. **Never call `os.getenv` in business logic** — route through `Settings` so tests + Infisical injection keep working.
 
 ### Release policy
 ADR 0006 made release 1.0.0 **recommend-only**: the agent never clicks unsubscribe / archives / sends on the user's behalf. Two narrow, explicit writes have since superseded it for one action each, each gated and documented in its own ADR: **ADR 0013** permits user-initiated Gmail mark-read (`gmail.modify`), and **ADR 0014** permits user-initiated unsubscribe execution behind the `FeatureConfig.unsubscribe_execute` flag (default off; SSRF-hardened; only via the sender-advertised `List-Unsubscribe`; no new Gmail scope). If you add another destructive action path, it must be gated behind an explicit user confirmation flow and documented in a new ADR.

@@ -26,16 +26,35 @@ RUFF ?= $(PYTHON) -m ruff
 UVICORN ?= $(PYTHON) -m uvicorn
 VULTURE ?= $(PYTHON) -m vulture
 PROMPTFOO ?= npx --yes promptfoo@0.121.13
+INFISICAL ?= infisical
 
 export PYTHONPATH := backend:$(PYTHONPATH)
 
+# ``.env`` is allowed only for Infisical selector metadata. Application
+# secrets must live in Infisical and be injected through ``infisical run``.
 ifneq (,$(wildcard .env))
 include .env
-export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
 endif
-ifneq ($(BRIEFED_OPENROUTER_API_KEY),)
-export OPENROUTER_API_KEY ?= $(BRIEFED_OPENROUTER_API_KEY)
+ifeq ($(strip $(BRIEFED_ENV)),)
+BRIEFED_ENV := local
 endif
+ifeq ($(strip $(BRIEFED_RUNTIME)),)
+BRIEFED_RUNTIME := local
+endif
+ifeq ($(strip $(BRIEFED_INFISICAL_PROJECT_ID)),)
+BRIEFED_INFISICAL_PROJECT_ID := cbd87e9b-3963-4906-b8cc-d479ff5192ed
+endif
+ifeq ($(strip $(BRIEFED_INFISICAL_ENVIRONMENT)),)
+BRIEFED_INFISICAL_ENVIRONMENT := dev
+endif
+ifeq ($(strip $(BRIEFED_INFISICAL_SECRET_PATH)),)
+BRIEFED_INFISICAL_SECRET_PATH := /development
+endif
+ifeq ($(strip $(BRIEFED_INFISICAL_DOMAIN)),)
+BRIEFED_INFISICAL_DOMAIN := https://app.infisical.com/api
+endif
+INFISICAL_RUN = $(INFISICAL) run --projectId $(BRIEFED_INFISICAL_PROJECT_ID) --env $(BRIEFED_INFISICAL_ENVIRONMENT) --path $(BRIEFED_INFISICAL_SECRET_PATH) --domain $(BRIEFED_INFISICAL_DOMAIN) --silent --
+export BRIEFED_ENV BRIEFED_RUNTIME BRIEFED_INFISICAL_PROJECT_ID BRIEFED_INFISICAL_ENVIRONMENT BRIEFED_INFISICAL_SECRET_PATH
 
 # Frontend scaffolding landed in Phase 6 (sources + tsconfig + primitives).
 # CI still keys frontend-side targets off the lockfile so a clean clone
@@ -61,15 +80,36 @@ endif
 	docker compose up -d
 
 .PHONY: dev
-dev: ## Run backend + frontend with hot-reload (requires docker-compose services)
-	docker compose up -d postgres
-ifdef FRONTEND_READY
-	( $(UVICORN) app.main:app --app-dir backend --reload & \
-	  npm --workspace frontend run dev & \
-	  wait )
-else
-	$(UVICORN) app.main:app --app-dir backend --reload
-endif
+dev: bootstrap require-infisical _wait-postgres migrate ## Install deps, start services, fetch Infisical secrets, migrate DB, and run backend + frontend
+	@if [ -f package-lock.json ]; then \
+	  ( $(INFISICAL_RUN) $(UVICORN) app.main:app --app-dir backend --reload & \
+	    npm --workspace frontend run dev & \
+	    wait ); \
+	else \
+	  $(INFISICAL_RUN) $(UVICORN) app.main:app --app-dir backend --reload; \
+	fi
+
+.PHONY: require-infisical
+require-infisical:
+	@command -v $(INFISICAL) >/dev/null || (echo "Infisical CLI is required. Install it, then run 'infisical login'." && exit 1)
+	@$(INFISICAL) login status --domain $(BRIEFED_INFISICAL_DOMAIN) --silent >/dev/null || (echo "Infisical CLI is not authenticated. Run 'infisical login'." && exit 1)
+
+.PHONY: _wait-postgres
+_wait-postgres:
+	@printf "==> Waiting for local Postgres"
+	@for _ in {1..30}; do \
+	  status=$$(docker inspect -f '{{.State.Health.Status}}' briefed-postgres 2>/dev/null || true); \
+	  if [ "$$status" = "healthy" ]; then \
+	    echo " ready"; \
+	    exit 0; \
+	  fi; \
+	  printf "."; \
+	  sleep 1; \
+	done; \
+	echo ""; \
+	docker compose ps postgres; \
+	echo "Postgres did not become healthy in time."; \
+	exit 1
 
 .PHONY: clean
 clean: ## Remove build + test + coverage artifacts
@@ -205,13 +245,13 @@ link-check: ## Verify every relative link in README + docs/** resolves (Phase 9 
 # --------------------------------------------------------------------------- #
 
 .PHONY: migrate
-migrate: ## Apply Alembic migrations (head)
-	$(ALEMBIC) -c backend/alembic.ini upgrade head
+migrate: require-infisical ## Apply Alembic migrations (head) with Infisical secrets
+	$(INFISICAL_RUN) $(ALEMBIC) -c backend/alembic.ini upgrade head
 
 .PHONY: migrate-rev
-migrate-rev: ## alembic revision --autogenerate -m "<msg>"; pass MSG=...
+migrate-rev: require-infisical ## alembic revision --autogenerate -m "<msg>"; pass MSG=...
 	@test -n "$(MSG)" || (echo "usage: make migrate-rev MSG='your message'" && exit 1)
-	$(ALEMBIC) -c backend/alembic.ini revision --autogenerate -m "$(MSG)"
+	$(INFISICAL_RUN) $(ALEMBIC) -c backend/alembic.ini revision --autogenerate -m "$(MSG)"
 
 # --------------------------------------------------------------------------- #
 # Security                                                                    #

@@ -121,8 +121,6 @@ convention = "google"
 # Alembic scaffolding — env.py shape + versions/ boilerplate don't fit our docstring / import policy.
 "backend/alembic/env.py" = ["I001", "ANN"]
 "backend/alembic/versions/*.py" = ["D", "ANN", "I001"]
-# ssm_secrets.py: boto3 requires camelCase kwargs (Names, WithDecryption).
-"backend/app/integrations/ssm_secrets.py" = ["N803"]
 # core/security.py + ingestion/storage.py + workers/handlers/fanout.py mirror boto3 kwargs
 # (KeyId, Plaintext, Body, QueueUrl, MessageBody, ...) — we cannot rename them.
 "backend/app/core/security.py" = ["N803"]

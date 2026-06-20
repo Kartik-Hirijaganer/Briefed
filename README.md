@@ -101,7 +101,7 @@ flowchart LR
 
 - **`BRIEFED_RUNTIME`** selects `local` (uvicorn), `lambda-api` (Mangum), or `lambda-worker` / `lambda-fanout` (SQS dispatcher) from one codebase.
 - **Typed message contracts** — every queue payload is a frozen Pydantic discriminated union (`extra="forbid"`); no message shapes are invented inline.
-- **SnapStart-friendly init** — settings and logging hydrate at module import so SnapStart snapshots a warm process; heavy SDK imports are deferred to handler bodies.
+- **SnapStart-friendly init** — settings validate and logging configures at module import so SnapStart snapshots a warm process; heavy SDK imports are deferred to handler bodies.
 
 ## Built with
 
@@ -111,20 +111,24 @@ flowchart LR
 | **AI / LLM** | OpenRouter routing — Gemini 2.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
 | **Frontend** | React 18 · TypeScript · Vite · PWA (Workbox + `vite-plugin-pwa`) · Dexie · TanStack Query · Framer Motion |
 | **Data** | Supabase Postgres (asyncpg via the pooler) · two customer-managed KMS CMKs |
-| **Infra & CI** | AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
+| **Infra & CI** | AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · Infisical · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
 
 ## Quick start
 
-Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**.
+Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**, **Infisical CLI**.
 
 ```bash
 git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
-cp .env.example .env        # fill in BRIEFED_OPENROUTER_API_KEY + OAuth creds; other values optional
-make bootstrap              # installs deps, starts docker-compose services
-make migrate                # apply all Alembic migrations
-make dev                    # backend on :8000, frontend on :5173
+infisical login             # authenticate to the Briefed Infisical organization once
+make dev                    # install deps, start services, migrate DB, then run backend + frontend
 ```
+
+Application secrets live in Infisical, not `.env`. Local defaults target project
+`cbd87e9b-3963-4906-b8cc-d479ff5192ed`, env `dev`, path `/development`;
+production secrets are under env `prod`, path `/production`. Copy
+`.env.example` to `.env` only when you need to override those Infisical selector
+values locally.
 
 Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
@@ -136,7 +140,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 
 - **Envelope encryption, per row.** Two customer-managed KMS CMKs (one for OAuth-token wrapping, one for email content); a per-row data key; the encryption context binds `{user_id, table, row_id}`, so a leaked ciphertext can't be replayed across rows or users. → [ADR 0008](docs/adr/0008-kms-cmk-for-token-wrap-key.md), [`core/security.py`](backend/app/core/security.py), [`core/content_crypto.py`](backend/app/core/content_crypto.py)
 - **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain, 3 retries (exponential backoff + jitter, retryable-only), a circuit breaker that trips after 5 consecutive failures, per-model hard caps (Haiku at 100 calls/day), and per-call cost/token logging. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
-- **SnapStart cold-start discipline.** Settings and logging hydrate at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
+- **SnapStart cold-start discipline.** Settings validate and logging configures at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
 - **A decoupled pipeline with typed contracts.** SQS fan-out per stage; every message is a frozen, `extra="forbid"` Pydantic discriminated union — no inline message shapes anywhere. → [`workers/messages.py`](backend/app/workers/messages.py)
 - **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; later destructive paths are narrow, explicit, gated, and documented in ADRs. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0013](docs/adr/0013-gmail-mark-read-write-scope.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)
 - **Operability rehearsed, not assumed.** Blue/green Lambda alias deploys; rollback is a single `update-alias`; chaos drills cover DLQ replay, secret rotation, KMS-key revocation, and the LLM circuit breaker; restore-from-backup is drilled against a fresh Supabase project; every deploy writes an immutable `release_metadata` audit row. → [`docs/operations/`](docs/operations/), [`deploy-prod.yml`](.github/workflows/deploy-prod.yml)
@@ -162,7 +166,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 │   ├── prompts/        Versioned LLM prompt bundles + JSON Schemas
 │   ├── config/         Runtime YAML config, LLM catalog, seeds, schemas
 │   └── ui/             Design tokens + reusable React primitives
-├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
+├── infra/terraform/    Lambda + SnapStart + SQS + S3 + CloudFront +
 │                       WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
 │   ├── adr/            Architecture Decision Records (0001–0014)
@@ -199,7 +203,7 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 | Command              | What it does                                                           |
 |----------------------|------------------------------------------------------------------------|
 | `make bootstrap`     | Install Python + Node deps; start docker-compose services.             |
-| `make dev`           | Run backend + frontend with hot-reload (Postgres via docker-compose).  |
+| `make dev`           | Install deps, start services, fetch Infisical secrets, migrate DB, then run backend + frontend. |
 | `make test`          | Run pytest + vitest and print a unified summary.                       |
 | `make lint`          | Ruff + mypy + ESLint + Prettier check.                                 |
 | `make lint-tokens`   | Fail if raw hex / `rgb()` colors appear outside `tokens.css` (theme guard). |
@@ -208,7 +212,7 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 | `make docs`          | Regenerate `packages/contracts/openapi.json` + frontend TS client.     |
 | `make e2e`           | Playwright e2e (sets `PLAYWRIGHT=1`).                                  |
 | `make eval`          | Promptfoo prompt evals via pinned `npx` (sets `EVAL=1`).               |
-| `make migrate`       | `alembic upgrade head`.                                                |
+| `make migrate`       | Fetch Infisical secrets, then run `alembic upgrade head`.              |
 | `make secrets-lint`  | `gitleaks detect` full-repo scan.                                      |
 | `make link-check`    | Verify every relative markdown link resolves.                          |
 | `make deploy-dev`    | `terraform apply` the dev environment (requires `IMAGE_URI=<ecr>...`). |
