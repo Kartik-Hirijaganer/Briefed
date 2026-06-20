@@ -41,6 +41,21 @@ endif
 ifeq ($(strip $(BRIEFED_RUNTIME)),)
 BRIEFED_RUNTIME := local
 endif
+ifeq ($(strip $(LOG_LEVEL)),)
+LOG_LEVEL := info
+endif
+ifeq ($(strip $(AWS_REGION)),)
+AWS_REGION := us-east-1
+endif
+ifeq ($(strip $(AWS_ENDPOINT_URL)),)
+AWS_ENDPOINT_URL := http://localhost:4566
+endif
+ifeq ($(strip $(AWS_ACCESS_KEY_ID)),)
+AWS_ACCESS_KEY_ID := test
+endif
+ifeq ($(strip $(AWS_SECRET_ACCESS_KEY)),)
+AWS_SECRET_ACCESS_KEY := test
+endif
 ifeq ($(strip $(BRIEFED_INFISICAL_PROJECT_ID)),)
 BRIEFED_INFISICAL_PROJECT_ID := cbd87e9b-3963-4906-b8cc-d479ff5192ed
 endif
@@ -53,7 +68,8 @@ endif
 ifeq ($(strip $(BRIEFED_INFISICAL_DOMAIN)),)
 BRIEFED_INFISICAL_DOMAIN := https://app.infisical.com/api
 endif
-INFISICAL_RUN = $(INFISICAL) run --projectId $(BRIEFED_INFISICAL_PROJECT_ID) --env $(BRIEFED_INFISICAL_ENVIRONMENT) --path $(BRIEFED_INFISICAL_SECRET_PATH) --domain $(BRIEFED_INFISICAL_DOMAIN) --silent --
+LOCAL_RUN_ENV = BRIEFED_ENV=$(BRIEFED_ENV) BRIEFED_RUNTIME=$(BRIEFED_RUNTIME) LOG_LEVEL=$(LOG_LEVEL) AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)
+INFISICAL_RUN = $(LOCAL_RUN_ENV) $(INFISICAL) run --projectId $(BRIEFED_INFISICAL_PROJECT_ID) --env $(BRIEFED_INFISICAL_ENVIRONMENT) --path $(BRIEFED_INFISICAL_SECRET_PATH) --domain $(BRIEFED_INFISICAL_DOMAIN) --silent --
 export BRIEFED_ENV BRIEFED_RUNTIME BRIEFED_INFISICAL_PROJECT_ID BRIEFED_INFISICAL_ENVIRONMENT BRIEFED_INFISICAL_SECRET_PATH
 
 # Frontend scaffolding landed in Phase 6 (sources + tsconfig + primitives).
@@ -78,6 +94,7 @@ ifneq (,$(wildcard package.json))
 	npm install
 endif
 	docker compose up -d
+	@$(MAKE) _ensure-local-kms
 
 .PHONY: dev
 dev: bootstrap require-infisical _wait-postgres migrate ## Install deps, start services, fetch Infisical secrets, migrate DB, and run backend + frontend
@@ -93,6 +110,10 @@ dev: bootstrap require-infisical _wait-postgres migrate ## Install deps, start s
 require-infisical:
 	@command -v $(INFISICAL) >/dev/null || (echo "Infisical CLI is required. Install it, then run 'infisical login'." && exit 1)
 	@$(INFISICAL) login status --domain $(BRIEFED_INFISICAL_DOMAIN) --silent >/dev/null || (echo "Infisical CLI is not authenticated. Run 'infisical login'." && exit 1)
+
+.PHONY: _ensure-local-kms
+_ensure-local-kms:
+	@$(LOCAL_RUN_ENV) $(PYTHON) backend/scripts/ensure_local_kms.py
 
 .PHONY: _wait-postgres
 _wait-postgres:

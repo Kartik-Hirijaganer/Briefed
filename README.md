@@ -4,7 +4,7 @@
 
 **Your inbox, triaged every morning — a ranked brief of what matters, summaries of the must-reads, and recommendations on what to mute. It never acts without your explicit confirmation.**
 
-[![Live demo](https://img.shields.io/badge/demo-live-success)](https://d2vki955e8ckrc.cloudfront.net/)
+[![Live demo](https://img.shields.io/badge/demo-live-success)](https://briefed-six.vercel.app/)
 [![Demo video](https://img.shields.io/badge/video-real%20session-blue)](#demo-video)
 [![CI](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml/badge.svg)](https://github.com/Kartik-Hirijaganer/Briefed/actions/workflows/ci.yml)
 ![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20gated-success)
@@ -17,7 +17,7 @@
 ![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-SnapStart-FF9900?logo=awslambda&logoColor=white)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 
-**[▶ Demo video](#demo-video)**  ·  **[Live demo](https://d2vki955e8ckrc.cloudfront.net/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
+**[▶ Demo video](#demo-video)**  ·  **[Live demo](https://briefed-six.vercel.app/)**  ·  [Why](#why-briefed-exists)  ·  [What it does](#what-it-does)  ·  [Architecture](#how-it-works)  ·  [Quick start](#quick-start)  ·  [Engineering highlights](#engineering-highlights)  ·  [Docs](#documentation)
 
 **Keywords:** AI email agent · Gmail triage · inbox zero · LLM pipeline · serverless SaaS · FastAPI · React PWA · AWS Lambda · Terraform · Supabase
 
@@ -69,7 +69,7 @@ The **digest above** is the home view — bucket filters at a glance, the full c
   <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions showing sender volume, engagement tags, and user-controlled bulk actions" width="820" />
 </div>
 
-▶ **Live demo:** https://d2vki955e8ckrc.cloudfront.net/
+▶ **Live demo:** https://briefed-six.vercel.app/
 
 ## How it works
 
@@ -132,7 +132,9 @@ values locally.
 
 Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
-The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
+Local frontend routes: `/` is the public homepage, `/demo` is synthetic read-only demo data, and `/app` is the authenticated dashboard.
+
+The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. It also starts Docker services and ensures the local LocalStack KMS aliases exist. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
 
 ## Engineering highlights
 
@@ -202,7 +204,7 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 
 | Command              | What it does                                                           |
 |----------------------|------------------------------------------------------------------------|
-| `make bootstrap`     | Install Python + Node deps; start docker-compose services.             |
+| `make bootstrap`     | Install Python + Node deps; start Docker services and local KMS aliases. |
 | `make dev`           | Install deps, start services, fetch Infisical secrets, migrate DB, then run backend + frontend. |
 | `make test`          | Run pytest + vitest and print a unified summary.                       |
 | `make lint`          | Ruff + mypy + ESLint + Prettier check.                                 |
