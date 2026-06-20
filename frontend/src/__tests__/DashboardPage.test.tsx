@@ -18,7 +18,8 @@ vi.mock('../api/client', async (importOriginal) => {
 vi.mock('../hooks/useFreshnessState', () => ({
   useFreshnessState: () => ({ state: 'fresh', lastKnownGoodAt: null }),
 }));
-vi.mock('../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
+const onlineMock = vi.hoisted(() => ({ value: true }));
+vi.mock('../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => onlineMock.value }));
 vi.mock('../hooks/usePullToRefresh', () => ({ usePullToRefresh: () => ({}) }));
 vi.mock('../hooks/useBreakpoint', () => ({ useBreakpoint: () => 'lg' }));
 vi.mock('../features/dashboard/ScanNowButton', () => ({
@@ -44,6 +45,17 @@ const makeEmail = (overrides: Partial<Schemas['EmailRow']> = {}): Schemas['Email
   summary_excerpt: 'Confirm the call agenda.',
   ...overrides,
 });
+
+const twoEmails = (): readonly Schemas['EmailRow'][] => [
+  makeEmail({ id: 'a', subject: 'Call tomorrow', sender: 'lead@example.com' }),
+  makeEmail({
+    id: 'b',
+    subject: 'Weekly newsletter',
+    sender: 'news@example.com',
+    bucket: 'good_to_read',
+    needs_review: false,
+  }),
+];
 
 const digest: Schemas['DigestToday'] = {
   generated_at: recentIso(),
@@ -90,6 +102,7 @@ describe('<DashboardPage>', () => {
   beforeEach(() => {
     apiMock.GET.mockReset();
     apiMock.POST.mockReset();
+    onlineMock.value = true;
   });
 
   it('renders the overview band: title, synced cost, filter pills, and scan control', async () => {
@@ -297,5 +310,172 @@ describe('<DashboardPage>', () => {
     await waitFor(() =>
       expect(screen.getByText(/could not load today's digest/i)).toBeInTheDocument(),
     );
+  });
+
+  it('renders a checkbox per row and a disabled mark-all button before any selection', async () => {
+    mockDashboardRequests({ emails: twoEmails() });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    expect(
+      screen.getByRole('checkbox', { name: /select all visible emails/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*call tomorrow/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('2 unread')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^mark all read$/i })).toBeDisabled();
+  });
+
+  it('select-all checks every row and marks every visible id', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    apiMock.POST.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('checkbox', { name: /select all visible emails/i }));
+
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*call tomorrow/i }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    ).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: /^mark all read$/i }));
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/emails/mark-read', {
+      body: { email_ids: ['a', 'b'] },
+    });
+  });
+
+  it('marking a subset posts only the checked ids and optimistically removes them', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    apiMock.POST.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    );
+
+    // The select-all header reflects the partial selection.
+    const selectAll = screen.getByRole('checkbox', { name: /select all visible emails/i });
+    expect((selectAll as HTMLInputElement).indeterminate).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: /^mark 1 read$/i }));
+    expect(apiMock.POST).toHaveBeenCalledWith('/api/v1/emails/mark-read', {
+      body: { email_ids: ['b'] },
+    });
+    await waitFor(() => expect(screen.queryByText('Weekly newsletter')).not.toBeInTheDocument());
+    // The unchecked row stays in the list.
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*call tomorrow/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces a partial-failure banner from the bulk response', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    apiMock.POST.mockResolvedValue({
+      data: {
+        marked: 1,
+        failed: [{ email_id: 'b', provider_message_id: 'm-b', reason: 'missing' }],
+      },
+    });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('checkbox', { name: /select all visible emails/i }));
+    await user.click(screen.getByRole('button', { name: /^mark all read$/i }));
+
+    expect(await screen.findByText(/could not be updated/i)).toBeInTheDocument();
+  });
+
+  it('restores the row and the selection when the bulk request fails', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    apiMock.POST.mockResolvedValue({ error: { detail: 'boom' }, response: { status: 500 } });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    );
+    await user.click(screen.getByRole('button', { name: /^mark 1 read$/i }));
+
+    expect(await screen.findByText(/could not mark mail read/i)).toBeInTheDocument();
+    const restored = await screen.findByRole('checkbox', {
+      name: /select email from .*weekly newsletter/i,
+    });
+    expect(restored).toBeChecked();
+  });
+
+  it('clears the selection when the bucket filter changes', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('checkbox', { name: /select email from .*call tomorrow/i }));
+    expect(screen.getByRole('button', { name: /^mark 1 read$/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /good-to-read/i }));
+
+    expect(await screen.findByRole('button', { name: /^mark all read$/i })).toBeDisabled();
+  });
+
+  it('clears the selection when the page changes', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails(), total: 50 });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('checkbox', { name: /select email from .*call tomorrow/i }));
+    expect(screen.getByRole('button', { name: /^mark 1 read$/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(await screen.findByRole('button', { name: /^mark all read$/i })).toBeDisabled();
+  });
+
+  it('toggles bulk selection without opening the reader; the row body still opens it', async () => {
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    renderPage();
+
+    // Default reader selection is the first row.
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+
+    // Checking the second row does not change the reading pane.
+    await user.click(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    );
+    expect(
+      screen.getByRole('checkbox', { name: /select email from .*weekly newsletter/i }),
+    ).toBeChecked();
+    expect(screen.getByRole('heading', { name: /call tomorrow/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /weekly newsletter/i })).not.toBeInTheDocument();
+
+    // Clicking the row body opens it in the reader.
+    await user.click(screen.getByRole('button', { name: /weekly newsletter/i }));
+    expect(await screen.findByRole('heading', { name: /weekly newsletter/i })).toBeInTheDocument();
+  });
+
+  it('disables bulk and single mark-read while offline', async () => {
+    onlineMock.value = false;
+    const user = userEvent.setup();
+    mockDashboardRequests({ emails: twoEmails() });
+    renderPage();
+
+    await screen.findByRole('heading', { name: /call tomorrow/i });
+    await user.click(screen.getByRole('checkbox', { name: /select all visible emails/i }));
+
+    expect(screen.getByRole('button', { name: /^mark all read$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^mark read$/i })).toBeDisabled();
   });
 });

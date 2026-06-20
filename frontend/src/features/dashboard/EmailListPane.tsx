@@ -91,8 +91,7 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs text-fg-muted">{total} unread</span>
+      <div className="flex items-center justify-end px-1">
         <span className="text-xs text-fg-faint">{SORT_OPTIONS[0]}</span>
       </div>
 
@@ -106,6 +105,7 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
       ) : emails.length > 0 ? (
         <>
           <EmailSelectionBar
+            total={total}
             selectedCount={selectedCount}
             allSelected={allSelected}
             indeterminate={someSelected && !allSelected}
