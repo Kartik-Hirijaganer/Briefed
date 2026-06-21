@@ -158,7 +158,7 @@ def build_authorize_url(
     """Build the Google consent-screen URL for the start-of-flow redirect.
 
     Args:
-        client_id: Google OAuth client id (from SSM).
+        client_id: Google OAuth client id from Infisical.
         redirect_uri: URL Google should redirect back to (must match the
             URI registered in the Cloud console).
         state: Opaque state token the caller stored in a signed cookie.

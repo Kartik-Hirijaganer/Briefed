@@ -23,11 +23,10 @@ from sqlalchemy.pool import StaticPool
 from app.db.models import Base
 
 # Tests assume KMS aliases + AWS creds are unset, matching CI's environment.
-# Locally, ``.env`` populates these and ``~/.aws/credentials`` supplies creds,
-# which routes integration tests through real KMS instead of the unset-alias
-# fallback paths. Empty strings beat the ``.env`` values because
-# ``pydantic-settings`` reads env vars *after* the env_file. CI never sets
-# these, so the fixture is a no-op there.
+# Locally, Infisical can inject these and ``~/.aws/credentials`` can supply
+# creds, which routes integration tests through real KMS instead of the
+# unset-alias fallback paths. CI never sets these, so the fixture is a no-op
+# there.
 _POLLUTED_ENV_VARS: tuple[str, ...] = (
     "BRIEFED_TOKEN_WRAP_KEY_ALIAS",
     "BRIEFED_CONTENT_KEY_ALIAS",
@@ -37,7 +36,7 @@ _POLLUTED_ENV_VARS: tuple[str, ...] = (
 
 @pytest.fixture(autouse=True, scope="session")
 def _scrub_local_env_pollution() -> Iterator[None]:
-    """Override developer ``.env`` values that diverge from CI defaults."""
+    """Override developer Infisical values that diverge from CI defaults."""
     snapshot = {key: os.environ.get(key) for key in _POLLUTED_ENV_VARS}
     for key in _POLLUTED_ENV_VARS:
         if key.startswith("AWS_"):
