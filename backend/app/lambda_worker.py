@@ -25,10 +25,9 @@ from app.core.logging import get_logger
 from app.core.sentry import configure_sentry
 from app.core.tracing import configure_tracing
 
-# SnapStart-friendly module init: load settings (SSM hydration happens
-# here on cold start) + configure logging + tracing + sentry before any
-# handler runs. All four calls are idempotent — repeated imports during
-# tests are cheap, and SnapStart restores skip the work entirely.
+# SnapStart-friendly module init: load settings + configure logging + tracing
+# + sentry before any handler runs. All four calls are idempotent — repeated
+# imports during tests are cheap, and SnapStart restores skip the work entirely.
 _settings = get_settings()
 _app_config = get_app_config()
 configure_tracing(_settings)

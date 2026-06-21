@@ -10,9 +10,9 @@ Flow (plan §14 Phase 1 — "OAuth start/callback routers"):
   :class:`ConnectedAccount` + :class:`OAuthToken`, and sets the signed
   session cookie before redirecting back to the UI.
 
-Secrets access: the OAuth client id + secret come from SSM via
+Secrets access: the OAuth client id + secret come from Infisical-injected
 :class:`app.core.config.Settings`. The KMS CMK alias comes from
-``settings.token_wrap_key_alias`` injected by Terraform.
+``settings.token_wrap_key_alias``.
 """
 
 from __future__ import annotations
