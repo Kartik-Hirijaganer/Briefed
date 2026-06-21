@@ -1,7 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Briefed">
-  <rect width="32" height="32" rx="6" fill="#2563eb" />
-  <path
-    fill="#ffffff"
-    d="M9 10h14v3H9zm0 4h14v3H9zm0 4h10v3H9z"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Briefed">
+  <rect width="100" height="100" rx="24" fill="#5645d4"></rect>
+  <g fill="#ffffff">
+    <rect x="22" y="18" width="54" height="11" rx="5.5"></rect>
+    <rect x="22" y="36" width="42" height="11" rx="5.5" opacity="0.78"></rect>
+    <rect x="22" y="54" width="30" height="11" rx="5.5" opacity="0.54"></rect>
+    <rect x="22" y="72" width="18" height="11" rx="5.5" opacity="0.32"></rect>
+  </g>
 </svg>
