@@ -21,8 +21,8 @@ const wrap = (initial: string): JSX.Element => {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[initial]}>
         <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<div data-testid="page">home</div>} />
+          <Route path="/app" element={<AppShell />}>
+            <Route index element={<div data-testid="page">home</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -32,7 +32,7 @@ const wrap = (initial: string): JSX.Element => {
 
 describe('<AppShell>', () => {
   it('renders sidebar, bottom tab bar, version, offline banners and outlet content', () => {
-    render(wrap('/'));
+    render(wrap('/app'));
     // The sidebar brand is now an icon-rail "B" glyph link (accessible name "Briefed").
     expect(screen.getByRole('link', { name: /briefed/i })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: /primary mobile/i })).toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '../api/client';
+import { api, DemoDisabledError } from '../api/client';
 
 const jsonResponse = new Response(
   JSON.stringify({
@@ -72,7 +72,7 @@ describe('api client payload hash middleware', () => {
     Object.defineProperty(window, 'location', {
       value: {
         ...window.location,
-        pathname: '/settings/accounts',
+        pathname: '/app/settings/accounts',
         search: '?tab=accounts',
         hash: '#add',
         assign,
@@ -92,7 +92,96 @@ describe('api client payload hash middleware', () => {
     });
 
     expect(assign).toHaveBeenCalledWith(
-      '/login?next=%2Fsettings%2Faccounts%3Ftab%3Daccounts%23add',
+      '/login?next=%2Fapp%2Fsettings%2Faccounts%3Ftab%3Daccounts%23add',
     );
+  });
+
+  it('redirects unauthenticated /app home responses to login without next', async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...window.location,
+        pathname: '/app',
+        search: '',
+        hash: '',
+        assign,
+      },
+      configurable: true,
+    });
+    const fetchSpy = vi.fn(async (): Promise<Response> => {
+      return new Response(JSON.stringify({ detail: 'not authenticated' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    await api.GET('/api/v1/accounts', {
+      baseUrl: 'https://briefed.test',
+      fetch: fetchSpy as unknown as typeof fetch,
+    });
+
+    expect(assign).toHaveBeenCalledWith('/login');
+  });
+
+  it('blocks every demo API GET before fetch or login redirect', async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...window.location,
+        pathname: '/demo/history',
+        search: '',
+        hash: '',
+        assign,
+      },
+      configurable: true,
+    });
+    const fetchSpy = vi.fn(async (): Promise<Response> => {
+      return new Response(JSON.stringify({ accounts: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    await expect(
+      api.GET('/api/v1/accounts', {
+        baseUrl: 'https://briefed.test',
+        fetch: fetchSpy as unknown as typeof fetch,
+      }),
+    ).rejects.toBeInstanceOf(DemoDisabledError);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('blocks demo API mutations before fetch or login redirect', async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...window.location,
+        pathname: '/demo',
+        search: '',
+        hash: '',
+        assign,
+      },
+      configurable: true,
+    });
+    const fetchSpy = vi.fn(async (): Promise<Response> => {
+      return jsonResponse.clone();
+    });
+
+    await expect(
+      api.POST('/api/v1/runs', {
+        baseUrl: 'https://briefed.test',
+        fetch: fetchSpy as unknown as typeof fetch,
+        body: {
+          kind: 'manual',
+          mode: 'incremental',
+          include_user_overrides: false,
+        },
+      }),
+    ).rejects.toBeInstanceOf(DemoDisabledError);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
   });
 });
