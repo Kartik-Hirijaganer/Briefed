@@ -33,7 +33,7 @@ def configure_sentry(settings: Settings | None = None) -> None:
 
     Args:
         settings: Optional pre-resolved :class:`Settings`. Tests pass a
-            stubbed instance to avoid the SSM round-trip.
+            stubbed instance to avoid mutating process environment.
     """
     global _CONFIGURED  # noqa: PLW0603 — module-level guard, intentional.
     if _CONFIGURED:

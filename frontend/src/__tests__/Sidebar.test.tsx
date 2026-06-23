@@ -20,24 +20,22 @@ describe('<Sidebar>', () => {
 
   it('renders the brand glyph and every primary nav target', () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <Sidebar />
       </MemoryRouter>,
     );
-    // The wordmark is gone; the icon rail uses a "B" glyph link with an
-    // accessible name instead.
-    expect(screen.getByRole('link', { name: /briefed/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /briefed/i })).toHaveAttribute('href', '/app');
     for (const item of NAV_ITEMS) {
       expect(screen.getByRole('link', { name: new RegExp(item.label, 'i') })).toHaveAttribute(
         'href',
-        item.to,
+        item.to ? `/app/${item.to}` : '/app',
       );
     }
   });
 
   it('marks the active route with the accent class', () => {
     render(
-      <MemoryRouter initialEntries={['/history']}>
+      <MemoryRouter initialEntries={['/app/history']}>
         <Sidebar />
       </MemoryRouter>,
     );
@@ -47,7 +45,7 @@ describe('<Sidebar>', () => {
 
   it('gives every icon-only link a non-empty accessible name and a title tooltip', () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <Sidebar />
       </MemoryRouter>,
     );
@@ -63,7 +61,7 @@ describe('<Sidebar>', () => {
   it('logs out from the sidebar action', async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/app']}>
         <Sidebar />
       </MemoryRouter>,
     );
