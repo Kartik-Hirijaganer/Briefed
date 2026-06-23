@@ -3,6 +3,8 @@ import { ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { Schemas } from '../../api/types';
+import { useDemoMode } from '../../demo/DemoModeProvider';
+import { useAppPath } from '../../routing/routeBase';
 
 /**
  * Props for {@link ReadingPaneActions}.
@@ -32,20 +34,29 @@ export interface ReadingPaneActionsProps {
  */
 export function ReadingPaneActions(props: ReadingPaneActionsProps): JSX.Element {
   const { email, onMarkRead, markReadPending, hasNextMustRead, onNextMustRead, online } = props;
+  const { isDemo } = useDemoMode();
+  const appPath = useAppPath();
+  const markReadDisabled = isDemo || !online || markReadPending;
+  const markReadTitle = isDemo ? 'Disabled in demo' : online ? undefined : "You're offline";
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button
         variant="primary"
         size="sm"
         loading={markReadPending}
-        disabled={!online}
-        title={online ? undefined : "You're offline"}
-        onClick={() => onMarkRead(email.id)}
+        disabled={markReadDisabled}
+        title={markReadTitle}
+        onClick={() => {
+          if (!markReadDisabled) onMarkRead(email.id);
+        }}
       >
-        Mark read
+        {isDemo ? 'Disabled in demo' : 'Mark read'}
       </Button>
       <OpenInGmailLink accountEmail={email.account_email} threadId={email.thread_id} />
-      <Link to="/unsubscribe" className="text-xs text-link underline-offset-4 hover:underline">
+      <Link
+        to={appPath('unsubscribe')}
+        className="text-xs text-link underline-offset-4 hover:underline"
+      >
         Unsubscribe
       </Link>
       {hasNextMustRead ? (
