@@ -29,6 +29,8 @@ export interface UnsubscribeSelectionBarProps {
   readonly primaryLoading: boolean;
   /** Optional tooltip explaining a disabled primary (e.g. offline). */
   readonly primaryTooltip?: string | undefined;
+  /** Disable every selection/action control in the bar. */
+  readonly disabled?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function UnsubscribeSelectionBar(props: UnsubscribeSelectionBarProps): JS
     primaryDisabled,
     primaryLoading,
     primaryTooltip,
+    disabled = false,
   } = props;
 
   const checkboxRef = useRef<HTMLInputElement>(null);
@@ -68,6 +71,7 @@ export function UnsubscribeSelectionBar(props: UnsubscribeSelectionBarProps): JS
           ref={checkboxRef}
           type="checkbox"
           checked={allSelected}
+          disabled={disabled}
           onChange={(event) => onToggleAll(event.target.checked)}
           aria-label="Select all senders"
         />
@@ -76,16 +80,22 @@ export function UnsubscribeSelectionBar(props: UnsubscribeSelectionBarProps): JS
         </span>
       </label>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={onKeep} disabled={keepDisabled}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onKeep}
+          disabled={disabled || keepDisabled}
+          title={disabled ? 'Disabled in demo' : undefined}
+        >
           Keep selected
         </Button>
         <Button
           variant="destructive"
           size="sm"
           onClick={onPrimary}
-          disabled={primaryDisabled}
+          disabled={disabled || primaryDisabled}
           loading={primaryLoading}
-          title={primaryTooltip}
+          title={disabled ? 'Disabled in demo' : primaryTooltip}
         >
           {primaryLabel}
         </Button>

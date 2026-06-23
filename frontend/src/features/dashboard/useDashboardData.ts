@@ -10,8 +10,10 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import type { FreshnessState } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
+import { digestToday, emails as emailsQueryKeyFactory } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
 import type { Bucket } from '../../config/presentation';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { useFreshnessState } from '../../hooks/useFreshnessState';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -137,6 +139,7 @@ export interface DashboardData {
  * @returns The {@link DashboardData} bundle consumed by the route shell.
  */
 export function useDashboardData(): DashboardData {
+  const { isDemo } = useDemoMode();
   const online = useOnlineStatus();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -148,10 +151,10 @@ export function useDashboardData(): DashboardData {
     activeBucket === null
       ? { offset, limit: EMAIL_LIMIT }
       : { bucket: activeBucket, offset, limit: EMAIL_LIMIT };
-  const emailsQueryKey = ['emails', emailQueryParams] as const;
+  const emailsQueryKey = emailsQueryKeyFactory(emailQueryParams);
 
   const digestQuery = useQuery({
-    queryKey: ['digest-today'],
+    queryKey: digestToday(),
     queryFn: async () => unwrap(await api.GET('/api/v1/digest/today')),
     staleTime: DIGEST_STALE_MS,
   });
@@ -166,7 +169,7 @@ export function useDashboardData(): DashboardData {
     staleTime: EMAIL_STALE_MS,
   });
   const freshness = useFreshnessState({
-    queryKey: ['digest-today'],
+    queryKey: digestToday(),
     staleTime: DIGEST_STALE_MS,
   });
 
@@ -183,7 +186,7 @@ export function useDashboardData(): DashboardData {
         }),
       ),
     onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ['emails'] });
+      await queryClient.cancelQueries({ queryKey: emailsQueryKeyFactory() });
       const previousEmails =
         queryClient.getQueryData<Schemas['EmailsListResponse']>(emailsQueryKey);
       const ids = new Set(variables.emailIds);
@@ -204,8 +207,8 @@ export function useDashboardData(): DashboardData {
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['digest-today'] });
-      void queryClient.invalidateQueries({ queryKey: ['emails'] });
+      void queryClient.invalidateQueries({ queryKey: digestToday() });
+      void queryClient.invalidateQueries({ queryKey: emailsQueryKeyFactory() });
     },
   });
 
@@ -216,13 +219,13 @@ export function useDashboardData(): DashboardData {
     ? (Date.now() - new Date(lastRunAt).getTime()) / (60 * 60 * 1000)
     : Infinity;
   const pullToRefresh = usePullToRefresh({
-    disabled: !online,
+    disabled: isDemo || !online,
     onRefresh: () => window.dispatchEvent(new Event(SCAN_NOW_EVENT)),
   });
   const emails = emailsQuery.data?.emails ?? EMPTY_EMAILS;
   const totalEmails = emailsQuery.data?.total ?? 0;
   const hasNextPage = offset + EMAIL_LIMIT < totalEmails;
-  const reconnectReturnTo = `${location.pathname}${location.search}${location.hash}` || '/';
+  const reconnectReturnTo = `${location.pathname}${location.search}${location.hash}` || '/app';
 
   const visibleIds = useMemo(() => emails.map((email) => email.id), [emails]);
   const selectedVisibleIds = visibleIds.filter((id) => selectedIds.has(id));
@@ -287,6 +290,7 @@ export function useDashboardData(): DashboardData {
   };
 
   const markOneRead = (emailId: string): void => {
+    if (isDemo) return;
     // Capture the next selection BEFORE the optimistic removal mutates the
     // list — the row after the marked one (or the previous when it was last).
     const index = emails.findIndex((email) => email.id === emailId);
@@ -311,6 +315,7 @@ export function useDashboardData(): DashboardData {
   const clearSelection = (): void => setSelectedIds(new Set<string>());
 
   const markSelectedRead = (): void => {
+    if (isDemo) return;
     const ids = selectedVisibleIds;
     if (ids.length === 0) return;
     const marked = new Set(ids);
