@@ -71,6 +71,8 @@ export interface paths {
          *         request: FastAPI request (used to compute the callback URL).
          *         return_to: Optional post-callback UI path (must be an internal
          *             absolute path, e.g. ``/settings/accounts``).
+         *         link: Whether this OAuth start should attach a mailbox to the
+         *             existing signed-in Briefed user.
          *         session_cookie: Existing signed session, when the caller is
          *             connecting another mailbox to the same user.
          *         settings: Cached :class:`Settings`.
@@ -1953,6 +1955,7 @@ export interface operations {
         parameters: {
             query?: {
                 return_to?: string | null;
+                link?: boolean;
             };
             header?: never;
             path?: never;
@@ -3025,7 +3028,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Unprocessable Entity */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
