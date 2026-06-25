@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Briefed — Project Rules
 
-Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 1.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · Infisical · React · PWA · AWS Lambda + SnapStart · Terraform.
+Personal AI email agent. Stack: Python · FastAPI · Pydantic · Gemini 2.5 Flash (primary) · Claude Haiku 4.5 (fallback) · Gmail API · Supabase · Infisical · React · PWA · AWS Lambda + SnapStart · Terraform.
 
 Monorepo layout:
 - [backend/](backend/) — FastAPI + Pydantic + LLM pipeline (Python 3.11+); also hosts the Lambda handlers
