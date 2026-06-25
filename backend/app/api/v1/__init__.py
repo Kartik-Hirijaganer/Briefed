@@ -17,6 +17,7 @@ from app.api.v1.accounts import router as accounts_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.emails import router as emails_router
 from app.api.v1.frontend import router as frontend_router
+from app.api.v1.legal import router as legal_router
 from app.api.v1.oauth import router as oauth_router
 from app.api.v1.profile import router as profile_router
 from app.api.v1.rubric import router as rubric_router
@@ -34,5 +35,6 @@ api_router.include_router(hygiene_router)
 api_router.include_router(emails_router)
 api_router.include_router(frontend_router)
 api_router.include_router(profile_router)
+api_router.include_router(legal_router)
 
 __all__ = ["api_router"]
