@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Briefed — Logo Directions</title>
+<style>
+  @font-face {
+    font-family: 'Inter Display';
+    src: url('fonts/InterDisplay-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Inter Display';
+    src: url('fonts/InterDisplay-Bold.woff2') format('woff2');
+    font-weight: 700; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Inter Display';
+    src: url('fonts/InterDisplay-Medium.woff2') format('woff2');
+    font-weight: 500; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Inter Variable';
+    src: url('fonts/InterVariable.woff2') format('woff2');
+    font-weight: 100 900; font-display: swap;
+  }
+  :root {
+    --accent: #5645d4;
+    --accent-hover: #4534b3;
+    --bg-canvas: #fafaf9;
+    --bg-surface: #ffffff;
+    --bg-muted: #f6f5f4;
+    --border: #e5e3df;
+    --border-strong: #c8c4be;
+    --fg: #37352f;
+    --fg-muted: #5d5b54;
+    --fg-faint: #787671;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: 'Inter Variable', system-ui, sans-serif; color: var(--fg); }
+
+  /* ---- brand card ---- */
+  .card { display: flex; flex-direction: column; align-items: center; padding: 28px 24px 24px; gap: 18px; }
+  .hero {
+    width: 132px; height: 132px; border-radius: 30px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 28px -10px rgba(86,69,212,0.55);
+  }
+  .variants { display: flex; gap: 12px; }
+  .tile {
+    width: 60px; height: 60px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tile.light { background: var(--bg-surface); border: 1px solid var(--border); }
+  .tile.mono { background: var(--bg-canvas); border: 1px solid var(--border); }
+
+  .lockup { display: flex; align-items: center; gap: 11px; padding: 4px 0; }
+  .lockup .mk {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  }
+  .wordmark {
+    font-family: 'Inter Display', sans-serif; font-weight: 600;
+    font-size: 30px; letter-spacing: -0.02em; color: var(--fg); line-height: 1;
+  }
+
+  .favstrip {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; background: var(--bg-muted); border-radius: 12px;
+  }
+  .favstrip .fav { background: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .fav.s32 { width: 32px; height: 32px; border-radius: 8px; }
+  .fav.s16 { width: 16px; height: 16px; border-radius: 4px; }
+  .favstrip .lbl { font-size: 11px; color: var(--fg-faint); letter-spacing: 0.02em; }
+
+  .meta { text-align: center; margin-top: 2px; }
+  .meta .nm {
+    font-family: 'Inter Display', sans-serif; font-weight: 600; font-size: 15px;
+    color: var(--fg); margin: 0 0 4px;
+  }
+  .meta .rat { font-size: 12.5px; line-height: 1.45; color: var(--fg-muted); margin: 0; max-width: 240px; }
+  .divider { width: 100%; height: 1px; background: var(--border); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="marks.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { createRoot } = ReactDOM;
+
+const DIRECTIONS = [
+  { id: 'ranked', name: 'Ranked Brief',
+    rat: 'Sorted bars descend must-read → waste. The four-way triage, made literal. Evolves the existing mark, now on-brand.' },
+  { id: 'mono', name: 'Monogram',
+    rat: 'A confident typographic “B” in Inter Display. Type-forward and Notion-native — reads instantly at any size.' },
+  { id: 'daybreak', name: 'Daybreak',
+    rat: 'A sunrise over the brief line. Owns “triaged every morning” — warm, calm, distinct from inbox clichés.' },
+  { id: 'focus', name: 'Focus',
+    rat: 'A brief bracketing the one signal worth your attention. Abstract, premium, and unmistakably not an envelope.' },
+  { id: 'distill', name: 'Distill',
+    rat: 'Noise converges to a single distilled point. The product thesis: a hundred that don’t, a few that matter.' },
+];
+
+function BrandCard({ dir }) {
+  return (
+    <div className="card">
+      <div className="hero"><Mark id={dir.id} c="#ffffff" size={84} /></div>
+
+      <div className="variants">
+        <div className="tile light"><Mark id={dir.id} c="#5645d4" size={38} /></div>
+        <div className="tile mono"><Mark id={dir.id} c="#37352f" size={38} /></div>
+      </div>
+
+      <div className="divider"></div>
+
+      <div className="lockup">
+        <span className="mk"><Mark id={dir.id} c="#ffffff" size={26} /></span>
+        <span className="wordmark">Briefed</span>
+      </div>
+
+      <div className="favstrip">
+        <span className="fav s32"><Mark id={dir.id} c="#ffffff" size={21} /></span>
+        <span className="fav s16"><Mark id={dir.id} c="#ffffff" size={11} /></span>
+        <span className="lbl">favicon · 32 / 16</span>
+      </div>
+
+      <div className="meta">
+        <p className="nm">{dir.name}</p>
+        <p className="rat">{dir.rat}</p>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="logos" title="Briefed · App Logo" subtitle="Five directions — one mark each, shown as app icon, light + mono variants, wordmark lockup, and favicon legibility.">
+        {DIRECTIONS.map((d, i) => (
+          <DCArtboard key={d.id} id={d.id} label={`${String(i + 1).padStart(2, '0')} · ${d.name}`} width={300} height={524}>
+            <BrandCard dir={d} />
+          </DCArtboard>
+        ))}
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
