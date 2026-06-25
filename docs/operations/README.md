@@ -15,6 +15,9 @@ Runbook, alarms, and recovery drills for Briefed production.
   pre-cut rehearsal script (plan §14 Phase 9).
 - [`secrets-rotation.md`](secrets-rotation.md) — quarterly rotation
   procedure for SSM + CMKs (plan §14 Phase 8).
+- [`google-oauth-verification.md`](google-oauth-verification.md) — Phase
+  13 Google OAuth consent, custom-domain, scope, demo-video, and CASA
+  checklist.
 - `ios-oauth.md` — notes on the iOS PWA OAuth external-Safari gotcha
   (Phase 6 owner; not gating Phase 8).
 
