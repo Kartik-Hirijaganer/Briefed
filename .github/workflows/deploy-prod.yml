@@ -286,10 +286,23 @@ jobs:
       - name: Auto-rollback on smoke failure
         if: failure() && steps.smoke.conclusion == 'failure' && steps.pre.outputs.api_version != ''
         run: |
+          set -euo pipefail
           echo "Smoke check failed. Reverting live alias to pre-deploy versions."
-          aws lambda update-alias --function-name "${{ steps.pre.outputs.api }}"    --name live --function-version "${{ steps.pre.outputs.api_version }}"
-          aws lambda update-alias --function-name "${{ steps.pre.outputs.worker }}" --name live --function-version "${{ steps.pre.outputs.worker_version }}"
-          aws lambda update-alias --function-name "${{ steps.pre.outputs.fanout }}" --name live --function-version "${{ steps.pre.outputs.fanout_version }}"
+          rollback_alias() {
+            local label="$1" fn="$2" version="$3"
+            if [ -z "$fn" ] || [ -z "$version" ]; then
+              echo "skip: $label (no pre-deploy live alias version captured)"
+              return
+            fi
+            aws lambda update-alias \
+              --function-name "$fn" \
+              --name live \
+              --function-version "$version"
+            echo "rolled back: $label -> version $version"
+          }
+          rollback_alias api    "${{ steps.pre.outputs.api }}"    "${{ steps.pre.outputs.api_version }}"
+          rollback_alias worker "${{ steps.pre.outputs.worker }}" "${{ steps.pre.outputs.worker_version }}"
+          rollback_alias fanout "${{ steps.pre.outputs.fanout }}" "${{ steps.pre.outputs.fanout_version }}"
           exit 1
 
       - name: Record release_metadata row
