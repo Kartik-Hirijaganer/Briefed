@@ -1,8 +1,8 @@
-"""Unit tests for the Infisical-backed config contract.
+"""Unit tests for the runtime config contract.
 
-The settings layer reads process environment only. Local Make targets and
-deployments are responsible for injecting that environment from Infisical;
-``.env`` files are allowed only for non-secret Infisical selector metadata.
+Local Make targets inject environment from Infisical. Lambda deployments may
+hydrate missing secrets from SSM SecureString parameters created by Terraform.
+``.env`` files are allowed only for non-secret selector metadata.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def test_reads_infisical_selector_metadata(monkeypatch: pytest.MonkeyPatch) -> N
 def test_lambda_runtime_requires_infisical_injected_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Lambda startup hard-fails when required Infisical values are missing."""
+    """Lambda startup hard-fails when required runtime values are missing."""
     _clear_secret_aliases(monkeypatch)
     monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
 
@@ -133,7 +133,7 @@ def test_lambda_runtime_requires_infisical_injected_secrets(
         load_settings()
 
     message = str(excinfo.value)
-    assert "Missing required Infisical-injected settings" in message
+    assert "Missing required runtime settings" in message
     assert "openrouter_api_key" in message
     assert "database_url" in message
 
@@ -150,3 +150,81 @@ def test_lambda_runtime_accepts_complete_infisical_injection(
     assert settings.runtime == "lambda-api"
     assert settings.openrouter_api_key == "fake-openrouter"
     assert settings.database_url == "postgresql+asyncpg://x@y/z"
+
+
+def test_lambda_runtime_hydrates_missing_secrets_from_ssm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lambda startup fills missing required secrets from SSM."""
+    import app.core.config as config_module
+
+    _clear_secret_aliases(monkeypatch)
+    monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
+    monkeypatch.setenv("BRIEFED_SSM_PREFIX", "/briefed/prod/")
+
+    def fake_fetch_parameters(
+        *,
+        prefix: str,
+        required: tuple[str, ...],
+        optional: tuple[str, ...],
+    ) -> dict[str, str]:
+        assert prefix == "/briefed/prod/"
+        assert set(required) == {
+            "openrouter_api_key",
+            "session_signing_key",
+            "google_oauth_client_id",
+            "google_oauth_client_secret",
+            "supabase_db_url",
+        }
+        assert set(optional) == {"supabase_url", "supabase_service_key"}
+        return {
+            "openrouter_api_key": "ssm-openrouter",
+            "session_signing_key": "ssm-session",
+            "google_oauth_client_id": "ssm-client-id",
+            "google_oauth_client_secret": "ssm-client-secret",
+            "supabase_db_url": "postgresql+asyncpg://x@y/ssm",
+            "supabase_url": "https://example.supabase.co",
+        }
+
+    monkeypatch.setattr(config_module, "fetch_parameters", fake_fetch_parameters)
+
+    settings = load_settings()
+
+    assert settings.openrouter_api_key == "ssm-openrouter"
+    assert settings.session_signing_key == "ssm-session"
+    assert settings.database_url == "postgresql+asyncpg://x@y/ssm"
+    assert settings.supabase_url == "https://example.supabase.co"
+
+
+def test_lambda_runtime_prefers_env_over_ssm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Direct env injection wins over SSM when both provide a value."""
+    import app.core.config as config_module
+
+    _clear_secret_aliases(monkeypatch)
+    monkeypatch.setenv("BRIEFED_RUNTIME", "lambda-api")
+    monkeypatch.setenv("BRIEFED_SSM_PREFIX", "/briefed/prod/")
+    monkeypatch.setenv("BRIEFED_OPENROUTER_API_KEY", "env-openrouter")
+
+    def fake_fetch_parameters(
+        *,
+        prefix: str,
+        required: tuple[str, ...],
+        optional: tuple[str, ...],
+    ) -> dict[str, str]:
+        del prefix, optional
+        assert "openrouter_api_key" not in required
+        return {
+            "session_signing_key": "ssm-session",
+            "google_oauth_client_id": "ssm-client-id",
+            "google_oauth_client_secret": "ssm-client-secret",
+            "supabase_db_url": "postgresql+asyncpg://x@y/ssm",
+        }
+
+    monkeypatch.setattr(config_module, "fetch_parameters", fake_fetch_parameters)
+
+    settings = load_settings()
+
+    assert settings.openrouter_api_key == "env-openrouter"
+    assert settings.session_signing_key == "ssm-session"

@@ -14,11 +14,15 @@ real runtime paths.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable, Mapping
 from functools import lru_cache
-from typing import Literal, Self
+from typing import Literal, Self, cast
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.integrations.ssm_secrets import fetch_parameters, merge_with_env
 
 Runtime = Literal["local", "lambda-api", "lambda-worker", "lambda-fanout"]
 """The deployment shape the current process is serving."""
@@ -31,6 +35,24 @@ _REQUIRED_LAMBDA_SECRET_FIELDS: tuple[str, ...] = (
     "database_url",
 )
 """Fields that must be present before any Lambda runtime can start."""
+
+_SSM_PARAMETER_BY_FIELD: dict[str, str] = {
+    "openrouter_api_key": "openrouter_api_key",
+    "session_signing_key": "session_signing_key",
+    "google_oauth_client_id": "google_oauth_client_id",
+    "google_oauth_client_secret": "google_oauth_client_secret",
+    "database_url": "supabase_db_url",
+}
+"""Settings field to SSM short-name mapping for required Lambda secrets."""
+
+_OPTIONAL_SSM_PARAMETER_BY_FIELD: dict[str, str] = {
+    "supabase_url": "supabase_url",
+    "supabase_service_key": "supabase_service_key",
+}
+"""Settings field to SSM short-name mapping for optional Lambda secrets."""
+
+_PLACEHOLDER_PREFIX = "PLACEHOLDER"
+"""Prefix used by Terraform-owned placeholder SecureString values."""
 
 
 class Settings(BaseSettings):
@@ -90,6 +112,11 @@ class Settings(BaseSettings):
         default="/development",
         description="Infisical secret path selected by local Make targets.",
         validation_alias="BRIEFED_INFISICAL_SECRET_PATH",
+    )
+    ssm_prefix: str | None = Field(
+        default=None,
+        description="SSM SecureString prefix used by Lambda runtimes.",
+        validation_alias="BRIEFED_SSM_PREFIX",
     )
 
     database_url: str | None = Field(
@@ -240,25 +267,115 @@ class Settings(BaseSettings):
         if missing:
             joined = ", ".join(sorted(missing))
             raise ValueError(
-                "Missing required Infisical-injected settings for Lambda runtime: "
-                f"{joined}. Run the process through Infisical or configure the "
-                "deployment's Infisical integration.",
+                "Missing required runtime settings for Lambda runtime: "
+                f"{joined}. Inject them through Infisical/env or configure "
+                "BRIEFED_SSM_PREFIX so the Lambda can hydrate them from SSM.",
             )
         return self
 
 
+def _is_lambda_runtime(env: Mapping[str, str]) -> bool:
+    """Return whether ``env`` selects a Lambda runtime.
+
+    Args:
+        env: Current process environment.
+
+    Returns:
+        ``True`` when ``BRIEFED_RUNTIME`` starts with ``lambda-``.
+    """
+    return env.get("BRIEFED_RUNTIME", "").startswith("lambda-")
+
+
+def _is_usable_env_value(value: str | None) -> bool:
+    """Return whether an env value should override SSM.
+
+    Args:
+        value: Environment variable value.
+
+    Returns:
+        ``True`` when ``value`` is non-empty and not a placeholder.
+    """
+    if value is None:
+        return False
+    stripped = value.strip()
+    return bool(stripped) and not stripped.startswith(_PLACEHOLDER_PREFIX)
+
+
+def _required_fields_missing_from_env(env: Mapping[str, str]) -> tuple[str, ...]:
+    """Return required settings fields not already present in env.
+
+    Args:
+        env: Current process environment.
+
+    Returns:
+        Tuple of settings field names that need SSM hydration.
+    """
+    missing: list[str] = []
+    for field_name in _REQUIRED_LAMBDA_SECRET_FIELDS:
+        field_env_name = field_name.upper()
+        values = (
+            env.get(f"BRIEFED_{field_env_name}"),
+            env.get(field_env_name),
+        )
+        if not any(_is_usable_env_value(value) for value in values):
+            missing.append(field_name)
+    return tuple(missing)
+
+
+def _settings_with_ssm(env: Mapping[str, str]) -> Settings:
+    """Load Lambda settings, hydrating missing secrets from SSM when configured.
+
+    Args:
+        env: Current process environment.
+
+    Returns:
+        Populated settings model.
+    """
+    prefix = env.get("BRIEFED_SSM_PREFIX")
+    if not _is_lambda_runtime(env) or not prefix:
+        return Settings()
+
+    missing_fields = _required_fields_missing_from_env(env)
+    required_ssm = tuple(_SSM_PARAMETER_BY_FIELD[field] for field in missing_fields)
+    optional_ssm = tuple(_OPTIONAL_SSM_PARAMETER_BY_FIELD.values())
+    ssm_values = fetch_parameters(
+        prefix=prefix,
+        required=required_ssm,
+        optional=optional_ssm,
+    )
+    field_values = merge_with_env(
+        env=env,
+        ssm_values=ssm_values,
+        field_to_ssm={**_SSM_PARAMETER_BY_FIELD, **_OPTIONAL_SSM_PARAMETER_BY_FIELD},
+    )
+    return _settings_from_values(field_values)
+
+
+def _settings_from_values(values: Mapping[str, str]) -> Settings:
+    """Instantiate settings with dynamic keyword values.
+
+    Args:
+        values: Field-name keyed values that should override BaseSettings env
+            resolution.
+
+    Returns:
+        Settings instance with env still used for unspecified fields.
+    """
+    settings_factory = cast("Callable[..., Settings]", Settings)
+    return settings_factory(**values)
+
+
 def load_settings() -> Settings:
-    """Load :class:`Settings` from the Infisical-injected environment.
+    """Load :class:`Settings` from env, optionally hydrating Lambda SSM secrets.
 
     This is the **single public entrypoint** for config. Both the FastAPI
     factory and the Lambda handlers call it at module-import time so a
-    deployment that pre-injects Infisical secrets snapshots a warm,
-    secret-populated process.
+    deployment snapshots a warm, secret-populated process.
 
     Returns:
         A populated :class:`Settings` instance.
     """
-    return Settings()
+    return _settings_with_ssm(os.environ)
 
 
 @lru_cache(maxsize=1)

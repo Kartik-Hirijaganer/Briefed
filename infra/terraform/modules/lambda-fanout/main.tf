@@ -105,6 +105,7 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.this.arn
   package_type  = "Image"
   image_uri     = var.image_uri
+  publish       = true
   memory_size   = 512
   timeout       = 60
   architectures = ["x86_64"]
@@ -118,6 +119,12 @@ resource "aws_lambda_function" "this" {
   }
 
   tags = var.tags
+}
+
+resource "aws_lambda_alias" "live" {
+  name             = "live"
+  function_name    = aws_lambda_function.this.function_name
+  function_version = aws_lambda_function.this.version
 }
 
 data "aws_iam_policy_document" "assume_scheduler" {
@@ -139,7 +146,7 @@ resource "aws_iam_role" "scheduler" {
 data "aws_iam_policy_document" "scheduler_inline" {
   statement {
     actions   = ["lambda:InvokeFunction"]
-    resources = [aws_lambda_function.this.arn]
+    resources = [aws_lambda_alias.live.arn]
   }
 }
 
@@ -156,13 +163,18 @@ resource "aws_scheduler_schedule" "daily" {
     mode = "OFF"
   }
   target {
-    arn      = aws_lambda_function.this.arn
+    arn      = aws_lambda_alias.live.arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
 
 output "function_name" {
   value = aws_lambda_function.this.function_name
+}
+
+output "alias_name" {
+  value       = aws_lambda_alias.live.name
+  description = "Rolling alias used by deploy-prod rollback."
 }
 
 output "schedule_name" {

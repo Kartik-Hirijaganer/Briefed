@@ -128,6 +128,7 @@ convention = "google"
 # (KeyId, Plaintext, Body, QueueUrl, MessageBody, ...) — we cannot rename them.
 "backend/app/core/security.py" = ["N803"]
 "backend/app/services/ingestion/storage.py" = ["N803"]
+"backend/app/integrations/ssm_secrets.py" = ["N803"]
 "backend/app/workers/handlers/fanout.py" = ["N803"]
 "backend/app/services/classification/dispatch.py" = ["N803"]
 "backend/app/services/summarization/dispatch.py" = ["N803"]
