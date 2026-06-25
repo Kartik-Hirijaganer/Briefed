@@ -8,12 +8,13 @@ license = { file = "LICENSE" }
 authors = [{ name = "Kartik Hirijaganer", email = "kartikhirijaganer@gmail.com" }]
 dependencies = [
     # Web framework + Lambda adapter
-    "fastapi>=0.115",
+    "fastapi>=0.136",
+    "starlette>=1.3.1",
     "uvicorn[standard]>=0.32",
     "mangum>=0.19",
     # Validation + settings
     "pydantic[email]>=2.9",
-    "pydantic-settings>=2.6",
+    "pydantic-settings>=2.14.2",
     "pyyaml>=6.0",
     # LLM providers — OpenRouter only (ADR 0009). Both Gemini Flash and
     # Claude Haiku are reached via the openrouter.ai/api/v1 surface, so
@@ -21,6 +22,7 @@ dependencies = [
     # Mailbox + external APIs
     "google-api-python-client>=2.149",
     "google-auth-oauthlib>=1.2",
+    "cryptography>=48.0.1",
     "httpx>=0.27",
     # Persistence — SQLAlchemy + asyncpg over Supabase pooler (§19.15)
     # psycopg2-binary is the sync driver Alembic uses for ``make migrate``;
@@ -35,6 +37,7 @@ dependencies = [
     # Reliability primitives
     "tenacity>=9.0",
     "pybreaker>=1.2",
+    "msgpack>=1.2.1",
     # Observability
     "structlog>=24.4",
     "opentelemetry-api>=1.27",

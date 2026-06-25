@@ -149,6 +149,8 @@ The real Gmail path is gated by versioned legal consent. A stale or missing cons
 
 The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. It also starts Docker services and ensures the local LocalStack KMS aliases and SQS queues exist. `make dev` runs uvicorn, Vite, and a LocalStack SQS worker so Scan now drains the same ingest → classify → summarize queues used in production. It frees the default dev ports (`8000` API, `5173` frontend) before startup; override with `BRIEFED_API_PORT=8010 BRIEFED_FRONTEND_PORT=5174 make dev` when you want alternate ports. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
 
+Python runtime dependencies are locked with `uv.lock`; CI audits the frozen runtime export, so security-sensitive runtime floors such as Starlette, `pydantic-settings`, `cryptography`, and `msgpack` stay explicit in `pyproject.toml`.
+
 Use `make dev-reset` when you want a clean local account-linking test. It removes local Postgres and LocalStack Docker volumes, then runs `make dev`; connected Gmail accounts, OAuth tokens, scan history, and queued messages are deleted locally.
 
 ## Engineering highlights

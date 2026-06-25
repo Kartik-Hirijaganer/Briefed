@@ -659,6 +659,9 @@ export interface paths {
          *     Plan §19.16 + §20.2 cap manual triggers at ``settings.manual_run_daily_cap``
          *     per user per rolling 24h window; the limiter raises ``429`` with a
          *     ``Retry-After`` header when exhausted.
+         *
+         *     Legal consent is checked before the quota limiter so a gated user does
+         *     not burn a manual-run allowance.
          */
         post: operations["start_manual_run_api_v1_runs_post"];
         delete?: never;
@@ -807,6 +810,49 @@ export interface paths {
          *     without matching slots (or vice versa) returns 422.
          */
         patch: operations["patch_schedule_api_v1_profile_me_schedule_patch"];
+        trace?: never;
+    };
+    "/api/v1/legal/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's legal-consent status
+         * @description Return whether the caller must accept current legal policies.
+         *
+         *     Args:
+         *         request: Incoming request, used for error correlation.
+         *         user_id: Authenticated caller, injected by :func:`current_user_id`.
+         *         session: DB session.
+         *
+         *     Returns:
+         *         Current legal-consent status, or a 404 error envelope when the
+         *         authenticated user row no longer exists.
+         */
+        get: operations["get_legal_consent_api_v1_legal_consent_get"];
+        put?: never;
+        /**
+         * Accept the current legal policies
+         * @description Record acceptance of the current legal policy versions.
+         *
+         *     Args:
+         *         payload: Policy versions the user saw and accepted.
+         *         request: Incoming request, used for error correlation and user-agent capture.
+         *         user_id: Authenticated caller, injected by :func:`current_user_id`.
+         *         session: DB session.
+         *
+         *     Returns:
+         *         Updated legal-consent status, or an error envelope for missing users
+         *         or stale/mismatched policy versions.
+         */
+        post: operations["accept_legal_consent_api_v1_legal_consent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -1231,6 +1277,85 @@ export interface components {
              * @default []
              */
             top_domains: components["schemas"]["DomainWasteEntry"][];
+        };
+        /**
+         * LegalConsentRequest
+         * @description Request body for accepting the current policies.
+         *
+         *     Attributes:
+         *         privacy_policy_version: Privacy policy version shown to the user.
+         *         terms_version: Terms of service version shown to the user.
+         */
+        LegalConsentRequest: {
+            /**
+             * Privacy Policy Version
+             * @description Privacy policy version the user is accepting.
+             */
+            privacy_policy_version: number;
+            /**
+             * Terms Version
+             * @description Terms of service version the user is accepting.
+             */
+            terms_version: number;
+        };
+        /**
+         * LegalConsentRequiredError
+         * @description Error body returned when current legal consent is required.
+         *
+         *     Attributes:
+         *         detail: Stable FastAPI ``HTTPException`` detail string.
+         */
+        LegalConsentRequiredError: {
+            /**
+             * Detail
+             * @description Stable error detail for stale or missing legal consent.
+             * @constant
+             */
+            detail: "legal_consent_required";
+        };
+        /**
+         * LegalConsentStatusOut
+         * @description Current caller's legal-consent status.
+         *
+         *     Attributes:
+         *         current_privacy_policy_version: Backend-required privacy policy version.
+         *         current_terms_version: Backend-required terms of service version.
+         *         accepted_privacy_policy_version: Highest privacy policy version the user accepted.
+         *         accepted_terms_version: Highest terms of service version the user accepted.
+         *         consent_required: Whether the user must accept current policies before processing.
+         *         accepted_at: Timestamp of the latest legal acceptance, if any.
+         */
+        LegalConsentStatusOut: {
+            /**
+             * Current Privacy Policy Version
+             * @description Backend-required privacy policy version.
+             */
+            current_privacy_policy_version: number;
+            /**
+             * Current Terms Version
+             * @description Backend-required terms of service version.
+             */
+            current_terms_version: number;
+            /**
+             * Accepted Privacy Policy Version
+             * @description Highest privacy policy version accepted by the user.
+             */
+            accepted_privacy_policy_version: number;
+            /**
+             * Accepted Terms Version
+             * @description Highest terms of service version accepted by the user.
+             */
+            accepted_terms_version: number;
+            /**
+             * Consent Required
+             * @description Whether current legal consent is required before Gmail processing.
+             */
+            consent_required: boolean;
+            /**
+             * Accepted At
+             * @description UTC timestamp of the latest legal acceptance.
+             */
+            accepted_at?: string | null;
         };
         /**
          * ManualRunRequest
@@ -2350,6 +2475,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Current legal consent is required before Gmail-derived state changes. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentRequiredError"];
+                };
+            };
         };
     };
     confirm_suggestion_api_v1_unsubscribes__suggestion_id__confirm_post: {
@@ -2379,6 +2513,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Current legal consent is required before Gmail-derived state changes. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentRequiredError"];
                 };
             };
         };
@@ -2434,6 +2577,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Current legal consent is required before Gmail-derived state changes. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentRequiredError"];
                 };
             };
         };
@@ -2559,6 +2711,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Current legal consent is required before Gmail processing. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentRequiredError"];
                 };
             };
             /** @description Service Unavailable */
@@ -2737,6 +2898,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Current legal consent is required before Gmail processing. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentRequiredError"];
                 };
             };
         };
@@ -3028,7 +3198,91 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_legal_consent_api_v1_legal_consent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentStatusOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_legal_consent_api_v1_legal_consent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                briefed_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalConsentStatusOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;

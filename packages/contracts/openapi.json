@@ -3,7 +3,7 @@
   "info": {
     "title": "Briefed API",
     "description": "Personal AI email agent. Runs a daily pipeline on the user's Gmail inbox, categorizes and prioritizes messages, and summarizes tech news via the Claude API.",
-    "version": "1.0.0"
+    "version": "1.1.2"
   },
   "paths": {
     "/health": {
@@ -791,6 +791,16 @@
           "204": {
             "description": "Successful Response"
           },
+          "451": {
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentRequiredError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -843,6 +853,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "451": {
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentRequiredError"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -933,6 +953,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "451": {
+            "description": "Current legal consent is required before Gmail-derived state changes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentRequiredError"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1261,6 +1291,16 @@
             },
             "description": "Conflict"
           },
+          "451": {
+            "description": "Current legal consent is required before Gmail processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentRequiredError"
+                }
+              }
+            }
+          },
           "503": {
             "content": {
               "application/json": {
@@ -1518,7 +1558,7 @@
           "frontend"
         ],
         "summary": "Start a manual digest run",
-        "description": "Create a digest run and enqueue incremental or reclassification work.\n\nPlan \u00a719.16 + \u00a720.2 cap manual triggers at ``settings.manual_run_daily_cap``\nper user per rolling 24h window; the limiter raises ``429`` with a\n``Retry-After`` header when exhausted.",
+        "description": "Create a digest run and enqueue incremental or reclassification work.\n\nPlan \u00a719.16 + \u00a720.2 cap manual triggers at ``settings.manual_run_daily_cap``\nper user per rolling 24h window; the limiter raises ``429`` with a\n``Retry-After`` header when exhausted.\n\nLegal consent is checked before the quota limiter so a gated user does\nnot burn a manual-run allowance.",
         "operationId": "start_manual_run_api_v1_runs_post",
         "parameters": [
           {
@@ -1555,6 +1595,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManualRunResponse"
+                }
+              }
+            }
+          },
+          "451": {
+            "description": "Current legal consent is required before Gmail processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentRequiredError"
                 }
               }
             }
@@ -2057,7 +2107,135 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/legal/consent": {
+      "get": {
+        "tags": [
+          "legal"
+        ],
+        "summary": "Get the caller's legal-consent status",
+        "description": "Return whether the caller must accept current legal policies.\n\nArgs:\n    request: Incoming request, used for error correlation.\n    user_id: Authenticated caller, injected by :func:`current_user_id`.\n    session: DB session.\n\nReturns:\n    Current legal-consent status, or a 404 error envelope when the\n    authenticated user row no longer exists.",
+        "operationId": "get_legal_consent_api_v1_legal_consent_get",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentStatusOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "legal"
+        ],
+        "summary": "Accept the current legal policies",
+        "description": "Record acceptance of the current legal policy versions.\n\nArgs:\n    payload: Policy versions the user saw and accepted.\n    request: Incoming request, used for error correlation and user-agent capture.\n    user_id: Authenticated caller, injected by :func:`current_user_id`.\n    session: DB session.\n\nReturns:\n    Updated legal-consent status, or an error envelope for missing users\n    or stale/mismatched policy versions.",
+        "operationId": "accept_legal_consent_api_v1_legal_consent_post",
+        "parameters": [
+          {
+            "name": "briefed_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Briefed Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegalConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalConsentStatusOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -2625,6 +2803,102 @@
         ],
         "title": "HygieneStatsResponse",
         "description": "Envelope for ``GET /hygiene/stats``.\n\nAttributes:\n    total_candidates: Count of active (``dismissed=False``)\n        suggestion rows.\n    dismissed_count: Count of rows the user has dismissed.\n    average_frequency: Mean ``frequency_30d`` over active\n        suggestions. ``0`` when there are none.\n    top_domains: Up to ten highest-volume sender domains in the\n        30-day window, by summed frequency."
+      },
+      "LegalConsentRequest": {
+        "properties": {
+          "privacy_policy_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Privacy Policy Version",
+            "description": "Privacy policy version the user is accepting."
+          },
+          "terms_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Terms Version",
+            "description": "Terms of service version the user is accepting."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "privacy_policy_version",
+          "terms_version"
+        ],
+        "title": "LegalConsentRequest",
+        "description": "Request body for accepting the current policies.\n\nAttributes:\n    privacy_policy_version: Privacy policy version shown to the user.\n    terms_version: Terms of service version shown to the user."
+      },
+      "LegalConsentRequiredError": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "const": "legal_consent_required",
+            "title": "Detail",
+            "description": "Stable error detail for stale or missing legal consent."
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "LegalConsentRequiredError",
+        "description": "Error body returned when current legal consent is required.\n\nAttributes:\n    detail: Stable FastAPI ``HTTPException`` detail string."
+      },
+      "LegalConsentStatusOut": {
+        "properties": {
+          "current_privacy_policy_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Current Privacy Policy Version",
+            "description": "Backend-required privacy policy version."
+          },
+          "current_terms_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Current Terms Version",
+            "description": "Backend-required terms of service version."
+          },
+          "accepted_privacy_policy_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Accepted Privacy Policy Version",
+            "description": "Highest privacy policy version accepted by the user."
+          },
+          "accepted_terms_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Accepted Terms Version",
+            "description": "Highest terms of service version accepted by the user."
+          },
+          "consent_required": {
+            "type": "boolean",
+            "title": "Consent Required",
+            "description": "Whether current legal consent is required before Gmail processing."
+          },
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At",
+            "description": "UTC timestamp of the latest legal acceptance."
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_privacy_policy_version",
+          "current_terms_version",
+          "accepted_privacy_policy_version",
+          "accepted_terms_version",
+          "consent_required"
+        ],
+        "title": "LegalConsentStatusOut",
+        "description": "Current caller's legal-consent status.\n\nAttributes:\n    current_privacy_policy_version: Backend-required privacy policy version.\n    current_terms_version: Backend-required terms of service version.\n    accepted_privacy_policy_version: Highest privacy policy version the user accepted.\n    accepted_terms_version: Highest terms of service version the user accepted.\n    consent_required: Whether the user must accept current policies before processing.\n    accepted_at: Timestamp of the latest legal acceptance, if any."
       },
       "ManualRunRequest": {
         "properties": {
