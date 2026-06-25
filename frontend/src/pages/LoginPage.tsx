@@ -43,14 +43,6 @@ const describeAuthError = (code: string | null): string | null => {
 };
 
 /**
- * Reads the build-time Gmail-connect flag. Any value except literal `true`
- * keeps live OAuth disabled.
- *
- * @returns True when the live Gmail OAuth CTA should be enabled.
- */
-const isGmailConnectEnabled = (): boolean => import.meta.env.VITE_ENABLE_GMAIL_CONNECT === 'true';
-
-/**
  * Real Gmail login page with informed pre-consent. Delegates OAuth start
  * to the backend, so the frontend never touches Google tokens.
  *
@@ -60,12 +52,9 @@ export default function LoginPage(): JSX.Element {
   const [params] = useSearchParams();
   const [acceptedPreConsent, setAcceptedPreConsent] = useState<boolean>(false);
   const authError = describeAuthError(params.get('auth_error'));
-  const gmailConnectEnabled = isGmailConnectEnabled();
   const addGmail = useAddGmailFlow({ returnTo: sanitizeReturnTo(params.get('next')) });
-  const continueDisabled = !gmailConnectEnabled || !acceptedPreConsent;
-  const continueLabel = gmailConnectEnabled
-    ? 'Continue with Google'
-    : 'Available soon — try the demo.';
+  const continueDisabled = !acceptedPreConsent;
+  const continueLabel = 'Continue with Google';
 
   const handlePreConsentChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setAcceptedPreConsent(event.target.checked);

@@ -338,7 +338,11 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
     from app.services.classification.dispatch import parse_classify_body
     from app.services.classification.repository import ClassificationsRepo
     from app.services.prompts.registry import PromptRegistry
-    from app.services.runs import mark_run_running, maybe_finalize_run
+    from app.services.runs import (
+        mark_run_running,
+        mark_unsubscribe_hygiene_enqueued,
+        maybe_finalize_run,
+    )
     from app.services.summarization import (
         enqueue_summary_for_email,
         enqueue_tech_news_cluster_for_account,
@@ -393,20 +397,19 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     trigger_email_id=message.email_id,
                 )
             if unsubscribe_queue_url:
-                # The hygiene aggregate runs over the trailing 30 days,
-                # so enqueueing once per classify record produces
-                # duplicate messages — cheap and idempotent (each run
-                # re-sweeps the same window and upserts rows while
-                # preserving ``dismissed`` state). A future
-                # optimization can debounce to one message per
-                # (account, run) when a run-scoped ledger lands.
-                await enqueue_hygiene_run_for_account(
-                    user_id=message.user_id,
-                    account_id=message.account_id,
-                    queue_url=unsubscribe_queue_url,
-                    sqs=sqs_client,
+                should_enqueue_hygiene = await mark_unsubscribe_hygiene_enqueued(
+                    session=session,
                     run_id=message.run_id,
+                    account_id=message.account_id,
                 )
+                if should_enqueue_hygiene:
+                    await enqueue_hygiene_run_for_account(
+                        user_id=message.user_id,
+                        account_id=message.account_id,
+                        queue_url=unsubscribe_queue_url,
+                        sqs=sqs_client,
+                        run_id=message.run_id,
+                    )
             await maybe_finalize_run(
                 session=session,
                 user_id=message.user_id,

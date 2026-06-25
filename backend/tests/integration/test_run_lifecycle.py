@@ -21,7 +21,11 @@ from app.db.models import (
     Summary,
     User,
 )
-from app.services.runs import maybe_finalize_run, stamp_run_membership
+from app.services.runs import (
+    mark_unsubscribe_hygiene_enqueued,
+    maybe_finalize_run,
+    stamp_run_membership,
+)
 from app.workers.messages import CategoryDigestMessage
 
 
@@ -156,6 +160,125 @@ async def test_maybe_finalize_run_fails_on_prompt_error(
     assert sent == []
     assert user.current_run_id is None
     assert user.last_run_finished_at is None
+
+
+async def test_maybe_finalize_run_ignores_recovered_category_digest_error(
+    test_session: AsyncSession,
+) -> None:
+    """Category digest prompt errors are non-fatal once a digest row exists."""
+    user, account, run = await _seed_run(test_session)
+    email = _email(account=account, subject="Planning")
+    prompt = PromptVersion(
+        name="category_digest",
+        version=1,
+        content="category",
+        content_hash=hashlib.sha256(b"category").digest(),
+        model="gemini-1.5-flash",
+        params={},
+    )
+    test_session.add_all([email, prompt])
+    await test_session.flush()
+    await stamp_run_membership(session=test_session, run_id=run.id, email_ids=(email.id,))
+    test_session.add_all(
+        [
+            Classification(
+                email_id=email.id,
+                label="must_read",
+                score=Decimal("0.950"),
+                rubric_version=1,
+                decision_source="model",
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=5,
+                is_newsletter=False,
+            ),
+            Summary(
+                kind="email",
+                email_id=email.id,
+                cluster_id=None,
+                prompt_version_id=prompt.id,
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=8,
+                body_md_ct=b"summary",
+                entities_ct=None,
+                cache_hit=False,
+                confidence=Decimal("0.900"),
+            ),
+            Summary(
+                kind="category_digest",
+                email_id=None,
+                cluster_id=None,
+                run_id=run.id,
+                category="must_read",
+                prompt_version_id=prompt.id,
+                model="deterministic-category-fallback",
+                tokens_in=0,
+                tokens_out=0,
+                body_md_ct=b"digest",
+                entities_ct=None,
+                cache_hit=False,
+                confidence=Decimal("0.550"),
+            ),
+            PromptCallLog(
+                prompt_version_id=prompt.id,
+                email_id=None,
+                model="gemini-1.5-flash",
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=Decimal("0.000000"),
+                latency_ms=0,
+                status="error",
+                provider="openrouter:gemini-flash",
+                run_id=run.id,
+            ),
+        ],
+    )
+    await test_session.flush()
+
+    terminal = await maybe_finalize_run(session=test_session, user_id=user.id, run_id=run.id)
+
+    assert terminal is True
+    assert run.status == "complete"
+    assert run.error is None
+    assert user.current_run_id is None
+
+
+async def test_mark_unsubscribe_hygiene_enqueued_is_per_account_run(
+    test_session: AsyncSession,
+) -> None:
+    """Unsubscribe hygiene dispatch is debounced per account/run."""
+    user, account, run = await _seed_run(test_session)
+    second_account = ConnectedAccount(
+        user_id=user.id,
+        email=f"second-{run.id}@example.com",
+        gmail_account_id=f"second-{run.id}",
+    )
+    test_session.add(second_account)
+    await test_session.flush()
+
+    first = await mark_unsubscribe_hygiene_enqueued(
+        session=test_session,
+        run_id=run.id,
+        account_id=account.id,
+    )
+    repeat = await mark_unsubscribe_hygiene_enqueued(
+        session=test_session,
+        run_id=run.id,
+        account_id=account.id,
+    )
+    second = await mark_unsubscribe_hygiene_enqueued(
+        session=test_session,
+        run_id=run.id,
+        account_id=second_account.id,
+    )
+
+    assert first is True
+    assert repeat is False
+    assert second is True
+    assert run.stats["unsubscribe_hygiene_enqueued"] == sorted(
+        [str(account.id), str(second_account.id)],
+    )
 
 
 async def test_maybe_finalize_run_completes_after_summary_lands(
