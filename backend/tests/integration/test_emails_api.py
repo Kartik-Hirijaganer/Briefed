@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
+from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, Email, OAuthToken, User
 from app.domain.providers import (
     MarkReadFailure,
@@ -435,18 +436,23 @@ async def _seed_user(
     factory: async_sessionmaker[AsyncSession],
     *,
     email: str = "me@example.com",
+    accepted: bool = True,
 ) -> User:
     """Insert a user and one active Gmail account.
 
     Args:
         factory: Async session factory.
         email: User and connected account email.
+        accepted: Whether to seed current legal-consent versions.
 
     Returns:
         Persisted user row.
     """
     async with factory() as session:
         user = User(email=email, tz="UTC", status="active")
+        if accepted:
+            user.privacy_policy_version_accepted = CURRENT_PRIVACY_POLICY_VERSION
+            user.terms_version_accepted = CURRENT_TERMS_VERSION
         session.add(user)
         await session.flush()
         session.add(
