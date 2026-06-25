@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.3.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.2.0...v1.3.0) (2026-06-25)
+
+
+### Features
+
+* add ADR for public homepage, demo, and enforced consent; update operations documentation and implement Google OAuth verification runbook; enhance tests for consent management and routing ([9165e94](https://github.com/Kartik-Hirijaganer/Briefed/commit/9165e9403ee7602f6ba00dfba3539dd247491c20))
+* add EmailSelectionBar component for bulk email actions and update EmailListPane to integrate it ([b3e5d13](https://github.com/Kartik-Hirijaganer/Briefed/commit/b3e5d133e5db3f3891188d09324048e9302426b4))
+* add HTML template for Briefed app icon handoff and update integration tests for privacy policy and terms acceptance ([9657896](https://github.com/Kartik-Hirijaganer/Briefed/commit/96578968d47a356167e1ec69a2a0f6d6f444b2dc))
+* add initial Vercel configuration files with project details and… ([a8a8e74](https://github.com/Kartik-Hirijaganer/Briefed/commit/a8a8e74a31f9510936b2a6b1d7e42d3e6528a6c8))
+* add integration tests for legal consent API and update user seeding with consent versions ([5c23498](https://github.com/Kartik-Hirijaganer/Briefed/commit/5c2349825fed5fe655f0fb6f4b5d44b3f187d3e4))
+* add legal consent gate implementation and integrate Gmail connect feature; update public base URL and version in package.json ([99bc0ee](https://github.com/Kartik-Hirijaganer/Briefed/commit/99bc0ee93229640c6b6a5271602c888e29149e2f))
+* add local environment variables for AWS configuration and update README with new demo link ([ccda4f9](https://github.com/Kartik-Hirijaganer/Briefed/commit/ccda4f9b33aa7614a927686d1bd4c13c8e17cba6))
+* add manifest file and update icon for improved PWA support ([2d78f05](https://github.com/Kartik-Hirijaganer/Briefed/commit/2d78f05bb26c4c963c01179536f5a05c5144d454))
+* add new routes for Home, About, Privacy Policy, and Terms of Service pages; implement demo routing structure with settings redirect ([c2290cc](https://github.com/Kartik-Hirijaganer/Briefed/commit/c2290cc87be946ae5858af80b329c97349d260e0))
+* add online status handling for mark-read functionality in ReadingPane and ReadingPaneActions ([c9864df](https://github.com/Kartik-Hirijaganer/Briefed/commit/c9864dfb44811b5dbb852355e089b9d44c263d94))
+* add refetch logic for persisted accounts cache in AccountsPage tests ([80b1216](https://github.com/Kartik-Hirijaganer/Briefed/commit/80b121684e5c59294003d67f249f2cf5020adb2b))
+* add script to ensure LocalStack SQS queues for local development ([724ec03](https://github.com/Kartik-Hirijaganer/Briefed/commit/724ec038b36ff6f0947b9bb2ab6cd5ce7e6fe15b))
+* add tests for public legal pages, login page, not found page, nav items, and route base functionality ([ab99cbf](https://github.com/Kartik-Hirijaganer/Briefed/commit/ab99cbf2dbf559d337abe51f53c81b38c2360aff))
+* add unit tests for local development SQS helper scripts ([fec6a3c](https://github.com/Kartik-Hirijaganer/Briefed/commit/fec6a3ca5dd8f7bb5c3388944473d250599de911))
+* **demo:** add demo mode context and fixtures for synthetic data ([3db747b](https://github.com/Kartik-Hirijaganer/Briefed/commit/3db747b98fd213366b92a805c601f8c5f8ad4699))
+* enhance demo mode functionality with new error handling and query keys; update routing for settings and sidebar components ([1ac002e](https://github.com/Kartik-Hirijaganer/Briefed/commit/1ac002eed3940345d225ae0fd0e05b17aeb8eb16))
+* enhance demo mode support across settings pages; update routing and query keys ([af844ad](https://github.com/Kartik-Hirijaganer/Briefed/commit/af844ad91e600f3da0a2cfcff705fdc213352af9))
+* enhance demo mode support by disabling actions and updating query keys across components ([38805fd](https://github.com/Kartik-Hirijaganer/Briefed/commit/38805fdafd71f76b1ad5e3e99da87daf3e571bd7))
+* enhance frontend metadata and update favicon for improved branding ([a9d7046](https://github.com/Kartik-Hirijaganer/Briefed/commit/a9d70461d329c34c5c51e864d82a71306c99ce4d))
+* enhance local development setup with SQS worker and improved OAuth linking ([b955b1b](https://github.com/Kartik-Hirijaganer/Briefed/commit/b955b1ba8a037ffc620bc43d96e3f903938831af))
+* enhance OAuth flow with link parameter and update error description ([a7e2a8e](https://github.com/Kartik-Hirijaganer/Briefed/commit/a7e2a8e6d2e7d53358c2b95179ef3a62a2d0ee12))
+* implement bulk selection and mark-read functionality in EmailLi… ([7735bb3](https://github.com/Kartik-Hirijaganer/Briefed/commit/7735bb303404c0a58a1248960cc793a59ea45f0f))
+* implement bulk selection and mark-read functionality in EmailListPane and EmailListRow ([5fab95a](https://github.com/Kartik-Hirijaganer/Briefed/commit/5fab95a16b0d68b6107e0c9e95842622f7f5fe51))
+* implement legal consent API and integrate with email processing ([bea2f6b](https://github.com/Kartik-Hirijaganer/Briefed/commit/bea2f6b3e55f8fa1e2086b0c86e376a056b4d7be))
+* implement legal consent enforcement and integrate with existing workflows ([d9ee924](https://github.com/Kartik-Hirijaganer/Briefed/commit/d9ee92430fc5b666d20d7e01d1b4d7f81f7933b0))
+* implement legal consent management with user model updates and API integration ([e00a81e](https://github.com/Kartik-Hirijaganer/Briefed/commit/e00a81efc72a044cb1e2df4f39595c30b257f8bd))
+* implement legal consent management; update routes and enhance tests for consent enforcement ([dc0399e](https://github.com/Kartik-Hirijaganer/Briefed/commit/dc0399e2bddd488e7eb890959143e05fad55cba4))
+* implement LocalStack KMS alias management and add structured legal document components ([3227c70](https://github.com/Kartik-Hirijaganer/Briefed/commit/3227c70508fd872678e7eb1eb7e8144c4593bb9a))
+* implement new pages for Home, Privacy Policy, and Terms of Service; enhance existing pages with improved routing and demo mode support ([5aa49e8](https://github.com/Kartik-Hirijaganer/Briefed/commit/5aa49e8ecb864557556f2a662be78f90a5a2cda7))
+* migrate configuration to use Infisical for secret management and remove SSM integration ([8b10576](https://github.com/Kartik-Hirijaganer/Briefed/commit/8b1057613463bc59eb604c92dcda17baabd53b54))
+* update API versioning in contracts and enhance OpenAPI descriptions ([8a08fa7](https://github.com/Kartik-Hirijaganer/Briefed/commit/8a08fa790b25bec354a885c0ac1c61980d83256e))
+* update changelog for version 1.2.0 and enhance design documentation with brand mark details ([b2cf749](https://github.com/Kartik-Hirijaganer/Briefed/commit/b2cf74902bcf8de0dbe640c31d5648b18c6c1d4c))
+* update configuration to use Infisical for secret management and remove legacy SSM integration ([35937e5](https://github.com/Kartik-Hirijaganer/Briefed/commit/35937e5c45526dd41d0ec9778691c9663999c681))
+* update OAuth client_id references to use Infisical and adjust environment variable comments ([0879f14](https://github.com/Kartik-Hirijaganer/Briefed/commit/0879f14f90a3d48c2d09e3fd092acc5b1dbbe6f5))
+* update project to use Infisical for secret management and remove legacy environment variables ([25872b3](https://github.com/Kartik-Hirijaganer/Briefed/commit/25872b322bc3e5a954705cb46c03f3c98125a0d3))
+* update tests to reflect new routing structure and add demo API restrictions ([752a43a](https://github.com/Kartik-Hirijaganer/Briefed/commit/752a43a48614c3bcfdcd7cbbfb44b580bfa4e0f8))
+* update unsubscribe hygiene logic and add related tests ([b705164](https://github.com/Kartik-Hirijaganer/Briefed/commit/b7051642cab6668b1512e3bff56c67222cdfda67))
+* update version to 1.2.0 across configuration files and enhance pull request template ([23d914b](https://github.com/Kartik-Hirijaganer/Briefed/commit/23d914bc9a5190bed83f8ce86c69a2776027b8b5))
+
 ## [1.2.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.1.2...v1.2.0) (2026-06-14)
 
 
