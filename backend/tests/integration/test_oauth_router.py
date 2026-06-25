@@ -21,7 +21,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.api.deps import db_session
-from app.api.session import OAUTH_STATE_COOKIE_NAME, sign_cookie
+from app.api.session import (
+    OAUTH_STATE_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    sign_cookie,
+    verify_cookie,
+)
 from app.api.v1.oauth import (
     _OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
     _build_token_cipher,
@@ -31,7 +36,7 @@ from app.api.v1.oauth import (
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError
 from app.core.security import EncryptionContext, EnvelopeCipher
-from app.db.models import RubricRule
+from app.db.models import ConnectedAccount, RubricRule, User
 from app.main import app
 from app.services.gmail import oauth as oauth_module
 
@@ -106,9 +111,14 @@ class _FakeTokenExchange:
                 "redirect_uri": redirect_uri,
             }
         )
+        email_by_code = {
+            "second": "second@example.com",
+            "xyz": "user@example.com",
+        }
+        email = email_by_code.get(code, "user@example.com")
         # Mint a fake id_token with the email claim Google would send.
         header = _b64({"alg": "none"})
-        body = _b64({"email": "user@example.com"})
+        body = _b64({"email": email, "sub": f"sub-{email}"})
         id_token = f"{header}.{body}.sig"
         return oauth_module.OAuthTokenBundle(
             access_token="access-xyz",
@@ -156,6 +166,19 @@ def _redirect_uri_from_location(location: str) -> str:
     """
     values = parse_qs(urlparse(location).query)["redirect_uri"]
     return values[0]
+
+
+def _query_value_from_location(location: str, key: str) -> str:
+    """Extract a query value from a redirect URL.
+
+    Args:
+        location: Redirect target URL.
+        key: Query key to extract.
+
+    Returns:
+        First decoded query value.
+    """
+    return parse_qs(urlparse(location).query)[key][0]
 
 
 @pytest_asyncio.fixture()
@@ -252,6 +275,7 @@ def test_oauth_start_uses_forwarded_host_for_callback(wired_app: TestClient) -> 
     ],
 )
 def test_sanitize_return_to_allows_only_app_paths(raw: str, expected: str) -> None:
+    """Only internal app routes may be used as OAuth return targets."""
     assert sanitize_return_to(raw) == expected
 
 
@@ -284,6 +308,7 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
 
 
 def test_oauth_callback_sanitizes_return_to_cookie(wired_app: TestClient) -> None:
+    """Unsafe signed return paths fall back to the app dashboard."""
     cookie_value = sign_cookie(
         {
             "state": "STATE-123",
@@ -302,6 +327,143 @@ def test_oauth_callback_sanitizes_return_to_cookie(wired_app: TestClient) -> Non
 
     assert response.status_code == 302, response.text
     assert response.headers["location"] == "/app"
+
+
+async def test_link_mode_adds_second_account_to_existing_user(
+    wired_app: TestClient,
+    test_engine: AsyncEngine,
+) -> None:
+    """An authenticated Add Gmail flow attaches the new mailbox to the same user."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        user = User(email="owner@example.com", tz="America/New_York", status="active")
+        session.add(user)
+        await session.flush()
+        session.add(
+            ConnectedAccount(
+                user_id=user.id,
+                provider="gmail",
+                email="first@example.com",
+                gmail_account_id="sub-first@example.com",
+                status="active",
+            ),
+        )
+        await session.commit()
+        user_id = user.id
+
+    wired_app.cookies.set(
+        SESSION_COOKIE_NAME,
+        sign_cookie({"user_id": str(user_id)}, secret="test-key"),
+    )
+
+    start_response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        params={"link": "true", "return_to": "/app/settings/accounts"},
+        follow_redirects=False,
+    )
+
+    assert start_response.status_code in (302, 307), start_response.text
+    location = start_response.headers["location"]
+    assert _query_value_from_location(location, "prompt") == "consent select_account"
+    state = _query_value_from_location(location, "state")
+    state_cookie = wired_app.cookies.get(OAUTH_STATE_COOKIE_NAME)
+    assert state_cookie is not None
+    state_payload = verify_cookie(state_cookie, secret="test-key")
+    assert state_payload["user_id"] == str(user_id)
+    assert state_payload["link"] is True
+
+    callback_response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "second", "state": state},
+        follow_redirects=False,
+    )
+
+    assert callback_response.status_code == 302, callback_response.text
+    assert callback_response.headers["location"] == "/app/settings/accounts"
+    list_response = wired_app.get("/api/v1/accounts")
+    assert list_response.status_code == 200, list_response.text
+    emails = [row["email"] for row in list_response.json()["accounts"]]
+    assert emails == ["first@example.com", "second@example.com"]
+
+
+def test_link_mode_requires_existing_session(wired_app: TestClient) -> None:
+    """Add Gmail should not silently create a new user when the session is gone."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        params={"link": "true", "return_to": "/app/settings/accounts"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?next=%2Fapp%2Fsettings%2Faccounts"
+
+
+async def test_non_link_login_ignores_existing_session_cookie(
+    wired_app: TestClient,
+    test_engine: AsyncEngine,
+) -> None:
+    """Normal login should not link a mailbox just because a session cookie exists."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        user = User(email="owner@example.com", tz="America/New_York", status="active")
+        session.add(user)
+        await session.flush()
+        user_id = user.id
+        await session.commit()
+
+    wired_app.cookies.set(
+        SESSION_COOKIE_NAME,
+        sign_cookie({"user_id": str(user_id)}, secret="test-key"),
+    )
+
+    start_response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        params={"return_to": "/app"},
+        follow_redirects=False,
+    )
+
+    assert start_response.status_code in (302, 307), start_response.text
+    state = _query_value_from_location(start_response.headers["location"], "state")
+    state_cookie = wired_app.cookies.get(OAUTH_STATE_COOKIE_NAME)
+    assert state_cookie is not None
+    state_payload = verify_cookie(state_cookie, secret="test-key")
+    assert "user_id" not in state_payload
+    assert state_payload["link"] is False
+
+    callback_response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "xyz", "state": state},
+        follow_redirects=False,
+    )
+
+    assert callback_response.status_code == 302, callback_response.text
+    async with factory() as session:
+        owner_accounts = (
+            (
+                await session.execute(
+                    select(ConnectedAccount).where(ConnectedAccount.user_id == user_id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        login_user = (
+            (await session.execute(select(User).where(User.email == "user@example.com")))
+            .scalars()
+            .one()
+        )
+        login_accounts = (
+            (
+                await session.execute(
+                    select(ConnectedAccount).where(ConnectedAccount.user_id == login_user.id),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert owner_accounts == []
+    assert [account.email for account in login_accounts] == ["user@example.com"]
 
 
 async def test_get_or_create_user_seeds_default_rubric_rules(

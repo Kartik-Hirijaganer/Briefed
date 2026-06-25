@@ -33,6 +33,8 @@ export interface ReadingPaneProps {
   readonly hasNextMustRead: boolean;
   /** Advance the selection to the next must-read row. */
   readonly onNextMustRead: () => void;
+  /** Live online status (mark-read is disabled offline). */
+  readonly online: boolean;
 }
 
 /**
@@ -48,7 +50,8 @@ export interface ReadingPaneProps {
  * @returns The rendered reading pane.
  */
 export function ReadingPane(props: ReadingPaneProps): JSX.Element {
-  const { email, isPending, onMarkRead, markReadPending, hasNextMustRead, onNextMustRead } = props;
+  const { email, isPending, onMarkRead, markReadPending, hasNextMustRead, onNextMustRead, online } =
+    props;
 
   if (isPending) return <DashboardSkeletons.ReadingPaneSkeleton />;
   if (!email) {
@@ -114,6 +117,7 @@ export function ReadingPane(props: ReadingPaneProps): JSX.Element {
         markReadPending={markReadPending}
         hasNextMustRead={hasNextMustRead}
         onNextMustRead={onNextMustRead}
+        online={online}
       />
     </Motion>
   );

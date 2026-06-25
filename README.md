@@ -110,7 +110,7 @@ flowchart LR
 
 - **`BRIEFED_RUNTIME`** selects `local` (uvicorn), `lambda-api` (Mangum), or `lambda-worker` / `lambda-fanout` (SQS dispatcher) from one codebase.
 - **Typed message contracts** — every queue payload is a frozen Pydantic discriminated union (`extra="forbid"`); no message shapes are invented inline.
-- **SnapStart-friendly init** — settings and logging hydrate at module import so SnapStart snapshots a warm process; heavy SDK imports are deferred to handler bodies.
+- **SnapStart-friendly init** — settings validate and logging configures at module import so SnapStart snapshots a warm process; heavy SDK imports are deferred to handler bodies.
 
 ## Built with
 
@@ -120,28 +120,38 @@ flowchart LR
 | **AI / LLM** | OpenRouter routing — Gemini 2.5 Flash (primary) + Claude Haiku 4.5 (fallback) · versioned prompt bundles + JSON Schemas · Promptfoo evals |
 | **Frontend** | React 18 · TypeScript · Vite · PWA (Workbox + `vite-plugin-pwa`) · Dexie · TanStack Query · Framer Motion |
 | **Data** | Supabase Postgres (asyncpg via the pooler) · two customer-managed KMS CMKs |
-| **Infra & CI** | Vercel · AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · SSM · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
+| **Infra & CI** | Vercel · AWS Lambda + SnapStart · SQS · EventBridge Scheduler · CloudFront + WAF · S3 · Infisical · Route 53 / ACM · Terraform · GitHub Actions · Docker + LocalStack |
 
 ## Quick start
 
-Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**.
+Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**, **Infisical CLI**.
 
 ```bash
 git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
-cp .env.example .env        # fill in BRIEFED_OPENROUTER_API_KEY + OAuth creds; other values optional
-make bootstrap              # installs deps, starts docker-compose services
-make migrate                # apply all Alembic migrations
-make dev                    # backend on :8000, frontend on :5173
+infisical login             # authenticate to the Briefed Infisical organization once
+make dev                    # install deps, start services, migrate DB, then run API + frontend + worker
 ```
+
+Application secrets live in Infisical, not `.env`. Local defaults target project
+`cbd87e9b-3963-4906-b8cc-d479ff5192ed`, env `dev`, path `/development`;
+production secrets are under env `prod`, path `/production`. Copy
+`.env.example` to `.env` only when you need to override those Infisical selector
+values locally.
 
 Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · PWA: http://localhost:5173
 
-The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
+Local frontend routes: `/` is the public homepage, `/demo` is synthetic read-only demo data, and `/app` is the authenticated dashboard.
 
 The public homepage lives at `/` with a primary Try Demo path at `/demo`; the Connect Gmail path points to `/login` only when Gmail connect is enabled. Public content routes `/about`, `/privacy`, and `/terms` render without authenticated API calls. The authenticated app lives under `/app/*`. Vercel serves deep links through the SPA fallback in [`vercel.json`](vercel.json), and keeps `/api/*` same-origin by proxying to the CloudFront API origin.
 
 The real Gmail path is gated by versioned legal consent. A stale or missing consent record blocks `/app/*` before dashboard routes mount, and the backend independently rejects manual scans, scheduled ingest work, and Gmail-affecting mutations until the current Privacy Policy and Terms versions have been accepted.
+
+The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. It also starts Docker services and ensures the local LocalStack KMS aliases and SQS queues exist. `make dev` runs uvicorn, Vite, and a LocalStack SQS worker so Scan now drains the same ingest → classify → summarize queues used in production. It frees the default dev ports (`8000` API, `5173` frontend) before startup; override with `BRIEFED_API_PORT=8010 BRIEFED_FRONTEND_PORT=5174 make dev` when you want alternate ports. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
+
+Python runtime dependencies are locked with `uv.lock`; CI audits the frozen runtime export, so security-sensitive runtime floors such as Starlette, `pydantic-settings`, `cryptography`, and `msgpack` stay explicit in `pyproject.toml`.
+
+Use `make dev-reset` when you want a clean local account-linking test. It removes local Postgres and LocalStack Docker volumes, then runs `make dev`; connected Gmail accounts, OAuth tokens, scan history, and queued messages are deleted locally.
 
 ## Engineering highlights
 
@@ -149,7 +159,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 
 - **Envelope encryption, per row.** Two customer-managed KMS CMKs (one for OAuth-token wrapping, one for email content); a per-row data key; the encryption context binds `{user_id, table, row_id}`, so a leaked ciphertext can't be replayed across rows or users. → [ADR 0008](docs/adr/0008-kms-cmk-for-token-wrap-key.md), [`core/security.py`](backend/app/core/security.py), [`core/content_crypto.py`](backend/app/core/content_crypto.py)
 - **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain, 3 retries (exponential backoff + jitter, retryable-only), a circuit breaker that trips after 5 consecutive failures, per-model hard caps (Haiku at 100 calls/day), and per-call cost/token logging. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
-- **SnapStart cold-start discipline.** Settings and logging hydrate at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
+- **SnapStart cold-start discipline.** Settings validate and logging configures at *module import*, not in a factory, so SnapStart snapshots a warm process; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
 - **A decoupled pipeline with typed contracts.** SQS fan-out per stage; every message is a frozen, `extra="forbid"` Pydantic discriminated union — no inline message shapes anywhere. → [`workers/messages.py`](backend/app/workers/messages.py)
 - **Public demo, real consent.** `/`, `/about`, `/privacy`, and `/terms` are public no-API surfaces; `/demo` is seeded synthetic data with `/api/*` blocked; `/app/*` is server-gated by versioned Privacy Policy and Terms acceptance before real Gmail processing. → [ADR 0015](docs/adr/0015-public-homepage-demo-and-enforced-consent.md)
 - **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; later destructive paths are narrow, explicit, gated, and documented in ADRs. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0013](docs/adr/0013-gmail-mark-read-write-scope.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)
@@ -176,7 +186,7 @@ The parts of this project I'd point a reviewer at — each links to the code or 
 │   ├── prompts/        Versioned LLM prompt bundles + JSON Schemas
 │   ├── config/         Runtime YAML config, LLM catalog, seeds, schemas
 │   └── ui/             Design tokens + reusable React primitives
-├── infra/terraform/    Lambda + SnapStart + SQS + SSM + S3 + CloudFront +
+├── infra/terraform/    Lambda + SnapStart + SQS + S3 + CloudFront +
 │                       WAF + Route 53 + ACM + two customer-managed KMS CMKs
 ├── docs/
 │   ├── adr/            Architecture Decision Records (0001–0015)
@@ -204,7 +214,6 @@ All routes are mounted under `/api/v1`. The full interactive spec is at `/docs` 
 | Emails | `/emails` | List classified emails · mark read · override bucket |
 | Unsubscribes | `/unsubscribes` | List recommendations · dismiss · confirm · execute (flagged) |
 | Hygiene | `/hygiene` | Inbox-hygiene summary counters |
-| Legal consent | `/legal/consent` | Get current/accepted policy versions · accept Privacy Policy and Terms |
 | Profile | `/profile` | Get / update profile · get / update schedule |
 
 ### Developer commands
@@ -213,8 +222,9 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 
 | Command              | What it does                                                           |
 |----------------------|------------------------------------------------------------------------|
-| `make bootstrap`     | Install Python + Node deps; start docker-compose services.             |
-| `make dev`           | Run backend + frontend with hot-reload (Postgres via docker-compose).  |
+| `make bootstrap`     | Install Python + Node deps; start Docker services, local KMS aliases, and local SQS queues. |
+| `make dev`           | Install deps, start services, fetch Infisical secrets, migrate DB, then run backend + frontend + local SQS worker. |
+| `make dev-reset`     | Delete local Postgres/LocalStack Docker volumes, then run the full local dev stack. |
 | `make test`          | Run pytest + vitest and print a unified summary.                       |
 | `make lint`          | Ruff + mypy + ESLint + Prettier check.                                 |
 | `make lint-tokens`   | Fail if raw hex / `rgb()` colors appear outside `tokens.css` (theme guard). |
@@ -223,7 +233,7 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 | `make docs`          | Regenerate `packages/contracts/openapi.json` + frontend TS client.     |
 | `make e2e`           | Playwright e2e (sets `PLAYWRIGHT=1`).                                  |
 | `make eval`          | Promptfoo prompt evals via pinned `npx` (sets `EVAL=1`).               |
-| `make migrate`       | `alembic upgrade head`.                                                |
+| `make migrate`       | Fetch Infisical secrets, then run `alembic upgrade head`.              |
 | `make secrets-lint`  | `gitleaks detect` full-repo scan.                                      |
 | `make link-check`    | Verify every relative markdown link resolves.                          |
 | `make deploy-dev`    | `terraform apply` the dev environment (requires `IMAGE_URI=<ecr>...`). |
@@ -237,21 +247,11 @@ Enforced by tooling and documented in [CLAUDE.md](CLAUDE.md):
 
 ### Deployment
 
-The frontend deploys to Vercel from the repo root: install with `npm install`, build with `npm run build`, and publish `frontend/dist`. [`vercel.json`](vercel.json) keeps `/api/*` same-origin by rewriting it to the existing CloudFront/Lambda API origin before the SPA fallback to `/index.html`; it also mirrors the CloudFront security headers because the public SPA is no longer served through CloudFront.
-
-The backend still runs on AWS Lambda behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Set `BRIEFED_PUBLIC_BASE_URL` / Terraform `public_base_url` to the Vercel production origin, currently `https://briefed-six.vercel.app`, so the Google OAuth callback URI is generated as `https://briefed-six.vercel.app/api/v1/oauth/gmail/callback` and cookies stay scoped to the browser-facing origin. Production backend deploys still go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
-
-Google OAuth verification for the public Gmail path is tracked in
-[`docs/operations/google-oauth-verification.md`](docs/operations/google-oauth-verification.md).
-The free Vercel domain can host the live real-user flow, but restricted Gmail
-scope approval may still require Google verification and CASA review before the
-flow is warning-free for broad public use.
+Release 1.0.0 runs on AWS Lambda + SnapStart behind CloudFront and AWS WAF. CloudFront fronts the Lambda Function URL with Origin Access Control + SigV4 signing; the Function URL is `AWS_IAM`-only and not publicly callable ([ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [ADR 0011](docs/adr/0011-cloudfront-oac-over-api-gateway.md)). Terraform sources live under [infra/terraform/](infra/terraform/). Production deploys go through the [`deploy-prod` workflow](.github/workflows/deploy-prod.yml) — annotated tag → blue/green Lambda alias swing → CloudFront invalidation → `release_metadata` row written. Rollback is a single `aws lambda update-alias` per function; [`docs/operations/rollback.md`](docs/operations/rollback.md) is the operator playbook. Steady-state cost target is **~$8–11/month**, including two customer-managed KMS CMKs.
 
 ### Version bumps
 
-**App version.** The single source of truth for the app version is [`packages/contracts/version.json`](packages/contracts/version.json). Bump it in one place — backend and frontend both read from it — then run `make docs` (or `/make-docs`) to regenerate the OpenAPI spec with a matching `info.version` pin.
-
-**Legal policy versions.** When Privacy Policy or Terms text materially changes, bump the backend enforcement constants in [`backend/app/core/consent.py`](backend/app/core/consent.py): `CURRENT_PRIVACY_POLICY_VERSION` and `CURRENT_TERMS_VERSION`. Mirror the same values in [`frontend/src/content/legal.ts`](frontend/src/content/legal.ts): `PRIVACY_POLICY_VERSION` and `TERMS_VERSION`, and set `POLICY_EFFECTIVE_DATE` to the deploy date for the published policy text. Then verify with `make test` and `make link-check`; run `make docs` as well if the consent API schema changed.
+The single source of truth for the app version is [`packages/contracts/version.json`](packages/contracts/version.json). Bump it in one place — backend and frontend both read from it — then run `make docs` (or `/make-docs`) to regenerate the OpenAPI spec with a matching `info.version` pin.
 
 ### Git workflow
 
@@ -277,4 +277,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 15 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>
+<sub>Briefed was designed and built solo — backend, frontend, infrastructure, CI, and docs. The 14 ADRs in [`docs/adr/`](docs/adr/) document the full decision trail end to end.</sub>

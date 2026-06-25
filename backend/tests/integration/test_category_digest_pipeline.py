@@ -156,6 +156,57 @@ async def test_summarize_category_happy_path(test_session) -> None:
     assert calls[0].email_id is None
 
 
+async def test_summarize_category_writes_deterministic_fallback_on_llm_failure(
+    test_session,
+) -> None:
+    """Category digest failures degrade instead of failing the whole scan."""
+    user, account, run = await _seed_run(test_session)
+    await _seed_email_summary(
+        test_session,
+        account=account,
+        run=run,
+        subject="Planning notes",
+        label="good_to_read",
+        body_md="Planning notes landed.\n\n**Key points**\n- Review the launch date",
+    )
+    prompt, prompt_version_id = await _registered_prompt(test_session)
+    provider = _Provider([LLMProviderError("malformed json", retryable=False)])
+    repo = SummariesRepo(cipher=None)
+
+    outcome = await summarize_category(
+        CategoryDigestInputs(
+            user_id=user.id,
+            run_id=run.id,
+            category="good_to_read",
+            prompt=prompt,
+            prompt_version_id=prompt_version_id,
+            llm=LLMClient(primary=provider),
+            repo=repo,
+        ),
+        session=test_session,
+    )
+
+    assert outcome.ok is True
+    assert outcome.fallback_used is True
+    assert outcome.confidence == pytest.approx(0.55)
+
+    row = (
+        await test_session.execute(
+            select(Summary).where(Summary.kind == "category_digest"),
+        )
+    ).scalar_one()
+    assert row.model == "deterministic-category-fallback"
+    assert repo.decrypt_category_narrative(row=row, user_id=user.id).startswith("Good To Read")
+    groups = repo.decrypt_category_groups(row=row, user_id=user.id)
+    assert groups[0].label == "Planning notes"
+    assert groups[0].item_refs == ("E1",)
+
+    calls = (await test_session.execute(select(PromptCallLog))).scalars().all()
+    assert len(calls) == 1
+    assert calls[0].status == "error"
+    assert calls[0].run_id == run.id
+
+
 async def test_summarize_category_is_idempotent(test_session) -> None:
     user, account, run = await _seed_run(test_session)
     await _seed_email_summary(

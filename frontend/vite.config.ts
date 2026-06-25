@@ -8,6 +8,11 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
 const projectDir = fileURLToPath(new URL('.', import.meta.url));
+const devApiHost = process.env.BRIEFED_API_HOST ?? '127.0.0.1';
+const devApiPort = process.env.BRIEFED_API_PORT ?? '8000';
+const devFrontendHost = process.env.BRIEFED_FRONTEND_HOST ?? '127.0.0.1';
+const devFrontendPort = Number.parseInt(process.env.BRIEFED_FRONTEND_PORT ?? '5173', 10);
+const devApiTarget = `http://${devApiHost}:${devApiPort}`;
 
 // Track C — Phase I.8: single source of truth for the app version.
 // Read once at config evaluation; baked into the bundle via `define`.
@@ -106,11 +111,11 @@ export default defineConfig({
     ],
   },
   server: {
-    host: '127.0.0.1',
-    port: 5173,
+    host: devFrontendHost,
+    port: devFrontendPort,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: false },
-      '/oauth': { target: 'http://127.0.0.1:8000', changeOrigin: false },
+      '/api': { target: devApiTarget, changeOrigin: false },
+      '/oauth': { target: devApiTarget, changeOrigin: false },
     },
   },
   test: {

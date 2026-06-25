@@ -53,7 +53,7 @@
           "oauth"
         ],
         "summary": "Start Google OAuth authorization-code flow",
-        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path under ``/app``, e.g. ``/app/settings/accounts``).\n    session_cookie: Existing signed session, when the caller is\n        connecting another mailbox to the same user.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
+        "description": "Generate PKCE + state, set the cookie, redirect to Google.\n\nArgs:\n    request: FastAPI request (used to compute the callback URL).\n    return_to: Optional post-callback UI path (must be an internal\n        absolute path under ``/app``, e.g. ``/app/settings/accounts``).\n    link: Whether this OAuth start should attach a mailbox to the\n        existing signed-in Briefed user.\n    session_cookie: Existing signed session, when the caller is\n        connecting another mailbox to the same user.\n    settings: Cached :class:`Settings`.\n\nReturns:\n    A 302 redirect to Google's consent screen.",
         "operationId": "gmail_oauth_start_api_v1_oauth_gmail_start_get",
         "parameters": [
           {
@@ -70,6 +70,16 @@
                 }
               ],
               "title": "Return To"
+            }
+          },
+          {
+            "name": "link",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Link"
             }
           },
           {

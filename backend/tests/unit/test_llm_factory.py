@@ -24,7 +24,6 @@ def _settings(monkeypatch: pytest.MonkeyPatch, **env_overrides: str | None) -> S
         "BRIEFED_OPENROUTER_API_KEY": "or-key",
         "OPENROUTER_API_KEY": "or-key",
         "BRIEFED_DAILY_LLM_USD_CAP": None,
-        "BRIEFED_SSM_PREFIX": None,
     }
     base.update(env_overrides)
     for key, value in base.items():

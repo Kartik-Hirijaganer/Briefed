@@ -10,9 +10,9 @@ Flow (plan §14 Phase 1 — "OAuth start/callback routers"):
   :class:`ConnectedAccount` + :class:`OAuthToken`, and sets the signed
   session cookie before redirecting back to the UI.
 
-Secrets access: the OAuth client id + secret come from SSM via
+Secrets access: the OAuth client id + secret come from Infisical-injected
 :class:`app.core.config.Settings`. The KMS CMK alias comes from
-``settings.token_wrap_key_alias`` injected by Terraform.
+``settings.token_wrap_key_alias``.
 """
 
 from __future__ import annotations
@@ -159,6 +159,7 @@ def _require_oauth_credentials(settings: Settings) -> tuple[str, str]:
 async def start(
     request: Request,
     return_to: str | None = Query(default=None),
+    link: bool = Query(default=False),
     session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
@@ -168,6 +169,8 @@ async def start(
         request: FastAPI request (used to compute the callback URL).
         return_to: Optional post-callback UI path (must be an internal
             absolute path under ``/app``, e.g. ``/app/settings/accounts``).
+        link: Whether this OAuth start should attach a mailbox to the
+            existing signed-in Briefed user.
         session_cookie: Existing signed session, when the caller is
             connecting another mailbox to the same user.
         settings: Cached :class:`Settings`.
@@ -184,15 +187,21 @@ async def start(
         "state": state,
         "code_verifier": verifier,
         "return_to": sanitize_return_to(return_to),
+        "link": link,
     }
-    if session_cookie:
+    existing_user_id: str | None = None
+    if link and session_cookie:
         try:
             existing_session = verify_cookie(session_cookie, secret=signing_key)
+            raw_existing_user_id = existing_session.get("user_id")
+            if isinstance(raw_existing_user_id, str):
+                existing_user_id = raw_existing_user_id
         except AuthError:
-            existing_session = {}
-        existing_user_id = existing_session.get("user_id")
-        if isinstance(existing_user_id, str):
-            cookie_payload["user_id"] = existing_user_id
+            existing_user_id = None
+    if link and existing_user_id is None:
+        return _redirect_to_login_for_link(return_to=return_to)
+    if link and existing_user_id is not None:
+        cookie_payload["user_id"] = existing_user_id
     cookie_value = sign_cookie(cookie_payload, secret=signing_key)
 
     url = build_authorize_url(
@@ -200,6 +209,7 @@ async def start(
         redirect_uri=_compute_redirect_uri(request, settings),
         state=state,
         code_challenge=challenge,
+        select_account=link,
     )
     response = RedirectResponse(url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
     response.set_cookie(
@@ -374,6 +384,25 @@ def _redirect_after_oauth_error(error: str) -> RedirectResponse:
     response = RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
     response.delete_cookie(OAUTH_STATE_COOKIE_NAME)
     return response
+
+
+def _redirect_to_login_for_link(*, return_to: str | None) -> RedirectResponse:
+    """Redirect a link-mode OAuth start when the Briefed session is absent.
+
+    Args:
+        return_to: Requested post-link path. Unsafe values are ignored.
+
+    Returns:
+        A 302 redirect to login, preserving a safe app path as ``next``.
+    """
+    requested_next = sanitize_return_to(return_to)
+    safe_next = (
+        requested_next
+        if requested_next != "/app" or return_to == "/app"
+        else "/app/settings/accounts"
+    )
+    query = urlencode({"next": safe_next})
+    return RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
 
 
 async def _exchange_callback_code(

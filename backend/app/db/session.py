@@ -6,9 +6,9 @@ SQLAlchemy pool across Lambda invocations causes the pooler to see stale
 connections. ``NullPool`` + per-request checkout is the safe default.
 
 The engine is lazily constructed on first use so importing this module
-at Lambda cold-start time does not open a connection before secrets are
-hydrated. A single cached engine is reused for the rest of the warm
-window.
+at Lambda cold-start time does not open a connection before Infisical has
+injected settings. A single cached engine is reused for the rest of the
+warm window.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 def _resolve_async_url(raw: str) -> str:
     """Normalize a raw DB URL to the asyncpg driver.
 
-    Both Supabase (``postgresql://``) and the Phase 0 ``.env`` convention
+    Both Supabase (``postgresql://``) and the local Infisical value
     (``postgresql+asyncpg://``) land here; this helper force-selects the
     asyncpg driver so the engine never silently picks up psycopg2.
 
@@ -88,8 +88,8 @@ def get_engine() -> AsyncEngine:
         settings = get_settings()
         if not settings.database_url:
             raise RuntimeError(
-                "database_url is not configured. Set BRIEFED_DATABASE_URL or "
-                "the corresponding SSM parameter before opening a session.",
+                "database_url is not configured. Store BRIEFED_DATABASE_URL in "
+                "Infisical before opening a session.",
             )
         _engine = _build_engine(_resolve_async_url(settings.database_url))
     return _engine

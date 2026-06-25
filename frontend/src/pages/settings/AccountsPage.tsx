@@ -24,6 +24,8 @@ export default function AccountsPage(): JSX.Element {
   const accountsQuery = useQuery({
     queryKey: accounts(),
     queryFn: async () => unwrap(await api.GET('/api/v1/accounts')),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'sm';

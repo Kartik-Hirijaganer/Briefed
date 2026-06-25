@@ -4,6 +4,7 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 
 import type { FreshnessState } from '@briefed/ui';
@@ -110,6 +111,22 @@ export interface DashboardData {
   readonly markOneRead: (emailId: string) => void;
   /** The mark-read mutation (for status feedback). */
   readonly markRead: MarkReadMutation;
+  /** Ids currently checked for bulk mark-read (visible page only). */
+  readonly selectedIds: ReadonlySet<string>;
+  /** Count of checked rows among the visible page. */
+  readonly selectedCount: number;
+  /** Whether every visible row is checked. */
+  readonly allSelected: boolean;
+  /** Whether at least one visible row is checked. */
+  readonly someSelected: boolean;
+  /** Toggle one row's bulk-selection checkbox. */
+  readonly toggleSelected: (emailId: string, checked: boolean) => void;
+  /** Check or clear every visible row. */
+  readonly toggleAllSelected: (checked: boolean) => void;
+  /** Clear the bulk selection. */
+  readonly clearSelection: () => void;
+  /** Mark every checked row read (advances the reader off any marked row). */
+  readonly markSelectedRead: () => void;
   /** Path to return to after a Gmail reconnect. */
   readonly reconnectReturnTo: string;
 }
@@ -195,6 +212,8 @@ export function useDashboardData(): DashboardData {
     },
   });
 
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set<string>());
+
   const lastRunAt = digestQuery.data?.last_successful_run_at ?? null;
   const hoursSinceLastRun = lastRunAt
     ? (Date.now() - new Date(lastRunAt).getTime()) / (60 * 60 * 1000)
@@ -207,6 +226,23 @@ export function useDashboardData(): DashboardData {
   const totalEmails = emailsQuery.data?.total ?? 0;
   const hasNextPage = offset + EMAIL_LIMIT < totalEmails;
   const reconnectReturnTo = `${location.pathname}${location.search}${location.hash}` || '/app';
+
+  const visibleIds = useMemo(() => emails.map((email) => email.id), [emails]);
+  const selectedVisibleIds = visibleIds.filter((id) => selectedIds.has(id));
+  const selectedCount = selectedVisibleIds.length;
+  const allSelected = visibleIds.length > 0 && selectedCount === visibleIds.length;
+  const someSelected = selectedCount > 0;
+
+  // Drop ids that left the visible page (e.g. after a Scan Now refetch) so the
+  // selection never carries rows the user can no longer see.
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const visible = new Set(visibleIds);
+      const pruned = new Set([...current].filter((id) => visible.has(id)));
+      return pruned.size === current.size ? current : pruned;
+    });
+  }, [visibleIds]);
 
   const selectedEmail = emails.find((email) => email.id === selectedParam) ?? emails[0];
   const selectedId = selectedEmail?.id ?? null;
@@ -233,6 +269,7 @@ export function useDashboardData(): DashboardData {
     next.delete('offset');
     next.delete('selected');
     setSearchParams(next, { replace: false });
+    setSelectedIds(new Set<string>());
   };
 
   const setOffset = (nextOffset: number): void => {
@@ -241,6 +278,7 @@ export function useDashboardData(): DashboardData {
     else next.delete('offset');
     next.delete('selected');
     setSearchParams(next, { replace: false });
+    setSelectedIds(new Set<string>());
   };
 
   const setSelectedId = (emailId: string | null): void => {
@@ -259,6 +297,49 @@ export function useDashboardData(): DashboardData {
     const nextCandidate = emails[index + 1] ?? emails[index - 1] ?? undefined;
     markRead.mutate({ emailIds: [emailId] });
     setSelectedId(nextCandidate ? nextCandidate.id : null);
+  };
+
+  const toggleSelected = (emailId: string, checked: boolean): void => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(emailId);
+      else next.delete(emailId);
+      return next;
+    });
+  };
+
+  const toggleAllSelected = (checked: boolean): void => {
+    setSelectedIds(checked ? new Set(visibleIds) : new Set<string>());
+  };
+
+  const clearSelection = (): void => setSelectedIds(new Set<string>());
+
+  const markSelectedRead = (): void => {
+    if (isDemo) return;
+    const ids = selectedVisibleIds;
+    if (ids.length === 0) return;
+    const marked = new Set(ids);
+    const previousSelection = selectedIds;
+
+    // If the row open in the reading pane is being marked, advance the reader
+    // selection BEFORE the optimistic removal mutates the list (mirrors
+    // markOneRead): the next surviving row, else the previous, else clear.
+    if (selectedId && marked.has(selectedId)) {
+      const index = emails.findIndex((email) => email.id === selectedId);
+      const nextCandidate =
+        emails.slice(index + 1).find((email) => !marked.has(email.id)) ??
+        [...emails.slice(0, index)].reverse().find((email) => !marked.has(email.id)) ??
+        undefined;
+      setSelectedId(nextCandidate ? nextCandidate.id : null);
+    }
+
+    clearSelection();
+    markRead.mutate(
+      { emailIds: ids },
+      // The mutation-level onError rolls the cache back; restore the selection
+      // here too so the user can retry without re-checking every row.
+      { onError: () => setSelectedIds(previousSelection) },
+    );
   };
 
   return {
@@ -291,6 +372,14 @@ export function useDashboardData(): DashboardData {
     selectNextMustRead,
     markOneRead,
     markRead,
+    selectedIds,
+    selectedCount,
+    allSelected,
+    someSelected,
+    toggleSelected,
+    toggleAllSelected,
+    clearSelection,
+    markSelectedRead,
     reconnectReturnTo,
   };
 }

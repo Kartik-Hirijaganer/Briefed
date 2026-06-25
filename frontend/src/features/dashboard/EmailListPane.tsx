@@ -3,6 +3,7 @@ import { Inbox } from 'lucide-react';
 
 import type { Schemas } from '../../api/types';
 import { LIST_STAGGER_SECONDS, SORT_OPTIONS } from '../../config/presentation';
+import { useDemoMode } from '../../demo/DemoModeProvider';
 import { DashboardSkeletons } from './DashboardSkeletons';
 import { EmailListRow } from './EmailListRow';
 import { EmailSelectionBar } from './EmailSelectionBar';
@@ -65,6 +66,7 @@ export interface EmailListPaneProps {
  * @returns The rendered list pane.
  */
 export function EmailListPane(props: EmailListPaneProps): JSX.Element {
+  const { isDemo } = useDemoMode();
   const {
     emails,
     selectedId,
@@ -88,11 +90,18 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
     markReadLoading,
     online,
   } = props;
+  const markReadDisabled = isDemo || selectedCount === 0 || !online || markReadLoading;
+  const markReadTooltip = isDemo
+    ? 'Disabled in demo'
+    : !online
+      ? "You're offline"
+      : selectedCount === 0
+        ? 'Select emails to mark read'
+        : undefined;
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs text-fg-muted">{total} unread</span>
+      <div className="flex items-center justify-end px-1">
         <span className="text-xs text-fg-faint">{SORT_OPTIONS[0]}</span>
       </div>
 
@@ -106,20 +115,15 @@ export function EmailListPane(props: EmailListPaneProps): JSX.Element {
       ) : emails.length > 0 ? (
         <>
           <EmailSelectionBar
+            total={total}
             selectedCount={selectedCount}
             allSelected={allSelected}
             indeterminate={someSelected && !allSelected}
             onToggleAll={onToggleAll}
             onMarkRead={onMarkRead}
-            markReadDisabled={selectedCount === 0 || !online || markReadLoading}
+            markReadDisabled={markReadDisabled}
             markReadLoading={markReadLoading}
-            markReadTooltip={
-              !online
-                ? "You're offline"
-                : selectedCount === 0
-                  ? 'Select emails to mark read'
-                  : undefined
-            }
+            markReadTooltip={markReadTooltip}
           />
           <ul className="flex flex-col gap-1">
             {emails.map((email, index) => (

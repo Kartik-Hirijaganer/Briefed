@@ -43,7 +43,8 @@ if TYPE_CHECKING:  # pragma: no cover
 _APP_CONFIG = get_app_config()
 _SUMMARIZABLE_LABELS: tuple[str, ...] = _APP_CONFIG.taxonomy.summarizable_labels
 _FAILED_RUN_ERROR = "One or more LLM provider calls failed during the scan."
-_NON_FATAL_PROMPT_NAMES: tuple[str, ...] = ("unsubscribe_borderline",)
+_NON_FATAL_PROMPT_NAMES: tuple[str, ...] = ("unsubscribe_borderline", "category_digest")
+_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY = "unsubscribe_hygiene_enqueued"
 logger = get_logger(__name__)
 
 CategoryDigestSender = Callable[[CategoryDigestMessage], None]
@@ -158,6 +159,51 @@ async def mark_run_running(session: AsyncSession, run_id: UUID | None) -> None:
         return
     run.status = "running"
     await session.flush()
+
+
+async def mark_unsubscribe_hygiene_enqueued(
+    *,
+    session: AsyncSession,
+    run_id: UUID | None,
+    account_id: UUID,
+) -> bool:
+    """Record that unsubscribe hygiene was enqueued for an account/run.
+
+    Args:
+        session: Active database session.
+        run_id: Digest-run id carried by the worker message. ``None``
+            preserves legacy ad-hoc behavior and returns ``True``.
+        account_id: Connected account whose hygiene aggregate is being
+            enqueued.
+
+    Returns:
+        ``True`` when the caller should enqueue a hygiene message,
+        ``False`` when this account/run was already marked.
+    """
+    if run_id is None:
+        return True
+    run = (
+        await session.execute(
+            select(DigestRun).where(DigestRun.id == run_id).with_for_update(),
+        )
+    ).scalar_one_or_none()
+    if run is None:
+        return False
+
+    stats = dict(run.stats) if isinstance(run.stats, dict) else {}
+    raw_ids = stats.get(_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY)
+    enqueued = (
+        {item for item in raw_ids if isinstance(item, str)} if isinstance(raw_ids, list) else set()
+    )
+    account_key = str(account_id)
+    if account_key in enqueued:
+        return False
+
+    enqueued.add(account_key)
+    stats[_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY] = sorted(enqueued)
+    run.stats = stats
+    await session.flush()
+    return True
 
 
 async def maybe_finalize_run(
@@ -744,6 +790,7 @@ async def _clear_user_lock(
 __all__ = [
     "RunProgressSnapshot",
     "mark_run_running",
+    "mark_unsubscribe_hygiene_enqueued",
     "maybe_finalize_run",
     "stamp_run_membership",
 ]

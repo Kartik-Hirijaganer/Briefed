@@ -74,7 +74,7 @@ class OpenRouterProvider:
         the local-estimate fallback.
 
         Args:
-            api_key: OpenRouter API key from SSM / ``.env``.
+            api_key: OpenRouter API key from Infisical.
             http_client: Shared :class:`httpx.AsyncClient`. The caller
                 owns the lifecycle.
             catalog_entry: :class:`app.llm.catalog.ModelEntry` for the

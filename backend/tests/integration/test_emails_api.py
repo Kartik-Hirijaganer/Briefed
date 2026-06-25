@@ -20,7 +20,12 @@ from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
 from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
 from app.db.models import ConnectedAccount, Email, OAuthToken, User
-from app.domain.providers import MarkReadResult, MessageId, ProviderCredentials
+from app.domain.providers import (
+    MarkReadFailure,
+    MarkReadResult,
+    MessageId,
+    ProviderCredentials,
+)
 from app.main import app
 from app.services.classification.repository import ClassificationsRepo, ClassificationWrite
 from app.services.gmail.oauth import GMAIL_MODIFY_SCOPE, GMAIL_READONLY_SCOPE
@@ -71,6 +76,39 @@ class _FakeProvider:
 
         self.calls.append(message_ids)
         return MarkReadResult(marked=tuple(message_ids))
+
+
+class _PartialFailureProvider(_FakeProvider):
+    """Mark-read double that reports a configured subset of ids as failed."""
+
+    def __init__(self, *, fail_ids: frozenset[str]) -> None:
+        super().__init__()
+        self._fail_ids = fail_ids
+
+    async def mark_read(
+        self,
+        credentials: ProviderCredentials,
+        message_ids: list[MessageId],
+    ) -> MarkReadResult:
+        """Mark every id read except the configured failures.
+
+        Args:
+            credentials: Decrypted provider credentials.
+            message_ids: Provider ids selected by the endpoint.
+
+        Returns:
+            Result marking all but ``fail_ids``; the rest are reported failed.
+        """
+        del credentials
+
+        self.calls.append(message_ids)
+        marked = tuple(mid for mid in message_ids if mid not in self._fail_ids)
+        failed = tuple(
+            MarkReadFailure(message_id=mid, reason="missing")
+            for mid in message_ids
+            if mid in self._fail_ids
+        )
+        return MarkReadResult(marked=marked, failed=failed)
 
 
 @pytest_asyncio.fixture()
@@ -226,6 +264,111 @@ async def test_mark_read_by_category_selects_unread_owned_rows(
 
 
 @pytest.mark.asyncio
+async def test_mark_read_by_multiple_ids_marks_all_and_hides_them(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _seed_user(api_session)
+    await _seed_email_rows(api_session, user=user)
+    planning = await _email_by_subject(api_session, "Quarterly planning")
+    receipt = await _email_by_subject(api_session, "Receipt")
+    await _seed_oauth_token(
+        api_session, account_id=planning.account_id, scopes=(GMAIL_MODIFY_SCOPE,)
+    )
+    provider = _FakeProvider()
+    _patch_mark_read_deps(monkeypatch=monkeypatch, provider=provider)
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/emails/mark-read",
+            json={"email_ids": [str(planning.id), str(receipt.id)]},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"marked": 2, "failed": []}
+    assert len(provider.calls) == 1
+    assert set(provider.calls[0]) == {"m-1", "m-3"}
+    assert "UNREAD" not in (await _email_by_subject(api_session, "Quarterly planning")).labels
+    assert "UNREAD" not in (await _email_by_subject(api_session, "Receipt")).labels
+
+
+@pytest.mark.asyncio
+async def test_mark_read_by_multiple_accounts_groups_provider_calls(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _seed_user(api_session)
+    await _seed_email_rows(api_session, user=user)
+    planning = await _email_by_subject(api_session, "Quarterly planning")
+    account_id, second_email_id = await _seed_second_account_email(
+        api_session,
+        user=user,
+        gmail_message_id="m-4",
+        subject="Second account alert",
+    )
+    await _seed_oauth_token(
+        api_session, account_id=planning.account_id, scopes=(GMAIL_MODIFY_SCOPE,)
+    )
+    await _seed_oauth_token(api_session, account_id=account_id, scopes=(GMAIL_MODIFY_SCOPE,))
+    provider = _FakeProvider()
+    _patch_mark_read_deps(monkeypatch=monkeypatch, provider=provider)
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/emails/mark-read",
+            json={"email_ids": [str(planning.id), str(second_email_id)]},
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"marked": 2, "failed": []}
+    assert {tuple(call) for call in provider.calls} == {("m-1",), ("m-4",)}
+    assert "UNREAD" not in (await _email_by_subject(api_session, "Quarterly planning")).labels
+    assert "UNREAD" not in (await _email_by_subject(api_session, "Second account alert")).labels
+
+
+@pytest.mark.asyncio
+async def test_mark_read_partial_failure_keeps_failed_email_unread(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _seed_user(api_session)
+    await _seed_email_rows(api_session, user=user)
+    planning = await _email_by_subject(api_session, "Quarterly planning")
+    receipt = await _email_by_subject(api_session, "Receipt")
+    await _seed_oauth_token(
+        api_session, account_id=planning.account_id, scopes=(GMAIL_MODIFY_SCOPE,)
+    )
+    provider = _PartialFailureProvider(fail_ids=frozenset({"m-3"}))
+    _patch_mark_read_deps(monkeypatch=monkeypatch, provider=provider)
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/emails/mark-read",
+            json={"email_ids": [str(planning.id), str(receipt.id)]},
+            cookies={SESSION_COOKIE_NAME: cookie},
+            headers={"x-request-id": "test-request-partial"},
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["marked"] == 1
+    assert body["failed"] == [
+        {
+            "email_id": str(receipt.id),
+            "provider_message_id": "m-3",
+            "reason": "missing",
+        }
+    ]
+    assert "UNREAD" not in (await _email_by_subject(api_session, "Quarterly planning")).labels
+    assert "UNREAD" in (await _email_by_subject(api_session, "Receipt")).labels
+
+
+@pytest.mark.asyncio
 async def test_mark_read_rejects_unowned_email_id(
     api_session: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
@@ -368,6 +511,51 @@ async def _seed_oauth_token(
             ),
         )
         await session.commit()
+
+
+async def _seed_second_account_email(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    user: User,
+    gmail_message_id: str,
+    subject: str,
+) -> tuple[UUID, UUID]:
+    """Insert one unread email under a second account for the same user.
+
+    Args:
+        factory: Async session factory.
+        user: Existing owner.
+        gmail_message_id: Provider message id to store.
+        subject: Email subject to store.
+
+    Returns:
+        The connected account id and email id.
+    """
+    async with factory() as session:
+        account = ConnectedAccount(
+            user_id=user.id,
+            provider="gmail",
+            email="work@example.com",
+            status="active",
+        )
+        session.add(account)
+        await session.flush()
+        email = Email(
+            account_id=account.id,
+            gmail_message_id=gmail_message_id,
+            thread_id=f"t-{gmail_message_id}",
+            internal_date=datetime.now(tz=UTC) - timedelta(minutes=10),
+            from_addr="ops@example.com",
+            to_addrs=[],
+            cc_addrs=[],
+            subject=subject,
+            snippet=subject,
+            labels=["UNREAD"],
+            content_hash=hashlib.sha256(gmail_message_id.encode()).digest(),
+        )
+        session.add(email)
+        await session.commit()
+        return account.id, email.id
 
 
 def _patch_mark_read_deps(

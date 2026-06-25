@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as ApiClient from '../api/client';
+import { accounts } from '../api/queryKeys';
 import AccountsPage from '../pages/settings/AccountsPage';
 
 const apiMock = vi.hoisted(() => ({ GET: vi.fn() }));
@@ -29,15 +30,16 @@ vi.mock('../components/AppVersion', () => ({
   AppVersion: () => <span data-testid="app-version">v</span>,
 }));
 
-const renderPage = (): void => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const renderPage = (client?: QueryClient): QueryClient => {
+  const queryClient = client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <AccountsPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 };
 
 describe('<AccountsPage>', () => {
@@ -56,6 +58,27 @@ describe('<AccountsPage>', () => {
     await waitFor(() => expect(screen.getByTestId('account-a1')).toBeInTheDocument());
     expect(screen.getByTestId('account-a2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add gmail account/i })).toBeInTheDocument();
+  });
+
+  it('refetches when a persisted accounts cache is already hydrated', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 5 * 60 * 1000 } },
+    });
+    client.setQueryData(accounts(), { accounts: [{ id: 'cached', email: 'cached@example.com' }] });
+    apiMock.GET.mockResolvedValue({
+      data: {
+        accounts: [
+          { id: 'primary', email: 'primary@example.com' },
+          { id: 'secondary', email: 'secondary@example.com' },
+        ],
+      },
+    });
+
+    renderPage(client);
+
+    await waitFor(() => expect(apiMock.GET).toHaveBeenCalledWith('/api/v1/accounts'));
+    await waitFor(() => expect(screen.getByTestId('account-secondary')).toBeInTheDocument());
+    expect(screen.queryByTestId('account-cached')).not.toBeInTheDocument();
   });
 
   it('renders the empty state when no accounts are connected', async () => {

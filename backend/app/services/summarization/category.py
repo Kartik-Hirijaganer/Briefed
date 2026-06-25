@@ -30,7 +30,7 @@ from app.db.models import (
     Summary,
 )
 from app.llm.client import LLMClient, LLMClientError, PromptCallRecord, render_prompt
-from app.llm.schemas import CategoryDigestCategory, CategoryDigestSummary
+from app.llm.schemas import CategoryDigestCategory, CategoryDigestGroup, CategoryDigestSummary
 from app.services.email_labels import unread_email_filter
 from app.services.summarization.repository import SummariesRepo, SummaryCategoryDigestWrite
 
@@ -212,7 +212,13 @@ async def summarize_category(
             category=inputs.category,
             error=str(exc),
         )
-        return _skipped(inputs, reason=str(exc))
+        return await _write_deterministic_digest(
+            inputs=inputs,
+            session=session,
+            items=items,
+            reason=str(exc),
+            elapsed_ms=int((utcnow() - started).total_seconds() * 1000),
+        )
 
     summary = response.parsed
     assert isinstance(summary, CategoryDigestSummary)
@@ -389,6 +395,107 @@ def _summary_parts(body: str) -> tuple[str, tuple[str, ...]]:
         if in_key_points and line.startswith("- "):
             key_points.append(line[2:].strip())
     return tldr, tuple(key_points[:5])
+
+
+async def _write_deterministic_digest(
+    *,
+    inputs: CategoryDigestInputs,
+    session: AsyncSession,
+    items: tuple[CategoryDigestItem, ...],
+    reason: str,
+    elapsed_ms: int,
+) -> CategoryDigestOutcome:
+    """Write a source-backed fallback digest when aggregate LLM synthesis fails.
+
+    Args:
+        inputs: Collaborator bundle.
+        session: Active async session.
+        items: Complete category item set already loaded for the prompt.
+        reason: LLM failure reason for logging.
+        elapsed_ms: Elapsed time spent attempting model synthesis.
+
+    Returns:
+        Successful outcome backed by deterministic summary content.
+    """
+    summary = _deterministic_digest(category=inputs.category, items=items)
+    await inputs.repo.upsert_category_digest(
+        session,
+        SummaryCategoryDigestWrite(
+            run_id=inputs.run_id,
+            category=inputs.category,
+            user_id=inputs.user_id,
+            prompt_version_id=inputs.prompt_version_id,
+            model="deterministic-category-fallback",
+            tokens_in=0,
+            tokens_out=0,
+            narrative=summary.narrative,
+            groups=summary.groups,
+            confidence=_to_decimal(summary.confidence),
+            cache_hit=False,
+        ),
+    )
+    logger.warning(
+        "summarize.category.fallback_written",
+        run_id=str(inputs.run_id),
+        category=inputs.category,
+        items=len(items),
+        reason=reason,
+        elapsed_ms=elapsed_ms,
+    )
+    return CategoryDigestOutcome(
+        run_id=inputs.run_id,
+        category=inputs.category,
+        ok=True,
+        confidence=summary.confidence,
+        tokens_in=0,
+        tokens_out=0,
+        cost_usd=Decimal("0"),
+        cache_hit=False,
+        fallback_used=True,
+    )
+
+
+def _deterministic_digest(
+    *,
+    category: CategoryDigestCategory,
+    items: tuple[CategoryDigestItem, ...],
+) -> CategoryDigestSummary:
+    """Build a compact digest directly from per-email summaries.
+
+    Args:
+        category: Triage category being summarized.
+        items: Complete category item set.
+
+    Returns:
+        Category digest that cites the source refs without model synthesis.
+    """
+    label = category.replace("_", " ").title()
+    count = len(items)
+    noun = "email" if count == 1 else "emails"
+    narrative = f"{label}: {count} {noun} ready for review. Top items are listed directly."
+    groups = tuple(
+        CategoryDigestGroup(
+            label=item.subject[:80],
+            bullets=(_first_bullet(item),),
+            item_refs=(item.ref,),
+        )
+        for item in items[:8]
+    )
+    return CategoryDigestSummary(narrative=narrative, groups=groups, confidence=0.55)
+
+
+def _first_bullet(item: CategoryDigestItem) -> str:
+    """Return the best deterministic bullet for one category item.
+
+    Args:
+        item: Category digest item.
+
+    Returns:
+        First key point when available, otherwise the item's TL;DR.
+    """
+    if item.key_points:
+        return item.key_points[0][:220]
+    return item.tldr[:220]
 
 
 async def _persist_call_log(

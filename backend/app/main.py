@@ -7,8 +7,7 @@ Module-level side effects
 -------------------------
 Settings are loaded and logging is configured at import time (not in the
 ``create_app`` factory) so Lambda SnapStart snapshots a fully-initialized
-process. Subsequent warm restores skip both the SSM round-trip and the
-``structlog.configure`` call.
+process. Subsequent warm restores skip the ``structlog.configure`` call.
 """
 
 from fastapi import FastAPI
@@ -22,10 +21,9 @@ from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.sentry import configure_sentry
 from app.core.tracing import configure_tracing, instrument_app
 
-# SnapStart-friendly init. ``get_settings`` is memoized via ``lru_cache``;
-# the first call triggers SSM hydration in Lambda mode. ``configure_logging``,
-# ``configure_tracing`` and ``configure_sentry`` are all idempotent so a
-# re-import during testing or a SnapStart restore is a no-op.
+# SnapStart-friendly init. ``get_settings`` is memoized via ``lru_cache``.
+# ``configure_logging``, ``configure_tracing`` and ``configure_sentry`` are
+# all idempotent so a re-import during testing or a SnapStart restore is a no-op.
 _settings = get_settings()
 _app_config = get_app_config()
 configure_tracing(_settings)

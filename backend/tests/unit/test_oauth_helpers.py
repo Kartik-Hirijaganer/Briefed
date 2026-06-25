@@ -44,6 +44,19 @@ def test_authorize_url_contains_required_params() -> None:
     assert GMAIL_MODIFY_SCOPE in GMAIL_SCOPES
 
 
+def test_authorize_url_can_force_account_selection() -> None:
+    """Link-mode OAuth asks Google to show the account chooser."""
+    url = build_authorize_url(
+        client_id="cid",
+        redirect_uri="https://api.briefed.dev/cb",
+        state="STATE",
+        code_challenge="CHAL",
+        select_account=True,
+    )
+
+    assert "prompt=consent+select_account" in url
+
+
 def test_expires_at_adds_safety_margin() -> None:
     bundle = OAuthTokenBundle(
         access_token="x",
