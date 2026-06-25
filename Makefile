@@ -13,6 +13,7 @@ SHELL := /usr/bin/env bash
 ARTIFACTS_DIR := .artifacts
 COV_BE_XML    := $(ARTIFACTS_DIR)/coverage-be.xml
 COV_FE_LCOV   := frontend/coverage/lcov.info
+LOCAL_SQS_ENV_FILE := $(ARTIFACTS_DIR)/local-sqs.env
 
 COVERAGE_FLOOR ?= 80
 PYTHON ?= $(shell if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python3; fi)
@@ -44,6 +45,18 @@ endif
 ifeq ($(strip $(LOG_LEVEL)),)
 LOG_LEVEL := info
 endif
+ifeq ($(strip $(BRIEFED_API_HOST)),)
+BRIEFED_API_HOST := 127.0.0.1
+endif
+ifeq ($(strip $(BRIEFED_API_PORT)),)
+BRIEFED_API_PORT := 8000
+endif
+ifeq ($(strip $(BRIEFED_FRONTEND_HOST)),)
+BRIEFED_FRONTEND_HOST := 127.0.0.1
+endif
+ifeq ($(strip $(BRIEFED_FRONTEND_PORT)),)
+BRIEFED_FRONTEND_PORT := 5173
+endif
 ifeq ($(strip $(AWS_REGION)),)
 AWS_REGION := us-east-1
 endif
@@ -55,6 +68,12 @@ AWS_ACCESS_KEY_ID := test
 endif
 ifeq ($(strip $(AWS_SECRET_ACCESS_KEY)),)
 AWS_SECRET_ACCESS_KEY := test
+endif
+ifeq ($(strip $(BRIEFED_TOKEN_WRAP_KEY_ALIAS)),)
+BRIEFED_TOKEN_WRAP_KEY_ALIAS := alias/briefed-dev-token-wrap
+endif
+ifeq ($(strip $(BRIEFED_CONTENT_KEY_ALIAS)),)
+BRIEFED_CONTENT_KEY_ALIAS := alias/briefed-dev-content-encrypt
 endif
 ifeq ($(strip $(BRIEFED_INFISICAL_PROJECT_ID)),)
 BRIEFED_INFISICAL_PROJECT_ID := cbd87e9b-3963-4906-b8cc-d479ff5192ed
@@ -68,7 +87,7 @@ endif
 ifeq ($(strip $(BRIEFED_INFISICAL_DOMAIN)),)
 BRIEFED_INFISICAL_DOMAIN := https://app.infisical.com/api
 endif
-LOCAL_RUN_ENV = BRIEFED_ENV=$(BRIEFED_ENV) BRIEFED_RUNTIME=$(BRIEFED_RUNTIME) LOG_LEVEL=$(LOG_LEVEL) AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)
+LOCAL_RUN_ENV = BRIEFED_ENV=$(BRIEFED_ENV) BRIEFED_RUNTIME=$(BRIEFED_RUNTIME) LOG_LEVEL=$(LOG_LEVEL) BRIEFED_PYTHON=$(PYTHON) BRIEFED_API_HOST=$(BRIEFED_API_HOST) BRIEFED_API_PORT=$(BRIEFED_API_PORT) BRIEFED_FRONTEND_HOST=$(BRIEFED_FRONTEND_HOST) BRIEFED_FRONTEND_PORT=$(BRIEFED_FRONTEND_PORT) AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) BRIEFED_TOKEN_WRAP_KEY_ALIAS=$(BRIEFED_TOKEN_WRAP_KEY_ALIAS) BRIEFED_CONTENT_KEY_ALIAS=$(BRIEFED_CONTENT_KEY_ALIAS)
 INFISICAL_RUN = $(LOCAL_RUN_ENV) $(INFISICAL) run --projectId $(BRIEFED_INFISICAL_PROJECT_ID) --env $(BRIEFED_INFISICAL_ENVIRONMENT) --path $(BRIEFED_INFISICAL_SECRET_PATH) --domain $(BRIEFED_INFISICAL_DOMAIN) --silent --
 export BRIEFED_ENV BRIEFED_RUNTIME BRIEFED_INFISICAL_PROJECT_ID BRIEFED_INFISICAL_ENVIRONMENT BRIEFED_INFISICAL_SECRET_PATH
 
@@ -95,16 +114,12 @@ ifneq (,$(wildcard package.json))
 endif
 	docker compose up -d
 	@$(MAKE) _ensure-local-kms
+	@$(MAKE) _ensure-local-sqs
 
 .PHONY: dev
-dev: bootstrap require-infisical _wait-postgres migrate ## Install deps, start services, fetch Infisical secrets, migrate DB, and run backend + frontend
-	@if [ -f package-lock.json ]; then \
-	  ( $(INFISICAL_RUN) $(UVICORN) app.main:app --app-dir backend --reload & \
-	    npm --workspace frontend run dev & \
-	    wait ); \
-	else \
-	  $(INFISICAL_RUN) $(UVICORN) app.main:app --app-dir backend --reload; \
-	fi
+dev: bootstrap require-infisical _wait-postgres migrate _ensure-local-sqs ## Install deps, start services, migrate DB, and run backend + frontend + local SQS worker
+	@( set -a; source "$(LOCAL_SQS_ENV_FILE)"; set +a; \
+	  $(INFISICAL_RUN) bash backend/scripts/run_local_dev.sh )
 
 .PHONY: require-infisical
 require-infisical:
@@ -114,6 +129,10 @@ require-infisical:
 .PHONY: _ensure-local-kms
 _ensure-local-kms:
 	@$(LOCAL_RUN_ENV) $(PYTHON) backend/scripts/ensure_local_kms.py
+
+.PHONY: _ensure-local-sqs
+_ensure-local-sqs:
+	@$(LOCAL_RUN_ENV) BRIEFED_LOCAL_SQS_ENV_FILE=$(LOCAL_SQS_ENV_FILE) $(PYTHON) backend/scripts/ensure_local_sqs.py
 
 .PHONY: _wait-postgres
 _wait-postgres:
@@ -136,6 +155,14 @@ _wait-postgres:
 clean: ## Remove build + test + coverage artifacts
 	rm -rf $(ARTIFACTS_DIR) .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml htmlcov
 	rm -rf frontend/coverage frontend/dist frontend/node_modules/.vite
+
+.PHONY: reset-local
+reset-local: ## Stop local services and remove local Postgres + LocalStack data
+	docker compose down -v
+	rm -f $(LOCAL_SQS_ENV_FILE)
+
+.PHONY: dev-reset
+dev-reset: reset-local dev ## Wipe local data, then start the full local dev stack
 
 # --------------------------------------------------------------------------- #
 # Lint / format / type-check                                                  #

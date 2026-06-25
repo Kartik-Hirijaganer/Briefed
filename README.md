@@ -121,7 +121,7 @@ Prereqs: **Python 3.11+**, **Node 20+**, **Docker**, **Make**, **Infisical CLI**
 git clone https://github.com/Kartik-Hirijaganer/Briefed.git
 cd Briefed
 infisical login             # authenticate to the Briefed Infisical organization once
-make dev                    # install deps, start services, migrate DB, then run backend + frontend
+make dev                    # install deps, start services, migrate DB, then run API + frontend + worker
 ```
 
 Application secrets live in Infisical, not `.env`. Local defaults target project
@@ -134,7 +134,9 @@ Swagger UI: http://localhost:8000/docs · ReDoc: http://localhost:8000/redoc · 
 
 Local frontend routes: `/` is the public homepage, `/demo` is synthetic read-only demo data, and `/app` is the authenticated dashboard.
 
-The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. It also starts Docker services and ensures the local LocalStack KMS aliases exist. The Vite dev server proxies `/api` + `/oauth` to the local FastAPI instance so cookies + CSRF stay same-origin. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
+The frontend is an npm workspace — `make bootstrap` runs `npm install` at the repo root, hoisting deps across `frontend/` and `packages/{ui,contracts}`. It also starts Docker services and ensures the local LocalStack KMS aliases and SQS queues exist. `make dev` runs uvicorn, Vite, and a LocalStack SQS worker so Scan now drains the same ingest → classify → summarize queues used in production. It frees the default dev ports (`8000` API, `5173` frontend) before startup; override with `BRIEFED_API_PORT=8010 BRIEFED_FRONTEND_PORT=5174 make dev` when you want alternate ports. Product knobs live in `packages/config/app_config.yml`; model routes and per-model caps live in `packages/config/llm/catalog.yml`.
+
+Use `make dev-reset` when you want a clean local account-linking test. It removes local Postgres and LocalStack Docker volumes, then runs `make dev`; connected Gmail accounts, OAuth tokens, scan history, and queued messages are deleted locally.
 
 ## Engineering highlights
 
@@ -204,8 +206,9 @@ The top-level [Makefile](Makefile) is the single source of truth — CI calls th
 
 | Command              | What it does                                                           |
 |----------------------|------------------------------------------------------------------------|
-| `make bootstrap`     | Install Python + Node deps; start Docker services and local KMS aliases. |
-| `make dev`           | Install deps, start services, fetch Infisical secrets, migrate DB, then run backend + frontend. |
+| `make bootstrap`     | Install Python + Node deps; start Docker services, local KMS aliases, and local SQS queues. |
+| `make dev`           | Install deps, start services, fetch Infisical secrets, migrate DB, then run backend + frontend + local SQS worker. |
+| `make dev-reset`     | Delete local Postgres/LocalStack Docker volumes, then run the full local dev stack. |
 | `make test`          | Run pytest + vitest and print a unified summary.                       |
 | `make lint`          | Ruff + mypy + ESLint + Prettier check.                                 |
 | `make lint-tokens`   | Fail if raw hex / `rgb()` colors appear outside `tokens.css` (theme guard). |

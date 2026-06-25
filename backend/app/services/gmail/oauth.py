@@ -154,6 +154,7 @@ def build_authorize_url(
     state: str,
     code_challenge: str,
     scopes: tuple[str, ...] = GMAIL_READONLY_SCOPES,
+    select_account: bool = False,
 ) -> str:
     """Build the Google consent-screen URL for the start-of-flow redirect.
 
@@ -164,10 +165,12 @@ def build_authorize_url(
         state: Opaque state token the caller stored in a signed cookie.
         code_challenge: PKCE challenge from :func:`generate_pkce_pair`.
         scopes: Requested scope strings.
+        select_account: Whether Google should show the account chooser.
 
     Returns:
         A fully-qualified Google authorize URL.
     """
+    prompt = "consent select_account" if select_account else "consent"
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -177,7 +180,7 @@ def build_authorize_url(
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": prompt,
         "include_granted_scopes": "true",
     }
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
