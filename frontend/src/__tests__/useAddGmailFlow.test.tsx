@@ -20,10 +20,10 @@ describe('useAddGmailFlow', () => {
 
   it('builds an OAuth start URL that respects link + returnTo', () => {
     const { result } = renderHook(() =>
-      useAddGmailFlow({ link: true, returnTo: '/settings/accounts' }),
+      useAddGmailFlow({ link: true, returnTo: '/app/settings/accounts' }),
     );
     expect(result.current.startUrl).toBe(
-      '/api/v1/oauth/gmail/start?link=true&return_to=%2Fsettings%2Faccounts',
+      '/api/v1/oauth/gmail/start?link=true&return_to=%2Fapp%2Fsettings%2Faccounts',
     );
     expect(result.current.opensInNewTab).toBe(false);
   });
@@ -34,9 +34,9 @@ describe('useAddGmailFlow', () => {
       value: { ...window.location, assign },
       configurable: true,
     });
-    const { result } = renderHook(() => useAddGmailFlow({ returnTo: '/' }));
+    const { result } = renderHook(() => useAddGmailFlow({ returnTo: '/app' }));
     result.current.start();
-    expect(assign).toHaveBeenCalledWith('/api/v1/oauth/gmail/start?return_to=%2F');
+    expect(assign).toHaveBeenCalledWith('/api/v1/oauth/gmail/start?return_to=%2Fapp');
   });
 
   it('escapes to external Safari when running as iOS PWA', () => {
@@ -49,11 +49,11 @@ describe('useAddGmailFlow', () => {
       configurable: true,
     });
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    const { result } = renderHook(() => useAddGmailFlow({ returnTo: '/' }));
+    const { result } = renderHook(() => useAddGmailFlow({ returnTo: '/app' }));
     result.current.start();
     expect(result.current.opensInNewTab).toBe(true);
     expect(open).toHaveBeenCalledWith(
-      '/api/v1/oauth/gmail/start?return_to=%2F',
+      '/api/v1/oauth/gmail/start?return_to=%2Fapp',
       '_blank',
       'noopener',
     );

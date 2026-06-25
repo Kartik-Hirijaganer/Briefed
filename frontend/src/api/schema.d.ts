@@ -70,7 +70,7 @@ export interface paths {
          *     Args:
          *         request: FastAPI request (used to compute the callback URL).
          *         return_to: Optional post-callback UI path (must be an internal
-         *             absolute path, e.g. ``/settings/accounts``).
+         *             absolute path under ``/app``, e.g. ``/app/settings/accounts``).
          *         link: Whether this OAuth start should attach a mailbox to the
          *             existing signed-in Briefed user.
          *         session_cookie: Existing signed session, when the caller is
@@ -114,7 +114,7 @@ export interface paths {
          *         settings: Cached :class:`Settings`.
          *
          *     Returns:
-         *         A 302 redirect back to the UI (``return_to`` or ``/``) on success,
+         *         A 302 redirect back to the UI (``return_to`` or ``/app``) on success,
          *         or to ``/login`` carrying an ``auth_error`` code on denial / a
          *         malformed callback.
          *

@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { legalConsent } from '../api/queryKeys';
+import type { Schemas } from '../api/types';
 import { useSyncQueueDrain } from '../hooks/useSyncQueueDrain';
 
 const replayMock = vi.hoisted(() => vi.fn());
@@ -20,6 +22,15 @@ const wrap =
   ({ children }: { children: ReactNode }): JSX.Element => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
+
+const consentRequired = (): Schemas['LegalConsentStatus'] => ({
+  current_privacy_policy_version: 1,
+  current_terms_version: 1,
+  accepted_privacy_policy_version: 0,
+  accepted_terms_version: 0,
+  consent_required: true,
+  accepted_at: null,
+});
 
 describe('useSyncQueueDrain', () => {
   beforeEach(() => {
@@ -62,6 +73,18 @@ describe('useSyncQueueDrain', () => {
     await act(async () => {
       await result.current.drainNow();
     });
+    expect(replayMock).not.toHaveBeenCalled();
+  });
+
+  it('skips automatic and manual replay while legal consent is required', async () => {
+    const client = new QueryClient();
+    client.setQueryData(legalConsent(), consentRequired());
+    const { result } = renderHook(() => useSyncQueueDrain(), { wrapper: wrap(client) });
+
+    await act(async () => {
+      await result.current.drainNow();
+    });
+
     expect(replayMock).not.toHaveBeenCalled();
   });
 });
