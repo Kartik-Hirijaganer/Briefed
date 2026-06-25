@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import LoginPage from '../pages/LoginPage';
 
@@ -32,10 +32,6 @@ describe('<LoginPage>', () => {
     useAddGmailFlowMock.mockClear();
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it('renders Gmail consent details, policy links, and the demo fallback', () => {
     renderPage();
 
@@ -64,25 +60,7 @@ describe('<LoginPage>', () => {
     );
   });
 
-  it('keeps live OAuth disabled by default even after pre-consent is checked', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    const connectButton = screen.getByRole('button', { name: /available soon/i });
-    expect(connectButton).toBeDisabled();
-
-    await user.click(
-      screen.getByRole('checkbox', {
-        name: /i understand briefed will process my gmail data/i,
-      }),
-    );
-
-    expect(connectButton).toBeDisabled();
-    expect(startMock).not.toHaveBeenCalled();
-  });
-
-  it('gates Google OAuth on the required checkbox when the flag is enabled', async () => {
-    vi.stubEnv('VITE_ENABLE_GMAIL_CONNECT', 'true');
+  it('gates Google OAuth on the required checkbox', async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -94,6 +72,7 @@ describe('<LoginPage>', () => {
         name: /i understand briefed will process my gmail data/i,
       }),
     );
+
     expect(connectButton).toBeEnabled();
 
     await user.click(connectButton);
@@ -111,8 +90,6 @@ describe('<LoginPage>', () => {
   });
 
   it('surfaces a friendly error when the OAuth callback reports access_denied', () => {
-    vi.stubEnv('VITE_ENABLE_GMAIL_CONNECT', 'true');
-
     renderPage(['/login?auth_error=access_denied']);
 
     expect(screen.getByText(/cancelled or access was denied/i)).toBeInTheDocument();

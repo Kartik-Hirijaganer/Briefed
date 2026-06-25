@@ -40,16 +40,12 @@ const SECONDARY_CTA_CLASS =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ' +
   'focus-visible:ring-offset-2';
 
-const isGmailConnectEnabled = (): boolean => import.meta.env.VITE_ENABLE_GMAIL_CONNECT === 'true';
-
 /**
  * Public marketing homepage. Makes no authenticated API calls.
  *
  * @returns The rendered public homepage.
  */
 export default function HomePage(): JSX.Element {
-  const gmailConnectEnabled = isGmailConnectEnabled();
-
   return (
     <main className="min-h-[100dvh] bg-bg-canvas text-fg">
       <header className="border-b border-border bg-bg-canvas">
@@ -97,17 +93,15 @@ export default function HomePage(): JSX.Element {
               Explore Briefed with synthetic inbox data. No Google account required.
             </p>
           </div>
-          {gmailConnectEnabled ? (
-            <div className="flex flex-col items-start gap-[var(--space-2)]">
-              <Link to="/login" className={SECONDARY_CTA_CLASS}>
-                Connect Gmail
-              </Link>
-              <p className="max-w-[var(--measure)] text-[length:var(--fs-sm)] leading-[var(--lh-sm)] text-fg-muted">
-                Google will show an unverified app warning while Briefed is pending verification.
-                Choose Advanced, then proceed to continue.
-              </p>
-            </div>
-          ) : null}
+          <div className="flex flex-col items-start gap-[var(--space-2)]">
+            <Link to="/login" className={SECONDARY_CTA_CLASS}>
+              Connect Gmail
+            </Link>
+            <p className="max-w-[var(--measure)] text-[length:var(--fs-sm)] leading-[var(--lh-sm)] text-fg-muted">
+              Google will show an unverified app warning while Briefed is pending verification.
+              Choose Advanced, then proceed to continue.
+            </p>
+          </div>
         </div>
       </section>
 
