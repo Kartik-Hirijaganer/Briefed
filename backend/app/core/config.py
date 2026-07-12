@@ -40,7 +40,8 @@ _SSM_PARAMETER_BY_FIELD: dict[str, str] = {
     "openrouter_api_key": "openrouter_api_key",
     "session_signing_key": "session_signing_key",
     "google_oauth_client_id": "google_oauth_client_id",
-    "google_oauth_client_secret": "google_oauth_client_secret",
+    # This value names an SSM parameter; it is not secret material.
+    "google_oauth_client_secret": "google_oauth_client_secret",  # nosec B105
     "database_url": "supabase_db_url",
 }
 """Settings field to SSM short-name mapping for required Lambda secrets."""
