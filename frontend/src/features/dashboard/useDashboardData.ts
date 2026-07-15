@@ -10,7 +10,7 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import type { FreshnessState } from '@briefed/ui';
 
 import { api, unwrap } from '../../api/client';
-import { digestToday, emails as emailsQueryKeyFactory } from '../../api/queryKeys';
+import { accounts, digestToday, emails as emailsQueryKeyFactory } from '../../api/queryKeys';
 import type { Schemas } from '../../api/types';
 import type { Bucket } from '../../config/presentation';
 import { useDemoMode } from '../../demo/DemoModeProvider';
@@ -67,8 +67,8 @@ export interface DashboardData {
   readonly freshnessLastKnownGoodAt: string | null;
   /** Last successful run timestamp from the digest. */
   readonly lastRunAt: string | null;
-  /** Whether the last successful run is older than the stale threshold. */
-  readonly autoScanMayBeOff: boolean;
+  /** Whether every active account has auto-scan disabled and the digest is stale. */
+  readonly autoScanIsOff: boolean;
   /** Active bucket filter, or null for "All". */
   readonly activeBucket: Bucket | null;
   /** Switch the active bucket filter (clears offset + selection). */
@@ -158,6 +158,12 @@ export function useDashboardData(): DashboardData {
     queryFn: async () => unwrap(await api.GET('/api/v1/digest/today')),
     staleTime: DIGEST_STALE_MS,
   });
+  const accountsQuery = useQuery({
+    queryKey: accounts(),
+    queryFn: async () => unwrap(await api.GET('/api/v1/accounts')),
+    staleTime: DIGEST_STALE_MS,
+    enabled: !isDemo,
+  });
   const emailsQuery = useQuery({
     queryKey: emailsQueryKey,
     queryFn: async () =>
@@ -218,6 +224,13 @@ export function useDashboardData(): DashboardData {
   const hoursSinceLastRun = lastRunAt
     ? (Date.now() - new Date(lastRunAt).getTime()) / (60 * 60 * 1000)
     : Infinity;
+  const activeAccounts = accountsQuery.data?.accounts?.filter(
+    (account) => account.status === 'active',
+  );
+  const everyActiveAccountHasAutoScanOff =
+    activeAccounts !== undefined &&
+    activeAccounts.length > 0 &&
+    activeAccounts.every((account) => !account.auto_scan_enabled);
   const pullToRefresh = usePullToRefresh({
     disabled: isDemo || !online,
     onRefresh: () => window.dispatchEvent(new Event(SCAN_NOW_EVENT)),
@@ -352,7 +365,10 @@ export function useDashboardData(): DashboardData {
     freshnessState: freshness.state,
     freshnessLastKnownGoodAt: freshness.lastKnownGoodAt,
     lastRunAt,
-    autoScanMayBeOff: digestQuery.data !== undefined && hoursSinceLastRun > STALE_RUN_HOURS,
+    autoScanIsOff:
+      digestQuery.data !== undefined &&
+      everyActiveAccountHasAutoScanOff &&
+      hoursSinceLastRun > STALE_RUN_HOURS,
     activeBucket,
     setBucket,
     emails,

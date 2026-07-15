@@ -105,10 +105,10 @@ async def test_maybe_finalize_run_fails_on_prompt_error(
     user, account, run = await _seed_run(test_session)
     email = _email(account=account, subject="Needs model")
     prompt = PromptVersion(
-        name="triage",
+        name="summarize_relevant",
         version=1,
-        content="triage",
-        content_hash=hashlib.sha256(b"triage").digest(),
+        content="summarize",
+        content_hash=hashlib.sha256(b"summarize").digest(),
         model="gemini-1.5-flash",
         params={},
     )
@@ -121,7 +121,6 @@ async def test_maybe_finalize_run_fails_on_prompt_error(
             label="must_read",
             score=Decimal("0.000"),
             rubric_version=1,
-            prompt_version_id=prompt.id,
             decision_source="model",
             model="gemini-1.5-flash",
             tokens_in=0,
@@ -160,6 +159,180 @@ async def test_maybe_finalize_run_fails_on_prompt_error(
     assert sent == []
     assert user.current_run_id is None
     assert user.last_run_finished_at is None
+
+
+async def test_maybe_finalize_run_waits_for_other_work_after_prompt_error(
+    test_session: AsyncSession,
+) -> None:
+    """A prompt error does not freeze run counters while other work is pending."""
+    user, account, run = await _seed_run(test_session)
+    failed_email = _email(account=account, subject="Provider exhausted")
+    pending_email = _email(account=account, subject="Still processing")
+    prompt = PromptVersion(
+        name="triage",
+        version=1,
+        content="triage",
+        content_hash=hashlib.sha256(b"triage-pending").digest(),
+        model="gemini-1.5-flash",
+        params={},
+    )
+    test_session.add_all([failed_email, pending_email, prompt])
+    await test_session.flush()
+    await stamp_run_membership(
+        session=test_session,
+        run_id=run.id,
+        email_ids=(failed_email.id, pending_email.id),
+    )
+    test_session.add_all(
+        [
+            Classification(
+                email_id=failed_email.id,
+                label="ignore",
+                score=Decimal("0.000"),
+                rubric_version=0,
+                decision_source="model",
+                model="",
+                tokens_in=0,
+                tokens_out=0,
+                is_newsletter=False,
+                needs_review=True,
+            ),
+            PromptCallLog(
+                prompt_version_id=prompt.id,
+                email_id=failed_email.id,
+                model="gemini-1.5-flash",
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=Decimal("0.000000"),
+                latency_ms=0,
+                status="error",
+                provider="openrouter:gemini-flash",
+                run_id=run.id,
+            ),
+        ],
+    )
+    await test_session.flush()
+
+    terminal = await maybe_finalize_run(session=test_session, user_id=user.id, run_id=run.id)
+
+    assert terminal is False
+    assert run.status == "running"
+    assert run.stats["classified"] == 1
+
+    test_session.add_all(
+        [
+            Classification(
+                email_id=pending_email.id,
+                label="ignore",
+                score=Decimal("0.900"),
+                rubric_version=1,
+                decision_source="model",
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=5,
+                is_newsletter=False,
+            ),
+            PromptCallLog(
+                prompt_version_id=prompt.id,
+                email_id=pending_email.id,
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=5,
+                cost_usd=Decimal("0.020000"),
+                latency_ms=10,
+                status="ok",
+                provider="openrouter:gemini-flash",
+                run_id=run.id,
+            ),
+        ],
+    )
+    await test_session.flush()
+
+    terminal = await maybe_finalize_run(session=test_session, user_id=user.id, run_id=run.id)
+
+    assert terminal is True
+    assert run.status == "failed"
+    assert run.stats["ingested"] == 2
+    assert run.stats["classified"] == 2
+    assert run.cost_cents == 2
+
+
+async def test_maybe_finalize_run_treats_failed_cluster_as_terminal(
+    test_session: AsyncSession,
+) -> None:
+    """A terminal newsletter-cluster failure does not strand the run."""
+    user, account, run = await _seed_run(test_session)
+    emails = (
+        _email(account=account, subject="Newsletter one"),
+        _email(account=account, subject="Newsletter two"),
+    )
+    prompt = PromptVersion(
+        name="newsletter_group",
+        version=1,
+        content="cluster",
+        content_hash=hashlib.sha256(b"newsletter-cluster").digest(),
+        model="gemini-1.5-flash",
+        params={},
+    )
+    test_session.add_all([*emails, prompt])
+    await test_session.flush()
+    await stamp_run_membership(
+        session=test_session,
+        run_id=run.id,
+        email_ids=(email.id for email in emails),
+    )
+    for email in emails:
+        test_session.add_all(
+            [
+                Classification(
+                    email_id=email.id,
+                    label="ignore",
+                    score=Decimal("0.800"),
+                    rubric_version=1,
+                    decision_source="model",
+                    model="gemini-1.5-flash",
+                    tokens_in=10,
+                    tokens_out=5,
+                    is_newsletter=True,
+                ),
+                Summary(
+                    kind="email",
+                    email_id=email.id,
+                    cluster_id=None,
+                    prompt_version_id=None,
+                    model="gemini-1.5-flash",
+                    tokens_in=10,
+                    tokens_out=5,
+                    body_md_ct=b"summary",
+                    entities_ct=None,
+                    cache_hit=False,
+                    confidence=Decimal("0.900"),
+                ),
+            ],
+        )
+    test_session.add(
+        PromptCallLog(
+            prompt_version_id=prompt.id,
+            email_id=None,
+            model="gemini-1.5-flash",
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=Decimal("0.000000"),
+            latency_ms=0,
+            status="error",
+            provider="openrouter:gemini-flash",
+            run_id=run.id,
+        ),
+    )
+    await test_session.flush()
+
+    terminal = await maybe_finalize_run(session=test_session, user_id=user.id, run_id=run.id)
+
+    assert terminal is True
+    assert run.status == "failed"
+    assert run.stats["ingested"] == 2
+    assert run.stats["classified"] == 2
+    assert run.stats["summarized"] == 2
 
 
 async def test_maybe_finalize_run_ignores_recovered_category_digest_error(

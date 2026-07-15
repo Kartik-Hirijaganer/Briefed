@@ -38,11 +38,12 @@ export default function DashboardPage(): JSX.Element {
             onSelectBucket={data.setBucket}
           />
 
-          {data.autoScanMayBeOff ? (
-            <Alert tone="warn" title="Auto-scan may be off">
+          {data.autoScanIsOff ? (
+            <Alert tone="warn" title="Auto-scan is off">
               <p>
-                It has been more than 7 days since the last successful scan. Run a manual scan or
-                re-enable auto-scans in settings.
+                It has been more than 7 days since the last successful scan, and auto-scan is
+                disabled for every active account. Run a manual scan or re-enable auto-scan in
+                settings.
               </p>
             </Alert>
           ) : null}

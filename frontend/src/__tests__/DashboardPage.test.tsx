@@ -67,6 +67,20 @@ const digest: Schemas['DigestToday'] = {
   must_read_preview: [],
 };
 
+const account: Schemas['ConnectedAccount'] = {
+  id: 'account-1',
+  email: 'me@example.com',
+  display_name: 'Personal',
+  provider: 'gmail',
+  status: 'active',
+  auto_scan_enabled: true,
+  exclude_from_global_digest: false,
+  emails_ingested_24h: 21,
+  daily_budget_used_pct: 0,
+  created_at: '2026-07-15T10:00:00Z',
+  last_sync_at: '2026-07-15T10:31:53Z',
+};
+
 const renderPage = (initialEntry = '/'): RenderResult => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -83,12 +97,20 @@ const mockDashboardRequests = (
     readonly digest?: Schemas['DigestToday'];
     readonly emails?: readonly Schemas['EmailRow'][];
     readonly total?: number;
+    readonly autoScanEnabled?: boolean;
   } = {},
 ): void => {
   const digestData = options.digest ?? digest;
   const emailRows = options.emails ?? [makeEmail()];
   apiMock.GET.mockImplementation((path: string) => {
     if (path === '/api/v1/digest/today') return Promise.resolve({ data: digestData });
+    if (path === '/api/v1/accounts') {
+      return Promise.resolve({
+        data: {
+          accounts: [{ ...account, auto_scan_enabled: options.autoScanEnabled ?? true }],
+        },
+      });
+    }
     if (path === '/api/v1/emails') {
       return Promise.resolve({
         data: { emails: [...emailRows], total: options.total ?? emailRows.length },
@@ -293,10 +315,21 @@ describe('<DashboardPage>', () => {
     expect(await screen.findByText(/no unread emails in this view/i)).toBeInTheDocument();
   });
 
-  it('shows the auto-scan-off alert when the last run is older than 7 days', async () => {
+  it('shows the auto-scan-off alert when auto-scan is disabled and the digest is stale', async () => {
+    mockDashboardRequests({
+      digest: { ...digest, last_successful_run_at: oldIso() },
+      autoScanEnabled: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/auto-scan is off/i)).toBeInTheDocument());
+  });
+
+  it('hides the auto-scan-off alert when an active account has auto-scan enabled', async () => {
     mockDashboardRequests({ digest: { ...digest, last_successful_run_at: oldIso() } });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/auto-scan may be off/i)).toBeInTheDocument());
+    await screen.findByText("Today's Digest");
+    await waitFor(() => expect(apiMock.GET).toHaveBeenCalledWith('/api/v1/accounts'));
+    expect(screen.queryByText(/auto-scan is off/i)).not.toBeInTheDocument();
   });
 
   it('renders the error state on a failed digest fetch', async () => {
