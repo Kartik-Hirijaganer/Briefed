@@ -1,10 +1,10 @@
 """Run-scoped category digest summarization.
 
 Phase 4 builds one synthesized digest per non-empty summarizable
-category after the run's classifications and per-email summaries have
-fully drained. The service reads only the explicit
-``digest_run_emails`` membership set, so the prompt cannot see a partial
-or timestamp-inferred run boundary.
+category after the run's classifications and per-email summary attempts
+have reached a terminal state. The service reads only successfully
+summarized items from the explicit ``digest_run_emails`` membership set,
+so the prompt cannot see out-of-run or timestamp-inferred emails.
 """
 
 from __future__ import annotations
@@ -143,7 +143,7 @@ async def summarize_category(
     *,
     session: AsyncSession,
 ) -> CategoryDigestOutcome:
-    """Summarize one complete run/category set.
+    """Summarize one terminal run/category set.
 
     Args:
         inputs: Collaborator bundle.
@@ -153,8 +153,8 @@ async def summarize_category(
         :class:`CategoryDigestOutcome`.
 
     Raises:
-        CategoryDigestNotReadyError: If classifications or per-email
-            summaries have not fully drained for the category.
+        CategoryDigestNotReadyError: If classifications or recoverable
+            per-email summaries have not fully drained for the category.
     """
     if await _has_category_digest(
         session=session,
@@ -291,7 +291,7 @@ async def _assert_complete_category(
     run_id: UUID,
     category: CategoryDigestCategory,
 ) -> None:
-    """Raise if a category digest would be built from a partial run."""
+    """Raise if recoverable category work is still pending."""
     pending_unclassified = await _count(
         session,
         select(func.count(DigestRunEmail.email_id))
@@ -308,6 +308,15 @@ async def _assert_complete_category(
     if pending_unclassified:
         raise CategoryDigestNotReadyError("run has unclassified member emails")
 
+    failed_summary = (
+        select(PromptCallLog.id)
+        .where(
+            PromptCallLog.run_id == run_id,
+            PromptCallLog.email_id == Email.id,
+            PromptCallLog.status == "error",
+        )
+        .exists()
+    )
     pending_summaries = await _count(
         session,
         select(func.count(DigestRunEmail.email_id))
@@ -327,6 +336,7 @@ async def _assert_complete_category(
             unread_email_filter(session),
             Classification.label == category,
             Summary.email_id.is_(None),
+            ~failed_summary,
         ),
     )
     if pending_summaries:

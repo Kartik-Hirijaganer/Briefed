@@ -300,6 +300,90 @@ async def test_summarize_category_rejects_partial_set(test_session) -> None:
     assert provider.calls == 0
 
 
+async def test_summarize_category_uses_successful_items_after_terminal_failure(
+    test_session,
+) -> None:
+    """A terminal per-email failure does not block a best-effort category digest."""
+    user, account, run = await _seed_run(test_session)
+    await _seed_email_summary(
+        test_session,
+        account=account,
+        run=run,
+        subject="Available summary",
+        label="must_read",
+        body_md="Available summary content.",
+    )
+    failed_email = _email(account=account, subject="Failed summary")
+    summary_prompt = PromptVersion(
+        name="summarize_relevant",
+        version=1,
+        content="summarize",
+        content_hash=hashlib.sha256(b"failed-summary").digest(),
+        model="gemini-1.5-flash",
+        params={},
+    )
+    test_session.add_all([failed_email, summary_prompt])
+    await test_session.flush()
+    test_session.add_all(
+        [
+            DigestRunEmail(run_id=run.id, email_id=failed_email.id),
+            Classification(
+                email_id=failed_email.id,
+                label="must_read",
+                score=Decimal("0.9"),
+                rubric_version=1,
+                decision_source="model",
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=5,
+            ),
+            PromptCallLog(
+                prompt_version_id=summary_prompt.id,
+                email_id=failed_email.id,
+                model="gemini-1.5-flash",
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=Decimal("0"),
+                latency_ms=0,
+                status="error",
+                provider="openrouter:gemini-flash",
+                run_id=run.id,
+            ),
+        ],
+    )
+    await test_session.flush()
+    prompt, prompt_version_id = await _registered_prompt(test_session)
+    provider = _Provider(
+        [
+            _call_result(
+                {
+                    "narrative": "Available must-read summary.",
+                    "groups": [],
+                    "confidence": 0.8,
+                },
+            ),
+        ],
+    )
+
+    outcome = await summarize_category(
+        CategoryDigestInputs(
+            user_id=user.id,
+            run_id=run.id,
+            category="must_read",
+            prompt=prompt,
+            prompt_version_id=prompt_version_id,
+            llm=LLMClient(primary=provider),
+            repo=SummariesRepo(cipher=None),
+        ),
+        session=test_session,
+    )
+
+    assert outcome.ok is True
+    assert provider.calls == 1
+    assert "Available summary" in provider.prompts[0]
+    assert "Failed summary" not in provider.prompts[0]
+
+
 async def test_upsert_category_digest_round_trip_and_replaces(test_session) -> None:
     user, _account, run = await _seed_run(test_session)
     repo = SummariesRepo(cipher=None)

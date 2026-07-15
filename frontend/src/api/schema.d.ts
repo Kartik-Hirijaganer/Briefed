@@ -78,7 +78,7 @@ export interface paths {
          *         settings: Cached :class:`Settings`.
          *
          *     Returns:
-         *         A 302 redirect to Google's consent screen.
+         *         A 307 redirect to the canonical OAuth start or Google's consent screen.
          */
         get: operations["gmail_oauth_start_api_v1_oauth_gmail_start_get"];
         put?: never;

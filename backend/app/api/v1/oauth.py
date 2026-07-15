@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 import secrets
 from typing import TYPE_CHECKING, cast
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
@@ -174,6 +174,56 @@ def _prevent_oauth_response_caching(response: RedirectResponse) -> RedirectRespo
     return response
 
 
+def _canonical_oauth_start_redirect(
+    request: Request,
+    settings: Settings,
+    *,
+    return_to: str | None,
+    link: bool,
+) -> RedirectResponse | None:
+    """Move OAuth start onto the configured callback origin when necessary.
+
+    OAuth state is stored in a host-only cookie. If a user starts from a
+    Vercel preview alias while Google returns to ``public_base_url``, the
+    callback cannot receive that cookie and the user is forced through a
+    second consent round. Redirecting before any cookie is set keeps the
+    state cookie and callback on the same host.
+
+    Args:
+        request: Incoming OAuth-start request.
+        settings: Cached application settings.
+        return_to: Requested post-login application path.
+        link: Whether the flow links another mailbox to an existing user.
+
+    Returns:
+        A redirect to the canonical OAuth-start URL when the forwarded host
+        differs, otherwise ``None``.
+    """
+    if not settings.public_base_url:
+        return None
+    forwarded_host_header = request.headers.get("x-forwarded-host")
+    if not forwarded_host_header:
+        return None
+
+    forwarded_host = forwarded_host_header.split(",", maxsplit=1)[0].strip().lower()
+    canonical_host = urlsplit(settings.public_base_url).netloc.lower()
+    if not canonical_host or forwarded_host == canonical_host:
+        return None
+
+    params: dict[str, str] = {"return_to": sanitize_return_to(return_to)}
+    if link:
+        params["link"] = "true"
+    target = f"{settings.public_base_url.rstrip('/')}/api/v1/oauth/gmail/start?{urlencode(params)}"
+    logger.info(
+        "oauth.start.canonical_redirect",
+        source_host=forwarded_host,
+        target_host=canonical_host,
+    )
+    return _prevent_oauth_response_caching(
+        RedirectResponse(target, status_code=status.HTTP_307_TEMPORARY_REDIRECT),
+    )
+
+
 @router.get(
     "/start",
     name="gmail_oauth_start",
@@ -199,8 +249,17 @@ async def start(
         settings: Cached :class:`Settings`.
 
     Returns:
-        A 302 redirect to Google's consent screen.
+        A 307 redirect to the canonical OAuth start or Google's consent screen.
     """
+    canonical_redirect = _canonical_oauth_start_redirect(
+        request,
+        settings,
+        return_to=return_to,
+        link=link,
+    )
+    if canonical_redirect is not None:
+        return canonical_redirect
+
     client_id, _client_secret = _require_oauth_credentials(settings)
     signing_key = _require_session_key(settings)
 

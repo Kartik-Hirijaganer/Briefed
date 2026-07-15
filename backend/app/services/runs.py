@@ -217,9 +217,11 @@ async def maybe_finalize_run(
     """Finalize a digest run when no DB-visible work remains.
 
     The helper is intentionally idempotent: every stage can call it
-    after committing its own row-level work. It marks the run failed
-    when provider errors were recorded, complete when all pending work
-    has drained, and otherwise leaves it running.
+    after committing its own row-level work. It waits for all recoverable
+    work to drain, then marks the run failed when provider errors were
+    recorded or complete otherwise. Failed work items are excluded from
+    the pending counters so an exhausted provider chain cannot strand a
+    run indefinitely.
 
     Args:
         session: Active database session.
@@ -251,15 +253,6 @@ async def maybe_finalize_run(
     if run.status == "queued":
         run.status = "running"
 
-    if snapshot.prompt_errors > 0:
-        run.stats = _stats_payload(run=run, account_ids=account_ids, snapshot=snapshot)
-        run.cost_cents = snapshot.cost_cents
-        _finish_run(run=run, status="failed", error=_FAILED_RUN_ERROR)
-        _log_run_terminal(run=run, snapshot=snapshot)
-        await _clear_user_lock(session=session, user_id=user_id, run_id=run_id, completed=False)
-        await session.flush()
-        return True
-
     if snapshot.pending_unclassified == 0 and snapshot.pending_summaries == 0:
         built_inline = await _dispatch_missing_category_summaries(
             session=session,
@@ -279,9 +272,19 @@ async def maybe_finalize_run(
     run.stats = _stats_payload(run=run, account_ids=account_ids, snapshot=snapshot)
     run.cost_cents = snapshot.cost_cents
     if snapshot.pending_total == 0:
-        _finish_run(run=run, status="complete", error=None)
+        failed = snapshot.prompt_errors > 0
+        _finish_run(
+            run=run,
+            status="failed" if failed else "complete",
+            error=_FAILED_RUN_ERROR if failed else None,
+        )
         _log_run_terminal(run=run, snapshot=snapshot)
-        await _clear_user_lock(session=session, user_id=user_id, run_id=run_id, completed=True)
+        await _clear_user_lock(
+            session=session,
+            user_id=user_id,
+            run_id=run_id,
+            completed=not failed,
+        )
         await session.flush()
         return True
 
@@ -507,7 +510,21 @@ async def _pending_summaries(
     run: DigestRun,
     account_ids: tuple[UUID, ...],
 ) -> int:
-    """Count member summarizable emails that lack summaries."""
+    """Count member emails still awaiting a summary or terminal failure."""
+    fatal_error = (
+        select(PromptCallLog.id)
+        .outerjoin(PromptVersion, PromptVersion.id == PromptCallLog.prompt_version_id)
+        .where(
+            PromptCallLog.run_id == run.id,
+            PromptCallLog.email_id == Email.id,
+            PromptCallLog.status == "error",
+            or_(
+                PromptVersion.name.is_(None),
+                PromptVersion.name.not_in(_NON_FATAL_PROMPT_NAMES),
+            ),
+        )
+        .exists()
+    )
     return await _count(
         session,
         select(func.count(DigestRunEmail.email_id))
@@ -523,6 +540,7 @@ async def _pending_summaries(
                 Classification.is_newsletter.is_(True),
             ),
             Summary.email_id.is_(None),
+            ~fatal_error,
         ),
     )
 
@@ -551,6 +569,22 @@ async def _pending_clusters(
         ),
     )
     if newsletter_count < 2:
+        return 0
+    failed_cluster = await _count(
+        session,
+        select(func.count(PromptCallLog.id))
+        .outerjoin(PromptVersion, PromptVersion.id == PromptCallLog.prompt_version_id)
+        .where(
+            PromptCallLog.run_id == run_id,
+            PromptCallLog.email_id.is_(None),
+            PromptCallLog.status == "error",
+            or_(
+                PromptVersion.name.is_(None),
+                PromptVersion.name == "newsletter_group",
+            ),
+        ),
+    )
+    if failed_cluster > 0:
         return 0
     summary_id = (
         await session.execute(
@@ -596,11 +630,13 @@ async def _missing_category_digest_categories(
             select(Classification.label, func.count(Classification.id))
             .join(DigestRunEmail, DigestRunEmail.email_id == Classification.email_id)
             .join(Email, Email.id == Classification.email_id)
+            .join(Summary, Summary.email_id == Classification.email_id)
             .where(
                 DigestRunEmail.run_id == run_id,
                 Email.account_id.in_(account_ids),
                 unread_email_filter(session),
                 Classification.label.in_(_SUMMARIZABLE_LABELS),
+                Summary.kind == "email",
             )
             .group_by(Classification.label),
         )

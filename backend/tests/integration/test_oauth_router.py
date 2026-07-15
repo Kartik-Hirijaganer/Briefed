@@ -245,6 +245,7 @@ def test_oauth_start_uses_public_base_url_for_callback(wired_app: TestClient) ->
     )
     response = wired_app.get(
         "/api/v1/oauth/gmail/start",
+        headers={"x-forwarded-host": "app.example.test"},
         follow_redirects=False,
     )
 
@@ -252,6 +253,31 @@ def test_oauth_start_uses_public_base_url_for_callback(wired_app: TestClient) ->
     assert _redirect_uri_from_location(response.headers["location"]) == (
         "https://app.example.test/api/v1/oauth/gmail/callback"
     )
+
+
+def test_oauth_start_moves_preview_host_to_callback_origin(wired_app: TestClient) -> None:
+    """Preview-host logins set state only after reaching the canonical host."""
+    app.dependency_overrides[get_settings] = lambda: _test_settings(
+        public_base_url="https://briefed-six.vercel.app",
+    )
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        params={"return_to": "/app/settings/accounts", "link": "true"},
+        headers={"x-forwarded-host": "briefed-preview.vercel.app"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    location = urlparse(response.headers["location"])
+    assert f"{location.scheme}://{location.netloc}{location.path}" == (
+        "https://briefed-six.vercel.app/api/v1/oauth/gmail/start"
+    )
+    assert parse_qs(location.query) == {
+        "return_to": ["/app/settings/accounts"],
+        "link": ["true"],
+    }
+    assert OAUTH_STATE_COOKIE_NAME not in response.cookies
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_oauth_start_uses_forwarded_host_for_callback(wired_app: TestClient) -> None:

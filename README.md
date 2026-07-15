@@ -77,7 +77,7 @@ The **digest above** is the home view — bucket filters at a glance, the full c
   <img src="docs/screenshots/unsubscribe.png" alt="Unsubscribe suggestions showing sender volume, engagement tags, and user-controlled bulk actions" width="820" />
 </div>
 
-▶ **Live demo:** https://briefed.vercel.app/
+▶ **Live demo:** https://briefed-six.vercel.app/
 
 ## How it works
 
