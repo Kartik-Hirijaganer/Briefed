@@ -31,6 +31,7 @@ class _FakeSqs:
 async def _seed(
     session: AsyncSession,
     *,
+    environment: str = "local",
     schedule_frequency: str = "once_daily",
     schedule_times_local: list[str] | None = None,
     schedule_timezone: str = "UTC",
@@ -40,6 +41,7 @@ async def _seed(
 ) -> User:
     user = User(
         email="o@x.com",
+        environment=environment,
         tz="UTC",
         status="active",
         schedule_frequency=schedule_frequency,
@@ -159,3 +161,25 @@ async def test_fanout_skips_disabled_user(test_session: AsyncSession) -> None:
     )
     enqueued = await run_fanout(deps=deps)
     assert enqueued == 0
+
+
+async def test_fanout_skips_users_from_another_environment(
+    test_session: AsyncSession,
+) -> None:
+    """A prod scheduler never enqueues work for a dev-owned user."""
+    await _seed(test_session, environment="dev", schedule_times_local=["08:00"])
+    sqs = _FakeSqs()
+    deps = FanoutDeps(
+        session=test_session,
+        sqs=sqs,
+        ingest_queue_url="https://sqs.local/ingest",
+        environment="prod",
+    )
+    with patch(
+        "app.workers.handlers.fanout.utcnow",
+        return_value=datetime(2026, 4, 25, 8, 5, tzinfo=ZoneInfo("UTC")),
+    ):
+        enqueued = await run_fanout(deps=deps)
+
+    assert enqueued == 0
+    assert sqs.sent == []

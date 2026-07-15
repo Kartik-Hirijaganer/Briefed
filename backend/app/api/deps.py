@@ -12,10 +12,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import Cookie, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.session import SESSION_COOKIE_NAME, verify_cookie
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError
+from app.db.models import User
 from app.db.session import get_sessionmaker
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -41,9 +44,10 @@ async def db_session() -> AsyncIterator[AsyncSession]:
             raise
 
 
-def current_user_id(
+async def current_user_id(
     cookie_value: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(db_session),
 ) -> UUID:
     """Extract ``user_id`` from the signed session cookie.
 
@@ -51,6 +55,7 @@ def current_user_id(
         cookie_value: Raw cookie string; FastAPI injects it via the
             :class:`fastapi.Cookie` marker.
         settings: Cached :class:`Settings`.
+        session: Open database session used to enforce environment ownership.
 
     Returns:
         The caller's ``user_id`` as a UUID.
@@ -71,10 +76,27 @@ def current_user_id(
     except AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
+    cookie_environment = payload.get("environment")
+    if isinstance(cookie_environment, str) and cookie_environment != settings.env:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail="session belongs to another environment",
+        )
     user_id = payload.get("user_id")
     if not isinstance(user_id, str):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad session payload")
     try:
-        return UUID(user_id)
+        parsed_user_id = UUID(user_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad user id") from exc
+
+    if settings.env in {"dev", "prod"}:
+        user_environment = await session.scalar(
+            select(User.environment).where(User.id == parsed_user_id),
+        )
+        if user_environment is not None and user_environment != settings.env:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                detail="session belongs to another environment",
+            )
+    return parsed_user_id

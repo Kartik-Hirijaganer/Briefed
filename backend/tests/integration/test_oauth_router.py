@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -31,6 +32,7 @@ from app.api.v1.oauth import (
     _OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
     _build_token_cipher,
     _get_or_create_user,
+    _resolve_oauth_user,
     sanitize_return_to,
 )
 from app.core.config import Settings, get_settings
@@ -303,6 +305,10 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
     assert response.headers["location"] == "/app/settings/accounts"
     assert response.headers["cache-control"] == "no-store"
     # The session cookie is now set; /accounts should return our new row.
+    session_cookie = wired_app.cookies.get(SESSION_COOKIE_NAME)
+    assert session_cookie is not None
+    session_payload = verify_cookie(session_cookie, secret="test-key")
+    assert session_payload["environment"] == "test"
     list_response = wired_app.get("/api/v1/accounts")
     assert list_response.status_code == 200, list_response.text
     payload = list_response.json()
@@ -339,7 +345,12 @@ async def test_link_mode_adds_second_account_to_existing_user(
     """An authenticated Add Gmail flow attaches the new mailbox to the same user."""
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
     async with factory() as session:
-        user = User(email="owner@example.com", tz="America/New_York", status="active")
+        user = User(
+            email="owner@example.com",
+            environment="test",
+            tz="America/New_York",
+            status="active",
+        )
         session.add(user)
         await session.flush()
         session.add(
@@ -391,6 +402,26 @@ async def test_link_mode_adds_second_account_to_existing_user(
 
 def test_link_mode_requires_existing_session(wired_app: TestClient) -> None:
     """Add Gmail should not silently create a new user when the session is gone."""
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/start",
+        params={"link": "true", "return_to": "/app/settings/accounts"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?next=%2Fapp%2Fsettings%2Faccounts"
+
+
+def test_link_mode_rejects_session_from_another_environment(wired_app: TestClient) -> None:
+    """A dev session cannot start a mailbox-link flow in another environment."""
+    wired_app.cookies.set(
+        SESSION_COOKIE_NAME,
+        sign_cookie(
+            {"user_id": "a339fa66-db47-4b0e-9f2f-ab541c0e17ca", "environment": "dev"},
+            secret="test-key",
+        ),
+    )
+
     response = wired_app.get(
         "/api/v1/oauth/gmail/start",
         params={"link": "true", "return_to": "/app/settings/accounts"},
@@ -475,7 +506,11 @@ async def test_get_or_create_user_seeds_default_rubric_rules(
     """First-time OAuth user provisioning inserts the default rubric rows."""
     factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
     async with factory() as session:
-        user = await _get_or_create_user(session, email="seeded@example.com")
+        user = await _get_or_create_user(
+            session,
+            email="seeded@example.com",
+            environment="test",
+        )
         rows = (
             (
                 await session.execute(
@@ -494,7 +529,11 @@ async def test_get_or_create_user_seeds_default_rubric_rules(
             "Newsletters",
         ]
 
-        same_user = await _get_or_create_user(session, email="seeded@example.com")
+        same_user = await _get_or_create_user(
+            session,
+            email="seeded@example.com",
+            environment="test",
+        )
         repeat_rows = (
             (
                 await session.execute(
@@ -507,6 +546,52 @@ async def test_get_or_create_user_seeds_default_rubric_rules(
 
     assert same_user.id == user.id
     assert len(repeat_rows) == len(rows)
+
+
+async def test_get_or_create_user_scopes_identity_by_environment(
+    test_engine: AsyncEngine,
+) -> None:
+    """The same Google email gets independent dev and prod user rows."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        dev_user = await _get_or_create_user(
+            session,
+            email="shared@example.com",
+            environment="dev",
+        )
+        prod_user = await _get_or_create_user(
+            session,
+            email="shared@example.com",
+            environment="prod",
+        )
+
+    assert dev_user.id != prod_user.id
+    assert dev_user.environment == "dev"
+    assert prod_user.environment == "prod"
+
+
+async def test_resolve_oauth_user_rejects_cross_environment_link(
+    test_engine: AsyncEngine,
+) -> None:
+    """Account linking cannot reuse a user id owned by another environment."""
+    factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as session:
+        user = User(
+            email="dev-link@example.com",
+            environment="dev",
+            tz="UTC",
+            status="active",
+        )
+        session.add(user)
+        await session.flush()
+
+        with pytest.raises(HTTPException, match="session user belongs to another environment"):
+            await _resolve_oauth_user(
+                session,
+                requested_user_id=user.id,
+                email="dev-link@example.com",
+                environment="prod",
+            )
 
 
 def test_oauth_callback_redirects_to_login_on_access_denied(wired_app: TestClient) -> None:

@@ -622,6 +622,7 @@ def fanout_handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
                 session=session,
                 sqs=_sqs_client(),
                 ingest_queue_url=queue_url,
+                environment=_settings.env,
                 store_raw_mime=os.environ.get("BRIEFED_STORE_RAW_MIME", "0") == "1",
             )
             return await run_fanout(deps=deps, user_id=user_filter)

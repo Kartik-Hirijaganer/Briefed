@@ -63,6 +63,7 @@ class FanoutDeps:
         session: Open :class:`AsyncSession` for reads.
         sqs: SQS client used for :meth:`send_message` calls.
         ingest_queue_url: Full queue URL for the ingest queue.
+        environment: Runtime environment whose users may be scheduled.
         store_raw_mime: Whether newly-enqueued messages should opt in to
             raw-MIME storage (owner-level preference — Phase 1 uses a
             single global flag until :mod:`preferences` ships in Phase 6).
@@ -71,6 +72,7 @@ class FanoutDeps:
     session: AsyncSession
     sqs: SqsSender
     ingest_queue_url: str
+    environment: str = "local"
     store_raw_mime: bool = False
 
 
@@ -134,6 +136,7 @@ async def run_fanout(
     """
     user_stmt = select(User).where(
         User.status == "active",
+        User.environment == deps.environment,
         User.schedule_frequency != "disabled",
     )
     if user_id is not None:

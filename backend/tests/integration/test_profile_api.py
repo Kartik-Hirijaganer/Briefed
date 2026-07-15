@@ -93,6 +93,37 @@ async def test_get_profile_missing_user_returns_error_envelope(
     }
 
 
+async def test_get_profile_rejects_user_from_another_environment(
+    api_session: async_sessionmaker[AsyncSession],
+) -> None:
+    """A prod session cannot address a user row owned by dev."""
+    async with api_session() as session:
+        user = User(
+            email="dev-only@x.com",
+            environment="dev",
+            tz="UTC",
+            status="active",
+        )
+        session.add(user)
+        await session.commit()
+
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        env="prod",
+        runtime="local",
+        log_level="info",
+        session_signing_key="test-key",
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/profile/me",
+            cookies={SESSION_COOKIE_NAME: cookie},
+        )
+
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"] == "session belongs to another environment"
+
+
 async def test_patch_profile_updates_fields(
     api_session: async_sessionmaker[AsyncSession],
 ) -> None:
