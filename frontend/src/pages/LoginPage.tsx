@@ -35,6 +35,8 @@ const sanitizeReturnTo = (value: string | null): string => {
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   access_denied: 'Google sign-in was cancelled or access was denied. Please try again.',
   invalid_request: "Google's sign-in response was incomplete. Please try again.",
+  oauth_session_invalid:
+    'Google sign-in lost its browser session. Please try again and allow cookies for this site.',
 };
 
 const describeAuthError = (code: string | null): string | null => {

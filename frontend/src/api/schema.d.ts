@@ -119,8 +119,8 @@ export interface paths {
          *         malformed callback.
          *
          *     Raises:
-         *         HTTPException: 400 on state mismatch / missing cookie; 503 when
-         *             server OAuth configuration is missing.
+         *         HTTPException: 400 when Google rejects the code or returned identity;
+         *             503 when server OAuth configuration is missing.
          */
         get: operations["gmail_oauth_callback_api_v1_oauth_gmail_callback_get"];
         put?: never;

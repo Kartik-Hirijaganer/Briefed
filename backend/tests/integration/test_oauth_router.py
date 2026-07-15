@@ -233,6 +233,8 @@ def test_oauth_start_redirects_to_google_and_sets_state_cookie(
     )
     assert OAUTH_STATE_COOKIE_NAME in response.cookies
     assert f"Max-Age={_OAUTH_STATE_COOKIE_MAX_AGE_SECONDS}" in response.headers["set-cookie"]
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
 
 
 def test_oauth_start_uses_public_base_url_for_callback(wired_app: TestClient) -> None:
@@ -299,6 +301,7 @@ def test_oauth_callback_persists_account_and_sets_session_cookie(
     )
     assert response.status_code == 302, response.text
     assert response.headers["location"] == "/app/settings/accounts"
+    assert response.headers["cache-control"] == "no-store"
     # The session cookie is now set; /accounts should return our new row.
     list_response = wired_app.get("/api/v1/accounts")
     assert list_response.status_code == 200, list_response.text
@@ -515,6 +518,7 @@ def test_oauth_callback_redirects_to_login_on_access_denied(wired_app: TestClien
     )
     assert response.status_code == 302, response.text
     assert response.headers["location"] == "/login?auth_error=access_denied"
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_oauth_callback_redirects_to_login_on_missing_code(wired_app: TestClient) -> None:
@@ -539,16 +543,37 @@ def test_oauth_callback_rejects_state_mismatch(wired_app: TestClient) -> None:
         params={"code": "c", "state": "B"},
         follow_redirects=False,
     )
-    assert response.status_code == 400
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?auth_error=oauth_session_invalid"
+    assert response.headers["cache-control"] == "no-store"
 
 
-def test_oauth_callback_rejects_missing_cookie(wired_app: TestClient) -> None:
+def test_oauth_callback_recovers_from_missing_cookie(wired_app: TestClient) -> None:
     response = wired_app.get(
         "/api/v1/oauth/gmail/callback",
         params={"code": "c", "state": "S"},
         follow_redirects=False,
     )
-    assert response.status_code == 400
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?auth_error=oauth_session_invalid"
+    assert response.headers["cache-control"] == "no-store"
+    assert f'{OAUTH_STATE_COOKIE_NAME}=""' in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_oauth_callback_recovers_from_malformed_cookie(wired_app: TestClient) -> None:
+    """A malformed state cookie returns the user to a clean login retry."""
+    wired_app.cookies.set(OAUTH_STATE_COOKIE_NAME, "malformed")
+
+    response = wired_app.get(
+        "/api/v1/oauth/gmail/callback",
+        params={"code": "c", "state": "S"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?auth_error=oauth_session_invalid"
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_oauth_callback_maps_token_exchange_auth_error(
