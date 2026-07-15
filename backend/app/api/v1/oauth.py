@@ -217,7 +217,11 @@ async def start(
         try:
             existing_session = verify_cookie(session_cookie, secret=signing_key)
             raw_existing_user_id = existing_session.get("user_id")
-            if isinstance(raw_existing_user_id, str):
+            existing_environment = existing_session.get("environment")
+            environment_matches = (
+                existing_environment is None or existing_environment == settings.env
+            )
+            if isinstance(raw_existing_user_id, str) and environment_matches:
                 existing_user_id = raw_existing_user_id
         except AuthError:
             existing_user_id = None
@@ -345,12 +349,12 @@ async def callback(
 
     async with get_sessionmaker()() as session:
         requested_user_id = _uuid_from_cookie(cookie.get("user_id"))
-        if requested_user_id is not None:
-            user = await session.get(User, requested_user_id)
-            if user is None:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="session user not found")
-        else:
-            user = await _get_or_create_user(session, email=email)
+        user = await _resolve_oauth_user(
+            session,
+            requested_user_id=requested_user_id,
+            email=email,
+            environment=settings.env,
+        )
         account = await _upsert_connected_account(
             session,
             user_id=user.id,
@@ -402,7 +406,10 @@ async def callback(
     )
     response.set_cookie(
         SESSION_COOKIE_NAME,
-        sign_cookie({"user_id": str(user_id)}, secret=signing_key),
+        sign_cookie(
+            {"user_id": str(user_id), "environment": settings.env},
+            secret=signing_key,
+        ),
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         path="/",
@@ -615,12 +622,14 @@ async def _get_or_create_user(
     session: AsyncSession,
     *,
     email: str,
+    environment: str,
 ) -> User:
     """Return an existing user or create one.
 
     Args:
         session: Open async session.
         email: Owner email from the id_token.
+        environment: Runtime environment that owns the user row.
 
     Returns:
         The loaded / created :class:`User`.
@@ -628,7 +637,10 @@ async def _get_or_create_user(
     existing = (
         (
             await session.execute(
-                select(User).where(User.email == email),
+                select(User).where(
+                    User.email == email,
+                    User.environment == environment,
+                ),
             )
         )
         .scalars()
@@ -636,12 +648,57 @@ async def _get_or_create_user(
     )
     if existing is not None:
         return existing
-    user = User(email=email, tz="America/New_York", status="active")
+    user = User(
+        email=email,
+        environment=environment,
+        tz="America/New_York",
+        status="active",
+    )
     session.add(user)
     await session.flush()
     for rule in _default_rubric_rules_for(user_id=user.id):
         session.add(rule)
     await session.flush()
+    return user
+
+
+async def _resolve_oauth_user(
+    session: AsyncSession,
+    *,
+    requested_user_id: UUID | None,
+    email: str,
+    environment: str,
+) -> User:
+    """Resolve a login or account-link request inside one environment.
+
+    Args:
+        session: Open async session.
+        requested_user_id: Existing owner selected by an account-link session.
+        email: Google identity email used for a normal login.
+        environment: Runtime environment that must own the resolved user.
+
+    Returns:
+        Existing linked user or environment-scoped login user.
+
+    Raises:
+        HTTPException: If an account-link session references a missing user or
+            a user owned by another environment.
+    """
+    if requested_user_id is None:
+        return await _get_or_create_user(
+            session,
+            email=email,
+            environment=environment,
+        )
+
+    user = await session.get(User, requested_user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="session user not found")
+    if user.environment != environment:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="session user belongs to another environment",
+        )
     return user
 
 

@@ -96,7 +96,8 @@ class User(Base, TimestampMixin):
 
     Attributes:
         id: Primary key (UUIDv4).
-        email: Owner email — unique, case-insensitive.
+        environment: Runtime environment that owns this user and all child data.
+        email: Owner email — unique per environment, case-insensitive.
         display_name: Optional display name; consumed by the Track B
             IdentityScrubber when present.
         tz: IANA timezone string (defaults to America/New_York).
@@ -137,10 +138,16 @@ class User(Base, TimestampMixin):
             "schedule_frequency IN ('once_daily','twice_daily','disabled')",
             name="ck_users_schedule_frequency",
         ),
+        CheckConstraint(
+            "environment IN ('local','test','dev','prod')",
+            name="ck_users_environment",
+        ),
+        UniqueConstraint("environment", "email", name="uq_users_environment_email"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(default=_uuid_factory, primary_key=True)
-    email: Mapped[str] = mapped_column(citext_column(320), nullable=False, unique=True)
+    environment: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
+    email: Mapped[str] = mapped_column(citext_column(320), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255))
     tz: Mapped[str] = mapped_column(String(64), nullable=False, default="America/New_York")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
