@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.5.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.4.0...v1.5.0) (2026-07-15)
+
+
+### Features
+
+* scope user identities by environment and enforce environment ch… ([4c6257c](https://github.com/Kartik-Hirijaganer/Briefed/commit/4c6257c61bc4bdc6cf19f2fc55a92921dc2aef9a))
+* scope user identities by environment and enforce environment checks in OAuth flow ([0bbbff8](https://github.com/Kartik-Hirijaganer/Briefed/commit/0bbbff8cd0a997cc1ca27956aafe5919ff9644d1))
+
+
+### Bug Fixes
+
+* enhance OAuth session handling and improve error messaging ([b84e79d](https://github.com/Kartik-Hirijaganer/Briefed/commit/b84e79db74cf4e3fdb69e5bc719f301bdac17109))
+* enhance OAuth session handling and improve error messaging ([b683de1](https://github.com/Kartik-Hirijaganer/Briefed/commit/b683de1cd69c74cab6399b52624ccca7d6ca5382))
+* update package versions for briefed-backend, click, and httplib2 ([77fc2ff](https://github.com/Kartik-Hirijaganer/Briefed/commit/77fc2ff048dd094afdeed82b515848131b7640cc))
+
 ## [1.4.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.3.0...v1.4.0) (2026-07-12)
 
 
