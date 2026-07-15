@@ -36,6 +36,7 @@ from app.api.session import (
 from app.core.clock import utcnow
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthError, CryptoError, ProviderError
+from app.core.logging import get_logger
 from app.core.security import EnvelopeCipher, token_context
 from app.db.models import ConnectedAccount, OAuthToken, RubricRule, User
 from app.db.session import get_sessionmaker
@@ -55,6 +56,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 router = APIRouter(prefix="/oauth/gmail", tags=["oauth"])
+logger = get_logger(__name__)
 
 _LOGIN_PATH = "/login"
 """SPA route shown to unauthenticated users; OAuth denials bounce here."""
@@ -64,6 +66,9 @@ _RETURN_TO_PATTERN = re.compile(r"^/app(/[^/].*)?$")
 
 _OAUTH_STATE_COOKIE_MAX_AGE_SECONDS = 30 * 60
 """How long a user may spend in Google consent before callback validation."""
+
+_OAUTH_SESSION_ERROR = "oauth_session_invalid"
+"""Stable UI error code for a missing, invalid, or mismatched state cookie."""
 
 
 def sanitize_return_to(value: str | None) -> str:
@@ -151,6 +156,24 @@ def _require_oauth_credentials(settings: Settings) -> tuple[str, str]:
     return client_id, client_secret
 
 
+def _prevent_oauth_response_caching(response: RedirectResponse) -> RedirectResponse:
+    """Mark an OAuth redirect as non-cacheable by browsers and edge proxies.
+
+    OAuth start redirects carry one-time state and PKCE material in an
+    HttpOnly cookie. Reusing a cached redirect can therefore send the browser
+    to Google without storing a fresh correlation cookie.
+
+    Args:
+        response: Redirect response to protect from caching.
+
+    Returns:
+        The same response with explicit legacy and modern no-cache headers.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 @router.get(
     "/start",
     name="gmail_oauth_start",
@@ -217,10 +240,11 @@ async def start(
         cookie_value,
         max_age=_OAUTH_STATE_COOKIE_MAX_AGE_SECONDS,
         httponly=True,
+        path="/",
         secure=settings.runtime != "local",
         samesite="lax",
     )
-    return response
+    return _prevent_oauth_response_caching(response)
 
 
 @router.get(
@@ -257,27 +281,45 @@ async def callback(
         malformed callback.
 
     Raises:
-        HTTPException: 400 on state mismatch / missing cookie; 503 when
-            server OAuth configuration is missing.
+        HTTPException: 400 when Google rejects the code or returned identity;
+            503 when server OAuth configuration is missing.
     """
     # RFC 6749 §4.1.2.1: on cancel/deny Google sends ``error`` and no
     # ``code``. Surface it on the login page instead of 422-ing on the
     # missing required query parameter.
     if error:
-        return _redirect_after_oauth_error(error)
+        return _redirect_after_oauth_error(
+            error,
+            secure_cookie=settings.runtime != "local",
+        )
     if not code or not state:
-        return _redirect_after_oauth_error("invalid_request")
+        return _redirect_after_oauth_error(
+            "invalid_request",
+            secure_cookie=settings.runtime != "local",
+        )
 
     client_id, client_secret = _require_oauth_credentials(settings)
     signing_key = _require_session_key(settings)
     if not oauth_state_cookie:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="missing state cookie")
+        logger.warning("oauth.callback.state_rejected", reason="missing_cookie")
+        return _redirect_after_oauth_error(
+            _OAUTH_SESSION_ERROR,
+            secure_cookie=settings.runtime != "local",
+        )
     try:
         cookie = verify_cookie(oauth_state_cookie, secret=signing_key)
-    except AuthError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except AuthError:
+        logger.warning("oauth.callback.state_rejected", reason="invalid_cookie")
+        return _redirect_after_oauth_error(
+            _OAUTH_SESSION_ERROR,
+            secure_cookie=settings.runtime != "local",
+        )
     if cookie.get("state") != state:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="state mismatch")
+        logger.warning("oauth.callback.state_rejected", reason="state_mismatch")
+        return _redirect_after_oauth_error(
+            _OAUTH_SESSION_ERROR,
+            secure_cookie=settings.runtime != "local",
+        )
 
     bundle = await _exchange_callback_code(
         code=code,
@@ -351,19 +393,26 @@ async def callback(
     cookie_return_to = cookie.get("return_to")
     return_to = sanitize_return_to(cookie_return_to if isinstance(cookie_return_to, str) else None)
     response = RedirectResponse(str(return_to), status_code=status.HTTP_302_FOUND)
-    response.delete_cookie(OAUTH_STATE_COOKIE_NAME)
+    response.delete_cookie(
+        OAUTH_STATE_COOKIE_NAME,
+        httponly=True,
+        path="/",
+        secure=settings.runtime != "local",
+        samesite="lax",
+    )
     response.set_cookie(
         SESSION_COOKIE_NAME,
         sign_cookie({"user_id": str(user_id)}, secret=signing_key),
         max_age=60 * 60 * 24 * 30,
         httponly=True,
+        path="/",
         secure=settings.runtime != "local",
         samesite="lax",
     )
-    return response
+    return _prevent_oauth_response_caching(response)
 
 
-def _redirect_after_oauth_error(error: str) -> RedirectResponse:
+def _redirect_after_oauth_error(error: str, *, secure_cookie: bool) -> RedirectResponse:
     """Bounce a failed authorization response back to the login page.
 
     Google redirects to the callback with an ``error`` query parameter (and
@@ -375,6 +424,8 @@ def _redirect_after_oauth_error(error: str) -> RedirectResponse:
     Args:
         error: Stable OAuth error code (e.g. ``access_denied``), or
             ``invalid_request`` when the callback was malformed.
+        secure_cookie: Whether the state-cookie deletion must carry the
+            ``Secure`` attribute.
 
     Returns:
         A 302 redirect to ``/login`` carrying the ``auth_error`` code; the
@@ -382,8 +433,14 @@ def _redirect_after_oauth_error(error: str) -> RedirectResponse:
     """
     query = urlencode({"auth_error": error})
     response = RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
-    response.delete_cookie(OAUTH_STATE_COOKIE_NAME)
-    return response
+    response.delete_cookie(
+        OAUTH_STATE_COOKIE_NAME,
+        httponly=True,
+        path="/",
+        secure=secure_cookie,
+        samesite="lax",
+    )
+    return _prevent_oauth_response_caching(response)
 
 
 def _redirect_to_login_for_link(*, return_to: str | None) -> RedirectResponse:
@@ -402,7 +459,8 @@ def _redirect_to_login_for_link(*, return_to: str | None) -> RedirectResponse:
         else "/app/settings/accounts"
     )
     query = urlencode({"next": safe_next})
-    return RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(f"{_LOGIN_PATH}?{query}", status_code=status.HTTP_302_FOUND)
+    return _prevent_oauth_response_caching(response)
 
 
 async def _exchange_callback_code(

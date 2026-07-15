@@ -118,4 +118,14 @@ describe('<LoginPage>', () => {
     expect(screen.getByText(/cancelled or access was denied/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
   });
+
+  it('surfaces retry guidance when the OAuth browser session is unavailable', () => {
+    vi.stubEnv('VITE_ENABLE_GMAIL_CONNECT', 'true');
+
+    renderPage(['/login?auth_error=oauth_session_invalid']);
+
+    expect(screen.getByText(/lost its browser session/i)).toBeInTheDocument();
+    expect(screen.getByText(/allow cookies for this site/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+  });
 });
