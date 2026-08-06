@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.5.1](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.0...v1.5.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* update dashboard API calls and enhance auto-scan alert messaging ([0e34760](https://github.com/Kartik-Hirijaganer/Briefed/commit/0e34760b0d85f9a9c31bba509545497c09e7aefc))
+* update dashboard API calls and enhance auto-scan alert messaging ([2539fbe](https://github.com/Kartik-Hirijaganer/Briefed/commit/2539fbeb40f79cdb93c695ede9957e41710cab9a))
+* update OAuth redirect status code from 302 to 307 in API documentation ([bd76759](https://github.com/Kartik-Hirijaganer/Briefed/commit/bd76759f02ed237cf33fe59ccd9ef449331b75eb))
+
 ## [1.5.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.4.0...v1.5.0) (2026-07-15)
 
 
