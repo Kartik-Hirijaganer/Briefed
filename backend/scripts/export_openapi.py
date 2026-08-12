@@ -21,7 +21,7 @@ from app.main import app
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_PATH = REPO_ROOT / "packages" / "contracts" / "openapi.json"
 
-JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonValue: TypeAlias = str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"] | None
 """JSON-compatible value used for generated OpenAPI traversal."""
 
 
