@@ -29,3 +29,4 @@ short, dated, numbered, immutable once accepted.
 | 0013 | Gmail mark-read write scope                           | Accepted                |
 | 0014 | Execute unsubscribe in release 2                      | Accepted                |
 | 0015 | Public homepage, demo, and enforced consent           | Accepted                |
+| 0016 | Single production cloud environment                  | Accepted                |
