@@ -329,15 +329,9 @@ tf-fmt:
 	terraform -chdir=infra/terraform fmt -recursive
 
 .PHONY: tf-validate
-tf-validate: ## terraform fmt -check + validate (dev + prod) — mirrors CI
+tf-validate: ## terraform fmt -check + validate (prod) — mirrors CI
 	terraform -chdir=infra/terraform fmt -check -recursive
-	cd infra/terraform/envs/dev  && terraform init -backend=false && terraform validate
 	cd infra/terraform/envs/prod && terraform init -backend=false && terraform validate
-
-.PHONY: deploy-dev
-deploy-dev: ## Terraform apply the dev env (requires IMAGE_URI=...)
-	@test -n "$(IMAGE_URI)" || (echo "usage: make deploy-dev IMAGE_URI=..." && exit 1)
-	cd infra/terraform/envs/dev && terraform apply -var "image_uri=$(IMAGE_URI)"
 
 # --------------------------------------------------------------------------- #
 # CI parity                                                                   #

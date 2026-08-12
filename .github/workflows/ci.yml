@@ -217,11 +217,6 @@ jobs:
           terraform_version: "1.9.8"
       - name: terraform fmt
         run: terraform -chdir=infra/terraform fmt -check -recursive
-      - name: terraform validate (dev env)
-        run: |
-          cd infra/terraform/envs/dev
-          terraform init -backend=false
-          terraform validate
       - name: terraform validate (prod env)
         run: |
           cd infra/terraform/envs/prod
