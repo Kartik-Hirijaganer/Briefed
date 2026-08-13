@@ -317,6 +317,7 @@ async def start(
 )
 async def callback(
     request: Request,
+    *,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
