@@ -24,6 +24,6 @@ operators can subscribe one inbox and route via SES rules.
 - The plan budgets one week of post-Phase-8 burn-in for threshold
   tuning. The defaults above are conservative; expect the
   `worker-p95-duration` alarm to false-positive during the first cold
-  burst after each deploy and to settle after SnapStart warms up.
+  burst after each deploy and to settle after Lambda execution environments warm up.
 - Replacement of `EXTENDED_STATISTIC=p95` with `p99` is reserved for a
   Phase 9 follow-up if oncall confirms the p95 line is too noisy.

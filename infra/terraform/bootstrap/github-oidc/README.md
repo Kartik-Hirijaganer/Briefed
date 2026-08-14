@@ -4,7 +4,7 @@ Run **once per AWS account**, with admin-level local credentials.
 
 This stack creates:
 - A single deploy role (`briefed-gha-deploy`) trusted only by workflows in
-  this repo running against the `dev` or `prod` GitHub Environments.
+  this repo running against the `prod` GitHub Environment.
 - Permissions: `PowerUserAccess` + a scoped IAM policy that lets
   Terraform create / update the lambda execution roles (`briefed-*`).
 
@@ -29,20 +29,20 @@ State is local on purpose — this is a one-shot, account-level resource.
 
 ```bash
 cd infra/terraform/bootstrap/github-oidc
-aws sts get-caller-identity   # confirm you are in account 970385384114
-terraform init
-terraform apply
+aws --profile personal-admin sts get-caller-identity   # must be 970385384114
+AWS_PROFILE=personal-admin terraform init
+AWS_PROFILE=personal-admin terraform apply
 ```
 
 Copy the `deploy_role_arn` output and store it as the GitHub Environment
-secret `AWS_DEPLOY_ROLE_ARN` for both `prod` and `dev`. See the root
+secret `AWS_DEPLOY_ROLE_ARN` for `prod`. See the root
 [README.md](../../../../README.md) section "GitHub Secrets" for the full
 list of secrets the deploy + CI workflows need.
 
 ## Tightening later
 
 `PowerUserAccess` is intentionally broad for v1 — the trust policy
-(`environment:prod` / `environment:dev`, this repo only) is the primary
+(`environment:prod`, this repo only) is the primary
 control. When the prod resource set stabilizes, replace the managed
 policy attachment in [main.tf](main.tf) with a hand-rolled policy
 limited to the resource ARNs Terraform actually manages.

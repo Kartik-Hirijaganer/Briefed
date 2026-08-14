@@ -86,6 +86,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "970385384114"
           role-session-name: gha-deploy-prod-${{ github.run_id }}
           mask-aws-account-id: true
 
@@ -109,6 +110,44 @@ jobs:
                  --region "${AWS_REGION}" \
                  --image-scanning-configuration scanOnPush=true \
                  --encryption-configuration encryptionType=AES256
+
+      - name: Preview and apply ECR lifecycle policy
+        run: |
+          set -euo pipefail
+          policy="infra/ecr/lifecycle-policy.json"
+          aws ecr start-lifecycle-policy-preview \
+            --repository-name "${ECR_REPOSITORY}" \
+            --lifecycle-policy-text "file://${policy}" >/dev/null
+
+          preview_status="IN_PROGRESS"
+          for attempt in $(seq 1 20); do
+            aws ecr get-lifecycle-policy-preview \
+              --repository-name "${ECR_REPOSITORY}" \
+              > "${RUNNER_TEMP}/ecr-preview.json"
+            preview_status=$(jq -r '.status' "${RUNNER_TEMP}/ecr-preview.json")
+            case "${preview_status}" in
+              COMPLETE) break ;;
+              FAILED) echo "::error::ECR lifecycle preview failed"; exit 1 ;;
+              *) sleep 3 ;;
+            esac
+          done
+          if [ "${preview_status}" != "COMPLETE" ]; then
+            echo "::error::ECR lifecycle preview did not complete"
+            exit 1
+          fi
+
+          if ! jq -e '
+            [.previewResults[]? | select(((.imageTags // []) | length) > 0)] | length == 0
+          ' "${RUNNER_TEMP}/ecr-preview.json" >/dev/null; then
+            echo "::error::Lifecycle preview selected a tagged image; refusing to apply"
+            jq -r '.previewResults[]? | select(((.imageTags // []) | length) > 0) | .imageTags[]' \
+              "${RUNNER_TEMP}/ecr-preview.json"
+            exit 1
+          fi
+
+          aws ecr put-lifecycle-policy \
+            --repository-name "${ECR_REPOSITORY}" \
+            --lifecycle-policy-text "file://${policy}" >/dev/null
 
       - name: Login to ECR
         id: ecr
@@ -216,11 +255,33 @@ jobs:
         run: |
           alembic -c backend/alembic.ini upgrade head
 
-      - name: Terraform apply (publish version + atomic alias swing)
+      - name: Terraform plan and protected-resource guard
         working-directory: ${{ env.TF_DIR }}
         run: |
-          terraform apply -auto-approve \
+          set -euo pipefail
+          terraform plan \
+            -out=tfplan \
             -var "image_uri=${{ steps.image.outputs.image_uri }}"
+          terraform show -json tfplan > "${RUNNER_TEMP}/tfplan.json"
+
+          protected_deletes=$(jq -r '
+            .resource_changes[]
+            | select(.type == "aws_kms_key"
+                or .type == "aws_cloudfront_distribution"
+                or .type == "aws_lambda_function_url"
+                or .type == "aws_wafv2_web_acl")
+            | select(.change.actions | index("delete"))
+            | .address
+          ' "${RUNNER_TEMP}/tfplan.json")
+          if [ -n "${protected_deletes}" ]; then
+            echo "::error::Terraform plan deletes or replaces protected production resources:"
+            printf '%s\n' "${protected_deletes}"
+            exit 1
+          fi
+
+      - name: Terraform apply saved plan (publish version + atomic alias swing)
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve tfplan
 
       - name: Sync runtime secrets to SSM
         # Pushes secrets stored as GitHub Environment secrets into the
@@ -305,6 +366,50 @@ jobs:
           rollback_alias fanout "${{ steps.pre.outputs.fanout }}" "${{ steps.pre.outputs.fanout_version }}"
           exit 1
 
+      - name: Verify production runtime wiring
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          if [ "${account_id}" != "970385384114" ]; then
+            echo "::error::Post-deploy verification reached account ${account_id}"
+            exit 1
+          fi
+
+          tf_out=$(terraform output -json)
+          api=$(printf '%s' "${tf_out}" | jq -r '.api_function_name.value')
+          worker=$(printf '%s' "${tf_out}" | jq -r '.worker_function_name.value')
+          fanout=$(printf '%s' "${tf_out}" | jq -r '.fanout_function_name.value')
+          for function_name in "${api}" "${worker}" "${fanout}"; do
+            alias_version=$(aws lambda get-alias \
+              --function-name "${function_name}" \
+              --name live \
+              --query FunctionVersion \
+              --output text)
+            if ! [[ "${alias_version}" =~ ^[0-9]+$ ]]; then
+              echo "::error::${function_name}:live does not target a published version"
+              exit 1
+            fi
+          done
+
+          enabled_consumers=$(aws lambda list-event-source-mappings \
+            --function-name "${worker}:live" \
+            --query 'length(EventSourceMappings[?State==`Enabled`])' \
+            --output text)
+          if [ "${enabled_consumers}" != "6" ]; then
+            echo "::error::Expected 6 enabled worker consumers, found ${enabled_consumers}"
+            exit 1
+          fi
+
+          schedule_state=$(aws scheduler get-schedule \
+            --name "${fanout}-daily" \
+            --query State \
+            --output text)
+          if [ "${schedule_state}" != "ENABLED" ]; then
+            echo "::error::Production fanout schedule is ${schedule_state}"
+            exit 1
+          fi
+
       - name: Record release_metadata row
         env:
           BRIEFED_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -315,3 +420,18 @@ jobs:
             --git-sha "${{ steps.meta.outputs.sha }}" \
             --frontend-build-id "${{ steps.frontend.outputs.frontend_build_id }}" \
             --notes "${{ inputs.release_notes || format('automated deploy of {0}', steps.meta.outputs.version) }}"
+
+      - name: Require empty post-deploy Terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set +e
+          terraform plan -detailed-exitcode \
+            -var "image_uri=${{ steps.image.outputs.image_uri }}"
+          status=$?
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            if [ "${status}" -eq 2 ]; then
+              echo "::error::Post-deploy Terraform drift detected"
+            fi
+            exit "${status}"
+          fi

@@ -15,6 +15,8 @@ Runbook, alarms, and recovery drills for Briefed production.
   pre-cut rehearsal script (plan §14 Phase 9).
 - [`secrets-rotation.md`](secrets-rotation.md) — quarterly rotation
   procedure for SSM + CMKs (plan §14 Phase 8).
+- [`dev-environment-retirement.md`](dev-environment-retirement.md) — one-time
+  dev archive, Terraform teardown, and 30-day recovery procedure.
 - [`google-oauth-verification.md`](google-oauth-verification.md) — Phase
   13 Google OAuth consent, custom-domain, scope, demo-video, and CASA
   checklist.

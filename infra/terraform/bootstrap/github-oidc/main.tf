@@ -3,8 +3,8 @@
  *
  * Run ONCE per AWS account, with admin-level local credentials.
  * Output ``deploy_role_arn`` is the value to drop into the GitHub
- * Environment secret ``AWS_DEPLOY_ROLE_ARN`` for the ``dev`` and ``prod``
- * environments. State for this stack is intentionally local — it is a
+ * Environment secret ``AWS_DEPLOY_ROLE_ARN`` for the ``prod`` environment.
+ * State for this stack is intentionally local — it is a
  * one-shot, account-level resource that does not benefit from remote
  * state. See README.md in this directory for the full runbook.
  */
@@ -72,10 +72,9 @@ data "aws_iam_openid_connect_provider" "github" {
 }
 
 # Trust policy — only the Briefed repo's workflows running against the
-# ``dev`` or ``prod`` GitHub Environments can assume the role. The
+# ``prod`` GitHub Environment can assume the role. The
 # ``environment:`` claim is set by GitHub when a job declares
-# ``environment: prod`` (or dev). Adding new environments? Extend the
-# ``token.actions.githubusercontent.com:sub`` list below and re-apply.
+# ``environment: prod``.
 data "aws_iam_policy_document" "trust" {
   statement {
     effect  = "Allow"
@@ -97,7 +96,6 @@ data "aws_iam_policy_document" "trust" {
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${var.github_owner}/${var.github_repo}:environment:prod",
-        "repo:${var.github_owner}/${var.github_repo}:environment:dev",
       ]
     }
   }
@@ -134,6 +132,7 @@ data "aws_iam_policy_document" "iam_for_deploy" {
   # Allow Terraform to manage IAM roles + policies for the briefed-*
   # lambdas it provisions, but nothing outside that name prefix.
   statement {
+    sid    = "ManageBriefedLambdaIAM"
     effect = "Allow"
     actions = [
       "iam:CreateRole",
@@ -161,6 +160,7 @@ data "aws_iam_policy_document" "iam_for_deploy" {
   # Read-only access to inspect customer-managed policies the deploy
   # role may attach.
   statement {
+    sid    = "ReadAnyManagedPolicy"
     effect = "Allow"
     actions = [
       "iam:GetPolicy",
