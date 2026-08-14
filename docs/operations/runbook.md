@@ -55,8 +55,9 @@ The SNS topic that fans out alarm emails is named
 - **First moves:**
   1. Check the worker log group for `MissingSecretError` (rotated SSM
      parameter not yet propagated) or KMS `AccessDeniedException`.
-  2. If SSM rotation is the cause, rerun `aws ssm put-parameter
-     --overwrite` and trigger a fresh deploy so SnapStart re-snapshots.
+  2. If SSM rotation is the cause, rerun `aws --profile personal-admin ssm
+     put-parameter --overwrite` and trigger a fresh deploy so new execution
+     environments hydrate the updated value.
 - **Drill:** `backend/tests/chaos/test_secret_rotation_drill.py` proves
   the second hydration picks up the new value.
 
