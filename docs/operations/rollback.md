@@ -80,52 +80,41 @@ python backend/scripts/write_release_metadata.py \
   --notes "rollback from v<bad-tag> at $(date -u +%FT%TZ)"
 ```
 
-## Rehearsal — run this before every prod cut
+## Pre-cut verification
 
-The rehearsal is run against the dev stack so prod is never touched.
-Wall-clock budget: 10 minutes.
+ADR 0016 removes the persistent dev stack. Before each production cut, use the
+saved-plan and automated rollback controls instead of injecting a known-bad
+image into a second environment. Wall-clock budget: 10 minutes.
 
-1. **Note the current dev `live` version.**
-
-   ```sh
-   aws lambda get-alias --function-name briefed-dev-api    --name live
-   aws lambda get-alias --function-name briefed-dev-worker --name live
-   aws lambda get-alias --function-name briefed-dev-fanout --name live
-   ```
-
-2. **Inject a known-bad image.** Build a debug image with `RAISE=1`
-   in the api entrypoint (or pin a deliberately old image tag) and
-   run the dev deploy workflow:
+1. Run `make ci` locally and require the GitHub CI workflow to be green.
+2. Confirm each prod `live` alias targets a published version and that one prior
+   version remains available:
 
    ```sh
-   gh workflow run deploy-dev.yml \
-     --ref dev \
-     --field image_tag=<known-bad-tag>
+   aws --profile personal-admin lambda get-alias \
+     --function-name briefed-prod-api --name live
+   aws --profile personal-admin lambda list-versions-by-function \
+     --function-name briefed-prod-api
+   # Repeat for worker and fanout.
    ```
 
-   The CloudWatch alarms `${name_prefix}-worker-init-errors` and
-   `${name_prefix}-digest-failure` should trip within 5 minutes.
-
-3. **Run the rollback steps above against `briefed-dev-*`.** Confirm
-   `/health` returns 200 within 60 s of the alias swap. Confirm the
-   alarms clear within their cooldown window (default 5 minutes).
-
-4. **Audit row.** Verify a fresh `release_metadata` row landed with
-   the previous version's SHA and a `notes` line containing
-   `"rollback"`. The integration test
-   [`backend/tests/integration/test_release_metadata.py`](../../backend/tests/integration/test_release_metadata.py)
-   pins this contract at unit level.
-
-5. **Restore.** Re-run the dev deploy workflow against the latest
-   green SHA so the dev stack is back to head. The rehearsal is over.
+3. Review the deploy workflow's saved Terraform plan. Its guard must report no
+   KMS key, CloudFront distribution, Function URL, or WAF deletion/replacement.
+4. Allow the workflow to apply only that plan. If the CloudFront smoke check
+   fails, the workflow must move all three aliases back to the versions captured
+   before apply.
+5. Verify the workflow's runtime-wiring and no-drift checks, then confirm the
+   new `release_metadata` row.
 
 ## Acceptance criteria for the rehearsal
 
 The rehearsal **passes** when all of the following hold:
 
-- Alarm fires within 5 minutes of the bad-image alias swing.
-- Rollback alias swing completes in < 60 s of operator command.
-- `/health` returns 200 against the rolled-back alias within 60 s.
+- Saved-plan protected-resource guard passes.
+- All three aliases target numeric published versions and retain a prior version.
+- CloudFront OpenAPI and body-bearing POST smoke checks pass.
+- Six worker event-source mappings and the prod fanout schedule are enabled.
+- The post-deploy Terraform plan is empty.
 - New `release_metadata` row visible via
   `psql -c "SELECT version, git_sha, notes FROM release_metadata
   ORDER BY deployed_at DESC LIMIT 5;"`.
@@ -142,8 +131,9 @@ PREV_TAG=v<last-good-tag>
 git checkout "$PREV_TAG" -- frontend/
 npm --workspace frontend ci
 npm --workspace frontend run build
-aws s3 sync frontend/dist "s3://briefed-prod-pwa" --delete
-aws cloudfront create-invalidation --distribution-id <dist-id> --paths "/*"
+aws --profile personal-admin s3 sync frontend/dist "s3://briefed-prod-pwa" --delete
+aws --profile personal-admin cloudfront create-invalidation \
+  --distribution-id <dist-id> --paths "/*"
 ```
 
 Service-worker users will pick up the previous manifest at their next
