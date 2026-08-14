@@ -6,8 +6,8 @@ lives in `backend/` + `frontend/`; everything AWS-level lives here.
 ```
 infra/terraform/
 ├── modules/
-│   ├── lambda-api/        # API Lambda (Mangum + SnapStart + Function URL)
-│   ├── lambda-worker/     # worker Lambda (SQS event sources + SnapStart)
+│   ├── lambda-api/        # API Lambda (Mangum + Function URL)
+│   ├── lambda-worker/     # worker Lambda (SQS event sources)
 │   ├── lambda-fanout/     # fan-out Lambda (EventBridge Scheduler target)
 │   ├── sqs/               # per-stage SQS queues + DLQ
 │   ├── ssm/               # SSM Parameter Store placeholders
@@ -17,22 +17,24 @@ infra/terraform/
 │   ├── acm/               # TLS certificates (DNS-validated)
 │   └── kms/               # two CMKs: token-wrap + content-encrypt
 └── envs/
-    └── dev/               # dev environment composition (Terraform root module)
+    └── prod/              # sole deployed environment (Terraform root module)
 ```
 
 ## State
 
-State is stored in an S3 bucket + DynamoDB lock table per environment;
-bootstrap script at `infra/terraform/envs/dev/bootstrap.sh` creates them
-with `aws cloudformation deploy` (chicken-and-egg: Terraform can't create
-its own state backend). Bootstrap is a one-time manual step per account.
+Production state is stored in an S3 bucket plus DynamoDB lock table. The
+[`state-backend.yaml`](terraform/bootstrap/state-backend.yaml) CloudFormation
+template bootstraps them (chicken-and-egg: Terraform cannot create its own
+state backend). Bootstrap is a one-time manual step per account.
 
-The committed `dev` root module and deploy workflow are guarded to AWS
-account `970385384114` via Terraform `allowed_account_ids` and
-`configure-aws-credentials.allowed-account-ids`.
+The committed `prod` root module and deploy workflow are guarded to AWS account
+`970385384114` via Terraform `allowed_account_ids`, explicit STS checks, and
+`configure-aws-credentials.allowed-account-ids`. Local development continues
+to use Docker, Postgres, LocalStack, and Infisical; it does not create a second
+paid AWS environment.
 
 ## Plans over applies
 
-CI runs `terraform plan` on every PR; `terraform apply` happens only from
-a protected deploy branch with manual approval. `main` is **never** auto-
-applied.
+Production deployment creates a saved Terraform plan, rejects destructive
+KMS/CloudFront/Function URL/WAF actions, applies that exact plan, runs runtime
+smoke checks, and requires a final no-drift plan.

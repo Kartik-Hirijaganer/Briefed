@@ -3,12 +3,12 @@ Description: >-
   Briefed — Terraform state backend bootstrap. Creates the S3 bucket
   (versioned, AES-256, public access blocked) and DynamoDB lock table
   used by terraform's S3 backend. Run once per environment; Terraform
-  takes over from there.
+  takes over from there. Briefed operates one persistent production environment.
 
 Parameters:
   Env:
     Type: String
-    AllowedValues: [dev, prod]
+    AllowedValues: [prod]
     Description: Environment slug — used in bucket and table names.
 
 Resources:
