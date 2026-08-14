@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.5.2](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.1...v1.5.2) (2026-08-14)
+
+
+### Bug Fixes
+
+* add dev environment retirement runbook and update GitHub OIDC role trust policy for prod only ([d1df74d](https://github.com/Kartik-Hirijaganer/Briefed/commit/d1df74dd3ce0b8e73d9d227799295713a604d995))
+* add ECR lifecycle policy for untagged images and update README for clarity ([b1b7041](https://github.com/Kartik-Hirijaganer/Briefed/commit/b1b7041a37b1520e5952206ee3a962696a5498b1))
+* adjust query parameter handling in OAuth callback and reorder type alias definition in OpenAPI export script ([359530c](https://github.com/Kartik-Hirijaganer/Briefed/commit/359530c0f1b2a9ce2cc240b0ba61157112d2245a))
+* enhance deploy workflow with ECR lifecycle policy preview and Terraform plan verification ([d2617b1](https://github.com/Kartik-Hirijaganer/Briefed/commit/d2617b1080f6b177126ff2e3619cee424a7c3f74))
+* remove dev environment validation from terraform workflow and up… ([5b53b34](https://github.com/Kartik-Hirijaganer/Briefed/commit/5b53b347cfcca8fa6e8c5305581f7db0b7aa52c9))
+* remove dev environment validation from terraform workflow and update README for AWS Lambda container images ([33575d3](https://github.com/Kartik-Hirijaganer/Briefed/commit/33575d3a168695e8c5a106c5630ef17b3ddf595a))
+* update README and alarms documentation for clarity and accuracy ([e5fc638](https://github.com/Kartik-Hirijaganer/Briefed/commit/e5fc638cfe45a5801f23f11c2f5cea515a9f3bd0))
+* update README and state backend configuration for production environment clarity ([6db9340](https://github.com/Kartik-Hirijaganer/Briefed/commit/6db934076d07ed5fc79ed6a4701c411724d79322))
+* update runbook to clarify SSM parameter rotation process and execution environment hydration ([f4ee244](https://github.com/Kartik-Hirijaganer/Briefed/commit/f4ee24438fc78fe398ab3032888694050511eb9a))
+* update trivy-action to use remediated version and pin to immutable release ([2aa8d72](https://github.com/Kartik-Hirijaganer/Briefed/commit/2aa8d72e528dd072f49d579d258bff26bda9622c))
+
 ## [1.5.1](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.0...v1.5.1) (2026-07-15)
 
 
