@@ -24,7 +24,7 @@ The chaos drill at
 hydration path with a stubbed SSM client whose values rotate between
 calls. CI runs this with `pytest -m chaos`. The drill catches:
 
-- A new sync call landing in `Settings` init (would slow SnapStart).
+- A new sync call landing in `Settings` init (would slow Lambda cold starts).
 - Forgetting to invalidate the `lru_cache` on `get_settings()` — the
   drill calls `load_settings` directly, but a regression in
   `get_settings` invalidation is caught by the integration test that
@@ -34,12 +34,11 @@ calls. CI runs this with `pytest -m chaos`. The drill catches:
 
 1. Generate the new value out-of-band (e.g. `openssl rand -hex 32` for
    `session_signing_key`, the provider's console for API keys).
-2. `aws ssm put-parameter --name "/briefed/${env}/<short>" --type
+2. `aws --profile personal-admin ssm put-parameter --name "/briefed/prod/<short>" --type
    SecureString --value "$NEW" --overwrite`.
-3. Trigger a fresh deploy. SnapStart will re-snapshot the warm process
-   with the new value. The previous warm window keeps using the old
-   value until it expires; for OAuth tokens this is fine because each
-   token unwrap is independent.
+3. Trigger a fresh deploy. New execution environments hydrate the updated value.
+   Existing warm environments keep using the old value until they expire; for
+   OAuth tokens this is fine because each token unwrap is independent.
 4. Verify by tailing the worker log group for
    `event=settings.loaded` and confirming the SSM versions match.
 5. Revoke the old value (provider console — not strictly required for
