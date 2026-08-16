@@ -76,6 +76,12 @@ variable "maximum_concurrency_per_queue" {
   }
 }
 
+variable "worker_consumers_enabled" {
+  description = "Whether SQS event-source mappings consume stage queues. Disable for an orderly environment shutdown."
+  type        = bool
+  default     = true
+}
+
 variable "env_vars" {
   type    = map(string)
   default = {}
@@ -143,14 +149,15 @@ resource "aws_iam_role_policy" "inline" {
 }
 
 resource "aws_lambda_function" "this" {
-  function_name = var.name
-  role          = aws_iam_role.this.arn
-  package_type  = "Image"
-  image_uri     = var.image_uri
-  publish       = true
-  memory_size   = var.memory_mb
-  timeout       = var.timeout_seconds
-  architectures = ["x86_64"]
+  function_name                  = var.name
+  role                           = aws_iam_role.this.arn
+  package_type                   = "Image"
+  image_uri                      = var.image_uri
+  publish                        = true
+  memory_size                    = var.memory_mb
+  timeout                        = var.timeout_seconds
+  architectures                  = ["x86_64"]
+  reserved_concurrent_executions = var.worker_consumers_enabled ? -1 : 0
 
   # See lambda-api/main.tf for why SnapStart is intentionally omitted
   # for container-image Lambdas.
@@ -173,7 +180,7 @@ resource "aws_lambda_alias" "live" {
 }
 
 resource "aws_lambda_event_source_mapping" "stage" {
-  for_each                           = var.queue_arns
+  for_each                           = var.worker_consumers_enabled ? var.queue_arns : {}
   event_source_arn                   = each.value
   function_name                      = aws_lambda_alias.live.arn
   batch_size                         = var.batch_size

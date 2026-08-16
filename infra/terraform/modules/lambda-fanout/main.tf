@@ -48,6 +48,12 @@ variable "schedule_expression" {
   default     = "rate(15 minutes)"
 }
 
+variable "fanout_schedule_enabled" {
+  description = "Whether EventBridge Scheduler invokes fanout. Disable before draining and retiring an environment."
+  type        = bool
+  default     = true
+}
+
 variable "env_vars" {
   type    = map(string)
   default = {}
@@ -159,6 +165,7 @@ resource "aws_iam_role_policy" "scheduler_inline" {
 resource "aws_scheduler_schedule" "daily" {
   name                = "${var.name}-daily"
   schedule_expression = var.schedule_expression
+  state               = var.fanout_schedule_enabled ? "ENABLED" : "DISABLED"
   flexible_time_window {
     mode = "OFF"
   }

@@ -84,6 +84,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       noncurrent_days = 30
     }
   }
+
+
+  dynamic "rule" {
+    for_each = each.key == "backups" ? [true] : []
+
+    content {
+      id     = "retired-dev-archive"
+      status = "Enabled"
+
+      filter {
+        prefix = "retired-dev/"
+      }
+
+      expiration {
+        days = 30
+      }
+
+      noncurrent_version_expiration {
+        noncurrent_days = 30
+      }
+    }
+  }
 }
 
 output "bucket_names" {
