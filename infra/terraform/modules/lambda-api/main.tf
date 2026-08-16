@@ -1,5 +1,5 @@
 /*
- * API Lambda — FastAPI via Mangum, SnapStart on, Function URL exposed.
+ * API Lambda — FastAPI via Mangum, published versions, Function URL exposed.
  *
  * Container-image packaging (ECR); single image, handler selects entrypoint.
  * CloudFront sits in front of the Function URL (see cloudfront module).

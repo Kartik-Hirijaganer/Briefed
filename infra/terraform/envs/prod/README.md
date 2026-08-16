@@ -1,9 +1,9 @@
 # prod environment
 
-The prod stack mirrors `envs/dev/main.tf` — same module graph, same
-KMS CMKs, same alarms — with stricter retention defaults
-(`BRIEFED_STORE_RAW_MIME=1`) and a custom domain wired in once ACM has
-issued the certificate.
+This is Briefed's only persistent cloud environment (ADR 0016). Local
+development uses Docker and LocalStack rather than a second AWS stack.
+Production stores raw MIME when configured (`BRIEFED_STORE_RAW_MIME=1`) and
+supports a custom domain once ACM has issued the certificate.
 
 Deploys go through `.github/workflows/deploy-prod.yml`. Manual
 operator commands below are for break-glass only.
@@ -11,7 +11,7 @@ operator commands below are for break-glass only.
 ## One-time bootstrap
 
 ```bash
-aws cloudformation deploy \
+aws --profile personal-admin cloudformation deploy \
   --template-file ../../bootstrap/state-backend.yaml \
   --stack-name briefed-tf-state-prod \
   --capabilities CAPABILITY_NAMED_IAM \
@@ -22,9 +22,9 @@ Copy `backend.tf.example` → `backend.tf` (gitignored) with the real
 state-bucket + lock-table names.
 
 ```bash
-terraform init
-terraform plan  -var "image_uri=<ecr-uri>:<sha>"
-terraform apply -var "image_uri=<ecr-uri>:<sha>"
+AWS_PROFILE=personal-admin terraform init
+AWS_PROFILE=personal-admin terraform plan  -var "image_uri=<ecr-uri>:<sha>"
+AWS_PROFILE=personal-admin terraform apply -var "image_uri=<ecr-uri>:<sha>"
 ```
 
 Before the first apply, populate every required SSM parameter with
@@ -33,28 +33,31 @@ module creates the parameter names with placeholders.
 
 ## Blue/green deploy flow (operator-friendly summary)
 
-1. CI builds the image and pushes to ECR (`:<sha>` + `:<tag>`).
-2. `terraform apply -var image_uri=...` publishes a new Lambda
-   version. The `live` alias does not move yet.
-3. Smoke test against the new `$LATEST` qualifier
-   (`/health` + `/api/v1/digest/today` returning a sane shape).
-4. `aws lambda update-alias --name live --function-version <new>`
-   for api + worker + fanout. This is the atomic cutover.
-5. `python backend/scripts/write_release_metadata.py
+1. CI previews and applies the untagged-image ECR lifecycle policy, then builds
+   and pushes the image (`:<sha>` + `:<tag>`).
+2. Terraform writes a saved plan. The workflow rejects KMS, CloudFront,
+   Function URL, or WAF deletion/replacement before applying that exact plan.
+3. The saved plan publishes new Lambda versions and moves each `live` alias as
+   part of the Terraform apply.
+4. CloudFront API smoke checks and runtime-wiring checks run immediately. A
+   failed API smoke check moves all aliases back to the captured versions.
+5. A no-drift Terraform plan must pass, and
+   `python backend/scripts/write_release_metadata.py
    --version v<semver> --git-sha "$GITHUB_SHA"` records the row
    (plan §8 + §19.7 ledger).
 
 ## Rollback
 
-The `live` alias is the only thing to flip back. Each deploy publishes
-a fresh version; previous versions remain available until SnapStart
-GC trims them (~30 days).
+The `live` alias is the only thing to flip back. Each deploy publishes a fresh
+container-image Lambda version. Briefed does not use SnapStart because AWS does
+not support it for container-image functions; rollback depends on retaining the
+prior published version.
 
 ```bash
-PREV=$(aws lambda list-versions-by-function \
+PREV=$(aws --profile personal-admin lambda list-versions-by-function \
   --function-name briefed-prod-api \
   --query 'Versions[-2].Version' --output text)
-aws lambda update-alias --name live \
+aws --profile personal-admin lambda update-alias --name live \
   --function-name briefed-prod-api --function-version "$PREV"
 # Repeat for briefed-prod-worker and briefed-prod-fanout.
 ```
