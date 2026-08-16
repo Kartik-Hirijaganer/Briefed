@@ -4,9 +4,8 @@
  * ``live`` alias; rollback = ``aws lambda update-alias --function-version
  * <previous>`` against api + worker + fanout.
  *
- * Diffs from dev (envs/dev/main.tf) are intentionally small — same
- * module graph, stricter retention + alarms, custom domain wired in
- * once ACM is approved.
+ * This is the only persistent cloud environment (ADR 0016). Local
+ * development uses Docker and LocalStack.
  */
 
 terraform {
@@ -68,6 +67,29 @@ variable "alarm_email" {
   default     = ""
 }
 
+variable "worker_consumers_enabled" {
+  description = "Whether worker SQS consumers are enabled. Production defaults to enabled."
+  type        = bool
+  default     = true
+}
+
+variable "fanout_schedule_enabled" {
+  description = "Whether the periodic fanout schedule is enabled. Production defaults to enabled."
+  type        = bool
+  default     = true
+}
+
+variable "api_reserved_concurrency" {
+  description = "Reserved API concurrency. Production defaults to the account's unreserved pool."
+  type        = number
+  default     = -1
+
+  validation {
+    condition     = var.api_reserved_concurrency >= -1
+    error_message = "api_reserved_concurrency must be -1 or greater."
+  }
+}
+
 locals {
   tags = {
     "briefed:env"     = "prod"
@@ -100,14 +122,15 @@ module "s3" {
 }
 
 module "api" {
-  source                 = "../../modules/lambda-api"
-  name                   = "${var.name_prefix}-api"
-  image_uri              = var.image_uri
-  function_url_auth_mode = var.function_url_auth_mode
-  ssm_parameter_prefix   = module.ssm.parameter_prefix
-  kms_key_arns           = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
-  sqs_queue_arns         = values(module.sqs.queue_arns)
-  tags                   = local.tags
+  source                         = "../../modules/lambda-api"
+  name                           = "${var.name_prefix}-api"
+  image_uri                      = var.image_uri
+  function_url_auth_mode         = var.function_url_auth_mode
+  ssm_parameter_prefix           = module.ssm.parameter_prefix
+  kms_key_arns                   = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
+  sqs_queue_arns                 = values(module.sqs.queue_arns)
+  reserved_concurrent_executions = var.api_reserved_concurrency
+  tags                           = local.tags
   env_vars = {
     BRIEFED_ENV                  = "prod"
     BRIEFED_INGEST_QUEUE_URL     = module.sqs.queue_urls["ingest"]
@@ -119,14 +142,15 @@ module "api" {
 }
 
 module "worker" {
-  source               = "../../modules/lambda-worker"
-  name                 = "${var.name_prefix}-worker"
-  image_uri            = var.image_uri
-  queue_arns           = module.sqs.queue_arns
-  ssm_parameter_prefix = module.ssm.parameter_prefix
-  kms_key_arns         = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
-  s3_bucket_arns       = values(module.s3.bucket_arns)
-  tags                 = local.tags
+  source                   = "../../modules/lambda-worker"
+  name                     = "${var.name_prefix}-worker"
+  image_uri                = var.image_uri
+  queue_arns               = module.sqs.queue_arns
+  ssm_parameter_prefix     = module.ssm.parameter_prefix
+  kms_key_arns             = [module.kms.token_wrap_key_arn, module.kms.content_key_arn]
+  s3_bucket_arns           = values(module.s3.bucket_arns)
+  worker_consumers_enabled = var.worker_consumers_enabled
+  tags                     = local.tags
   env_vars = {
     BRIEFED_ENV                   = "prod"
     BRIEFED_SSM_PREFIX            = module.ssm.parameter_prefix
@@ -141,13 +165,14 @@ module "worker" {
 }
 
 module "fanout" {
-  source               = "../../modules/lambda-fanout"
-  name                 = "${var.name_prefix}-fanout"
-  image_uri            = var.image_uri
-  ingest_queue_arn     = module.sqs.queue_arns["ingest"]
-  ssm_parameter_prefix = module.ssm.parameter_prefix
-  kms_key_arns         = [module.kms.token_wrap_key_arn]
-  tags                 = local.tags
+  source                  = "../../modules/lambda-fanout"
+  name                    = "${var.name_prefix}-fanout"
+  image_uri               = var.image_uri
+  ingest_queue_arn        = module.sqs.queue_arns["ingest"]
+  ssm_parameter_prefix    = module.ssm.parameter_prefix
+  kms_key_arns            = [module.kms.token_wrap_key_arn]
+  fanout_schedule_enabled = var.fanout_schedule_enabled
+  tags                    = local.tags
   env_vars = {
     BRIEFED_ENV              = "prod"
     BRIEFED_SSM_PREFIX       = module.ssm.parameter_prefix
