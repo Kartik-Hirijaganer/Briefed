@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.5.3](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.2...v1.5.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* add worker and fanout schedule configuration variables; update lambda function settings for production environment ([7ccec2d](https://github.com/Kartik-Hirijaganer/Briefed/commit/7ccec2da5ae60b18b707651483d24f68ed32ce6d))
+* stop intermittent API 5xx from idle reclaim and rejected refresh tokens ([a2646b2](https://github.com/Kartik-Hirijaganer/Briefed/commit/a2646b208c480186296d084ea1eceb513fce8934))
+* stop intermittent API 5xx from idle reclaim and rejected refresh tokens ([e1c676d](https://github.com/Kartik-Hirijaganer/Briefed/commit/e1c676dcb4b9597da7840dcd2afe4cf637a9e95b))
+* update README for clarity on production environment and bootstrap process; add fanout schedule variable and lifecycle rule for retired dev archives ([99f2771](https://github.com/Kartik-Hirijaganer/Briefed/commit/99f2771f0ee3f5d44f80eb1c8e670c0a1a8510fd))
+* update secrets rotation documentation for clarity and remove obsolete dev environment files ([907a06a](https://github.com/Kartik-Hirijaganer/Briefed/commit/907a06ad755996a96b205c17a100587ef4718696))
+
 ## [1.5.2](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.1...v1.5.2) (2026-08-14)
 
 
