@@ -322,6 +322,8 @@ module "alarms" {
   dlq_arn         = module.sqs.dlq_arn
   dlq_name        = module.sqs.dlq_name
   content_cmk_arn = module.kms.content_key_arn
+
+  cloudfront_distribution_id = module.cloudfront.distribution_id
   lambda_function_names = {
     api    = module.api.function_name
     worker = module.worker.function_name

@@ -16,7 +16,7 @@ from app.api.errors import api_error_response
 from app.core.app_config import get_app_config
 from app.core.config import Settings, get_settings
 from app.core.consent import enforce_legal_consent
-from app.core.errors import CryptoError, ProviderError, QuotaExceededError
+from app.core.errors import AuthError, CryptoError, ProviderError, QuotaExceededError
 from app.core.security import EncryptedBlob, EnvelopeCipher, token_context
 from app.db.models import Classification, ConnectedAccount, Email, OAuthToken, Summary, User
 from app.domain.providers import ProviderCredentials
@@ -576,7 +576,8 @@ async def _credentials_for_mark_read(
 
     Raises:
         MarkReadApiError: 409 when the account has not re-consented to
-            ``gmail.modify``; 503 when token unwrap/refresh is unavailable.
+            ``gmail.modify`` or Google rejected the stored refresh token;
+            503 when token unwrap/refresh is unavailable.
     """
     tokens = (
         (
@@ -616,12 +617,15 @@ async def _credentials_for_mark_read(
                 message="Google OAuth client credentials are required to refresh Gmail token.",
                 details={"accountId": str(account_id)},
             )
-        bundle = await refresh_access_token(
-            refresh_token=refresh_plain,
-            client_id=settings.google_oauth_client_id,
-            client_secret=settings.google_oauth_client_secret,
-            http_client=http_client,
-        )
+        try:
+            bundle = await refresh_access_token(
+                refresh_token=refresh_plain,
+                client_id=settings.google_oauth_client_id,
+                client_secret=settings.google_oauth_client_secret,
+                http_client=http_client,
+            )
+        except AuthError as exc:
+            raise _refresh_rejected_error(account_id=account_id) from exc
         refreshed_scope = tuple(bundle.scope.split())
         if refreshed_scope and not has_gmail_modify_scope(refreshed_scope):
             raise _reauthorize_error(account_id=account_id)
@@ -740,6 +744,29 @@ def _reauthorize_error(*, account_id: UUID) -> MarkReadApiError:
         code="gmail_reauthorization_required",
         message="Gmail re-authorization is required before mark-read.",
         details={"accountId": str(account_id), "scope": "gmail.modify"},
+    )
+
+
+def _refresh_rejected_error(*, account_id: UUID) -> MarkReadApiError:
+    """Return a re-consent error for a refresh token Google rejected.
+
+    Google invalidates refresh tokens when the user revokes consent, when
+    the OAuth client is still in testing mode (7-day refresh-token
+    expiry), or when the grant is superseded. None of those are
+    retryable server-side, so the client must send the user back through
+    the connect flow rather than surfacing a server error.
+
+    Args:
+        account_id: Connected account whose refresh token was rejected.
+
+    Returns:
+        API error instructing the client to reconnect Gmail.
+    """
+    return MarkReadApiError(
+        status_code=status.HTTP_409_CONFLICT,
+        code="gmail_reauthorization_required",
+        message="Gmail re-authorization is required before mark-read.",
+        details={"accountId": str(account_id), "reason": "refresh_token_rejected"},
     )
 
 
