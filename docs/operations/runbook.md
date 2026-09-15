@@ -61,6 +61,36 @@ The SNS topic that fans out alarm emails is named
 - **Drill:** `backend/tests/chaos/test_secret_rotation_drill.py` proves
   the second hydration picks up the new value.
 
+## API edge 5xx
+
+- **Alarm:** `${name_prefix}-api-edge-5xx` — CloudFront `5xxErrorRate`
+  above 5% over a 5-minute window.
+- **Why this alarm exists:** it is the only signal that catches a
+  Lambda *service-level* invoke rejection. If the API function has been
+  idle long enough for Lambda to reclaim its resources, it moves to the
+  `Inactive` state; the next invocation **fails** while Lambda rebuilds
+  the execution environment. No handler code runs, so there is no log
+  line in `/aws/lambda/${name_prefix}-api` and no `AWS/Lambda` `Errors`
+  or `Throttles` datapoint. The caller sees
+  `{"Type":"User","message":"The server encountered an error and could
+  not complete your request"}`, and a reload a minute later succeeds.
+- **First moves:**
+  1. `aws lambda get-function --function-name ${name_prefix}-api
+     --qualifier live --query 'Configuration.State'`. `Inactive` or
+     `Pending` confirms the reclaim path; it returns to `Active` on its
+     own once reactivation finishes.
+  2. If `State` is `Active`, the 5xx came from the app instead. Check
+     the API log group for the request; application 500s are logged with
+     a traceback and the request path.
+  3. Confirm the keep-alive schedule is still enabled:
+     `aws scheduler get-schedule --name ${name_prefix}-api-keepalive`.
+     That ping exists specifically to stop the function going idle long
+     enough to be reclaimed, so a disabled or failing schedule makes
+     this alarm recur.
+- **Note:** CloudFront access logging is disabled on the distribution,
+  so a rejected invocation leaves no request-level record anywhere.
+  Enable it first if this needs to be reconstructed after the fact.
+
 ## Worker p95 duration
 
 - **Alarm:** `${name_prefix}-worker-p95-duration` — p95 > 500 ms over

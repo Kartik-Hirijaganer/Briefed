@@ -68,6 +68,11 @@ variable "log_group_names" {
   type        = map(string)
 }
 
+variable "cloudfront_distribution_id" {
+  description = "CloudFront distribution serving the API; used for edge-visible 5xx alarming."
+  type        = string
+}
+
 variable "content_cmk_arn" {
   description = "Content KMS CMK ARN (§20.10) — used to scope the KMS Decrypt anomaly alarm."
   type        = string
@@ -419,6 +424,73 @@ resource "aws_cloudwatch_metric_alarm" "kms_decrypt_anomaly" {
   alarm_actions      = [aws_sns_topic.alarms.arn]
   treat_missing_data = "notBreaching"
   tags               = var.tags
+}
+
+# 12. Edge-visible 5xx on the API distribution.
+#    This is the only alarm that catches a Lambda service-level invoke
+#    rejection — for example a function reactivating out of the Inactive
+#    state after a long idle gap. Those requests never reach handler code,
+#    so they emit no log line and no AWS/Lambda Errors datapoint; the
+#    failure is observable only at the CloudFront edge. CloudFront metrics
+#    are published in us-east-1 under the Global region dimension.
+resource "aws_cloudwatch_metric_alarm" "api_edge_5xx" {
+  alarm_name          = "${var.name_prefix}-api-edge-5xx"
+  alarm_description   = "API 5xx at the CloudFront edge (app error or Lambda invoke rejection)."
+  namespace           = "AWS/CloudFront"
+  metric_name         = "5xxErrorRate"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    DistributionId = var.cloudfront_distribution_id
+    Region         = "Global"
+  }
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+  tags          = var.tags
+}
+
+# 13. API Lambda unhandled errors — handler raised past the app's own
+#    error envelope. Distinct from #12: this only fires once code ran.
+resource "aws_cloudwatch_metric_alarm" "api_errors" {
+  alarm_name          = "${var.name_prefix}-api-errors"
+  alarm_description   = "API Lambda raised unhandled errors."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    FunctionName = var.lambda_function_names["api"]
+  }
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  tags          = var.tags
+}
+
+# 14. API Lambda throttles — the account concurrency ceiling is shared
+#    across api + worker + fanout, so a worker burst can starve the API.
+resource "aws_cloudwatch_metric_alarm" "api_throttles" {
+  alarm_name          = "${var.name_prefix}-api-throttles"
+  alarm_description   = "API Lambda throttled; account concurrency ceiling reached."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    FunctionName = var.lambda_function_names["api"]
+  }
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  tags          = var.tags
 }
 
 # --------------------------------------------------------------------------- #

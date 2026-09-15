@@ -66,6 +66,18 @@ variable "function_url_auth_mode" {
   default = "NONE"
 }
 
+variable "keepalive_enabled" {
+  description = "Ping the API on a schedule so it never goes Inactive from idleness."
+  type        = bool
+  default     = true
+}
+
+variable "keepalive_schedule_expression" {
+  description = "How often to ping. Must stay well under Lambda's idle-reclaim window."
+  type        = string
+  default     = "rate(1 day)"
+}
+
 variable "env_vars" {
   type    = map(string)
   default = {}
@@ -169,6 +181,94 @@ resource "aws_lambda_function_url" "this" {
   function_name      = aws_lambda_function.this.function_name
   qualifier          = aws_lambda_alias.live.name
   authorization_type = var.function_url_auth_mode
+}
+
+# --------------------------------------------------------------------------- #
+# Keep-alive                                                                  #
+#                                                                             #
+# Lambda reclaims the resources of a function left idle for an extended        #
+# period and moves it to the Inactive state. The next invocation of an         #
+# Inactive function FAILS while Lambda recreates those resources: the          #
+# caller gets a generic service error, no handler code runs, so there is       #
+# no log line and no AWS/Lambda Errors datapoint. On a low-traffic             #
+# deployment that surfaces as "the site is randomly down, then fine on         #
+# reload". A cheap scheduled ping keeps the function out of that state.        #
+# --------------------------------------------------------------------------- #
+
+data "aws_iam_policy_document" "assume_scheduler" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "scheduler" {
+  name               = "${var.name}-keepalive-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_scheduler.json
+  tags               = var.tags
+}
+
+data "aws_iam_policy_document" "scheduler_inline" {
+  statement {
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_alias.live.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler_inline" {
+  name   = "${var.name}-keepalive-inline"
+  role   = aws_iam_role.scheduler.id
+  policy = data.aws_iam_policy_document.scheduler_inline.json
+}
+
+# The payload is a Lambda Function URL (HTTP API v2) event so Mangum can
+# route it like any other request; it hits the app's own GET /health.
+resource "aws_scheduler_schedule" "keepalive" {
+  name                = "${var.name}-keepalive"
+  schedule_expression = var.keepalive_schedule_expression
+  state               = var.keepalive_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode                      = "FLEXIBLE"
+    maximum_window_in_minutes = 15
+  }
+
+  target {
+    arn      = aws_lambda_alias.live.arn
+    role_arn = aws_iam_role.scheduler.arn
+    input = jsonencode({
+      version        = "2.0"
+      routeKey       = "$default"
+      rawPath        = "/health"
+      rawQueryString = ""
+      headers = {
+        host         = "keepalive.briefed.internal"
+        "user-agent" = "briefed-keepalive"
+      }
+      requestContext = {
+        accountId    = "anonymous"
+        apiId        = "keepalive"
+        domainName   = "keepalive.briefed.internal"
+        domainPrefix = "keepalive"
+        http = {
+          method    = "GET"
+          path      = "/health"
+          protocol  = "HTTP/1.1"
+          sourceIp  = "127.0.0.1"
+          userAgent = "briefed-keepalive"
+        }
+        requestId = "keepalive"
+        routeKey  = "$default"
+        stage     = "$default"
+        time      = "01/Jan/2026:00:00:00 +0000"
+        timeEpoch = 1767225600000
+      }
+      isBase64Encoded = false
+    })
+  }
 }
 
 output "function_name" {

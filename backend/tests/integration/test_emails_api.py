@@ -19,6 +19,7 @@ from app.api.deps import db_session
 from app.api.session import SESSION_COOKIE_NAME, sign_cookie
 from app.core.config import Settings, get_settings
 from app.core.consent import CURRENT_PRIVACY_POLICY_VERSION, CURRENT_TERMS_VERSION
+from app.core.errors import AuthError
 from app.db.models import ConnectedAccount, Email, OAuthToken, User
 from app.domain.providers import (
     MarkReadFailure,
@@ -432,6 +433,60 @@ async def test_mark_read_requires_gmail_modify_reconsent(
     assert provider.calls == []
 
 
+@pytest.mark.asyncio
+async def test_mark_read_surfaces_rejected_refresh_token_as_reconsent(
+    api_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _seed_user(api_session)
+    await _seed_email_rows(api_session, user=user)
+    email = await _email_by_subject(api_session, "Quarterly planning")
+    await _seed_oauth_token(
+        api_session,
+        account_id=email.account_id,
+        scopes=(GMAIL_MODIFY_SCOPE,),
+        expires_at=datetime.now(tz=UTC) - timedelta(minutes=5),
+    )
+    provider = _FakeProvider()
+    _patch_mark_read_deps(monkeypatch=monkeypatch, provider=provider)
+
+    from app.api.v1 import emails as emails_api
+
+    async def _reject(**_kwargs: object) -> None:
+        raise AuthError("refresh token rejected: invalid_grant: Bad Request")
+
+    monkeypatch.setattr(emails_api, "refresh_access_token", _reject)
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        env="test",
+        runtime="local",
+        log_level="info",
+        session_signing_key="test-key",
+        google_oauth_client_id="client-id",
+        google_oauth_client_secret="client-secret",
+    )
+    cookie = sign_cookie({"user_id": str(user.id)}, secret="test-key")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/emails/mark-read",
+            json={"email_ids": [str(email.id)]},
+            cookies={SESSION_COOKIE_NAME: cookie},
+            headers={"x-request-id": "test-request-invalid-grant"},
+        )
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "code": "gmail_reauthorization_required",
+        "message": "Gmail re-authorization is required before mark-read.",
+        "details": {
+            "accountId": str(email.account_id),
+            "reason": "refresh_token_rejected",
+        },
+        "requestId": "test-request-invalid-grant",
+    }
+    assert provider.calls == []
+
+
 async def _seed_user(
     factory: async_sessionmaker[AsyncSession],
     *,
@@ -492,6 +547,7 @@ async def _seed_oauth_token(
     *,
     account_id: UUID,
     scopes: tuple[str, ...],
+    expires_at: datetime | None = None,
 ) -> None:
     """Insert plaintext OAuth token bytes for mark-read endpoint tests.
 
@@ -499,6 +555,9 @@ async def _seed_oauth_token(
         factory: Async session factory.
         account_id: Connected account id.
         scopes: Granted OAuth scopes.
+        expires_at: Token expiry. Defaults to one hour ahead, which keeps
+            the endpoint off the refresh path; pass a past timestamp to
+            force a refresh.
     """
     async with factory() as session:
         session.add(
@@ -507,7 +566,7 @@ async def _seed_oauth_token(
                 access_token_ct=b"access",
                 refresh_token_ct=b"refresh",
                 scope=list(scopes),
-                expires_at=datetime.now(tz=UTC) + timedelta(hours=1),
+                expires_at=expires_at or datetime.now(tz=UTC) + timedelta(hours=1),
             ),
         )
         await session.commit()
