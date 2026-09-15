@@ -1,6 +1,6 @@
 {
   "name": "@briefed/contracts",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "private": true,
   "description": "Generated OpenAPI + shared provider types for Briefed.",
   "type": "module",
