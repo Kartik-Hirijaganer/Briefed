@@ -28,7 +28,9 @@ dependencies = [
     # psycopg2-binary is the sync driver Alembic uses for ``make migrate``;
     # the runtime app uses asyncpg, but Alembic's online runner is sync.
     # [asyncio] pins greenlet, which SQLAlchemy's async engine requires.
-    "sqlalchemy[asyncio]>=2.0",
+    # <2.1: 2.1 makes JSON generic + types Row columns, breaking mypy --strict
+    # (JsonType helpers, frontend.py casts). Lift the cap in a dedicated migration.
+    "sqlalchemy[asyncio]>=2.0,<2.1",
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
     "alembic>=1.13",
