@@ -13,7 +13,9 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "mangum>=0.19",
     # Validation + settings
-    "pydantic[email]>=2.9",
+    # <2.14: 2.14 drops the ``pattern`` it emitted for Decimal fields, so CI's
+    # unlocked install regenerates a different openapi.json (schema drift).
+    "pydantic[email]>=2.9,<2.14",
     "pydantic-settings>=2.14.2",
     "pyyaml>=6.0",
     # LLM providers — OpenRouter only (ADR 0009). Both Gemini Flash and
@@ -39,10 +41,10 @@ dependencies = [
     # Reliability primitives
     "tenacity>=9.0",
     "pybreaker>=1.2",
-    "msgpack>=1.2.1",
+    "msgpack>=1.2.3",
     # Observability
     "structlog>=24.4",
-    "opentelemetry-api>=1.27",
+    "opentelemetry-api>=1.45.1",
     "opentelemetry-sdk>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
     "opentelemetry-exporter-otlp-proto-http>=1.27",
