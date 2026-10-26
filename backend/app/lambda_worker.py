@@ -282,8 +282,9 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
             )
             await mark_run_running(session, message.run_id)
             stats = await handle_ingest(message, deps=deps)
+            await session.commit()
             sqs_client: SqsSender | None = None
-            if (stats.new or stats.email_ids) and classify_queue_url:
+            if classify_queue_url and (message.run_id is not None or stats.new or stats.email_ids):
                 sqs_client = _sqs_client()
                 await enqueue_unclassified_for_account(
                     session=session,
@@ -320,10 +321,9 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
 async def _handle_classify_record(record: _SqsRecord) -> None:
     """Decode + dispatch one classify-queue record (plan §14 Phase 2).
 
-    After the classification lands, enqueue only this email's eligible
-    downstream work. The dispatch helpers require the target row to
-    still lack a summary row, so SQS retries do not rescan the whole
-    account or fan out duplicate LLM work.
+    Commits the classification first so downstream workers never see an
+    unclassified email, then enqueues this email's unsummarized follow-up
+    work. Retries are idempotent via the upsert and dispatch filters.
 
     Args:
         record: Raw SQS record from the event envelope.
@@ -376,6 +376,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
             )
             await mark_run_running(session, message.run_id)
             await handle_classify(message, deps=deps)
+            await session.commit()
             sqs_client = _sqs_client()
             if summarize_queue_url:
                 await enqueue_summary_for_email(
@@ -428,6 +429,9 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
 
     Routes to :func:`app.workers.handlers.summarize.handle_summarize_email`
     or :func:`.handle_tech_news_cluster` based on the message kind.
+
+    Commits the summary before finalization, whose category digest would
+    otherwise be rejected as not ready.
 
     Args:
         record: Raw SQS record from the event envelope.
@@ -499,6 +503,7 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
                 await handle_category_digest(message, deps=deps, user_id=user_id)
             else:
                 await handle_tech_news_cluster(message, deps=deps)
+            await session.commit()
             await maybe_finalize_run(
                 session=session,
                 user_id=user_id,

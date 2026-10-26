@@ -5,8 +5,9 @@ One invocation processes one :class:`ClassifyMessage` and produces a
 
 Retry semantics:
 
-* Missing email row → treat as dropped (successful handle — nothing
-  to classify); log and return.
+* Missing email row → :func:`classify_one` raises ``LookupError``; SQS
+  re-delivers, then DLQs. Ingest commits rows before enqueueing, so this
+  only fires if the row was deleted after enqueue.
 * Missing prompt version → raises; SQS re-delivers.
 * :class:`app.llm.client.LLMClientError` is handled inside the pipeline
   by writing an ``ignore`` row with ``needs_review=true`` — we do not
