@@ -27,7 +27,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.clock import utcnow
-from app.core.errors import AuthError, ProviderError
+from app.core.errors import AuthError, InvalidGrantError, ProviderError
 
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 """Google OAuth authorize endpoint."""
@@ -257,7 +257,9 @@ async def refresh_access_token(
         old refresh token in that case.
 
     Raises:
-        AuthError: If Google marked the refresh token invalid.
+        InvalidGrantError: If Google rejected the refresh token
+            (``invalid_grant``); the user must reconnect.
+        AuthError: On any other OAuth 4xx, e.g. ``invalid_client``.
         ProviderError: On transient upstream failure.
     """
     payload = {
@@ -347,7 +349,8 @@ def _raise_for_oauth_error(
         provider_context: Prefix for upstream availability failures.
 
     Raises:
-        AuthError: If Google returns an OAuth 4xx error.
+        InvalidGrantError: If Google returns ``invalid_grant``.
+        AuthError: If Google returns any other OAuth 4xx error.
         ProviderError: If Google returns a 5xx error.
     """
     if response.status_code >= 500:
@@ -357,6 +360,8 @@ def _raise_for_oauth_error(
         detail = error_payload.error
         if error_payload.error_description:
             detail = f"{detail}: {error_payload.error_description}"
+        if error_payload.error == "invalid_grant":
+            raise InvalidGrantError(f"{auth_context}: {detail}")
         raise AuthError(f"{auth_context}: {detail}")
     if response.status_code >= 400:
         raise AuthError(f"{auth_context}: HTTP {response.status_code}")

@@ -16,6 +16,14 @@ class AuthError(BriefedError):
     """Authentication / authorization failure (401 / 403 at the API layer)."""
 
 
+class InvalidGrantError(AuthError):
+    """Google rejected an OAuth grant with ``invalid_grant``.
+
+    Terminal for a stored refresh token: only a user reconnect fixes it.
+    Other OAuth 4xx codes stay :class:`AuthError` (a Briefed config issue).
+    """
+
+
 class NotFoundError(BriefedError):
     """A requested resource does not exist (404 at the API layer)."""
 
