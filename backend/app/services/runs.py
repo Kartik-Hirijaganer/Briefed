@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import Select, Uuid, func, literal, or_, select, update
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import Executable
 
 from app.core.app_config import get_app_config
@@ -27,6 +28,7 @@ from app.db.models import (
     ConnectedAccount,
     DigestRun,
     DigestRunEmail,
+    DigestRunHygieneClaim,
     Email,
     PromptCallLog,
     PromptVersion,
@@ -46,7 +48,6 @@ _APP_CONFIG = get_app_config()
 _SUMMARIZABLE_LABELS: tuple[str, ...] = _APP_CONFIG.taxonomy.summarizable_labels
 _FAILED_RUN_ERROR = "One or more LLM provider calls failed during the scan."
 _NON_FATAL_PROMPT_NAMES: tuple[str, ...] = ("unsubscribe_borderline", "category_digest")
-_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY = "unsubscribe_hygiene_enqueued"
 _NEWSLETTER_LABEL = _APP_CONFIG.taxonomy.newsletter_label
 _NEWSLETTER_CLUSTERING_ENABLED = _APP_CONFIG.features.newsletter_clustering
 _MIN_CLUSTER_NEWSLETTERS = 2
@@ -176,43 +177,41 @@ async def mark_unsubscribe_hygiene_enqueued(
     run_id: UUID | None,
     account_id: UUID,
 ) -> bool:
-    """Record that unsubscribe hygiene was enqueued for an account/run.
+    """Claim the run's single unsubscribe-hygiene dispatch for an account.
+
+    An ``INSERT ... ON CONFLICT DO NOTHING`` into ``digest_run_hygiene_claims``,
+    so concurrent claimers serialize on the primary key and a stale
+    ``DigestRun`` copy can neither double-claim nor erase it.
 
     Args:
-        session: Active database session.
+        session: Active database session; a rollback releases the claim.
         run_id: Digest-run id carried by the worker message. ``None``
             preserves legacy ad-hoc behavior and returns ``True``.
         account_id: Connected account whose hygiene aggregate is being
             enqueued.
 
     Returns:
-        ``True`` when the caller should enqueue a hygiene message,
-        ``False`` when this account/run was already marked.
+        ``True`` if this caller won and must enqueue; ``False`` if already
+        claimed or the run no longer exists.
     """
     if run_id is None:
         return True
-    run = (
+    # Selecting from ``digest_runs`` keeps a deleted run a no-op rather
+    # than a foreign-key violation.
+    claimed = (
         await session.execute(
-            select(DigestRun).where(DigestRun.id == run_id).with_for_update(),
+            _claim_insert(session, DigestRunHygieneClaim)
+            .from_select(
+                ["run_id", "account_id"],
+                select(DigestRun.id, literal(account_id, type_=Uuid())).where(
+                    DigestRun.id == run_id,
+                ),
+            )
+            .on_conflict_do_nothing(index_elements=["run_id", "account_id"])
+            .returning(DigestRunHygieneClaim.run_id),
         )
     ).scalar_one_or_none()
-    if run is None:
-        return False
-
-    stats = dict(run.stats) if isinstance(run.stats, dict) else {}
-    raw_ids = stats.get(_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY)
-    enqueued = (
-        {item for item in raw_ids if isinstance(item, str)} if isinstance(raw_ids, list) else set()
-    )
-    account_key = str(account_id)
-    if account_key in enqueued:
-        return False
-
-    enqueued.add(account_key)
-    stats[_UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY] = sorted(enqueued)
-    run.stats = stats
-    await session.flush()
-    return True
+    return claimed is not None
 
 
 async def maybe_finalize_run(
@@ -841,6 +840,27 @@ def _mark_category_digests_enqueued(
     merged = sorted(_category_digests_enqueued(existing).union(categories))
     existing["category_digests_enqueued"] = merged
     run.stats = existing
+
+
+def _claim_insert(
+    session: AsyncSession,
+    claim_model: type[DigestRunHygieneClaim],
+) -> postgresql.Insert | sqlite.Insert:
+    """Start an ``INSERT`` into a claim table that can skip key conflicts.
+
+    ``ON CONFLICT DO NOTHING`` is dialect-specific in SQLAlchemy; prod runs
+    on Postgres and the test suite on SQLite.
+
+    Args:
+        session: Active database session, used to pick the dialect.
+        claim_model: Claim table whose composite primary key is the claim.
+
+    Returns:
+        A dialect ``INSERT`` supporting ``on_conflict_do_nothing``.
+    """
+    if session.get_bind().dialect.name == "postgresql":
+        return postgresql.insert(claim_model)
+    return sqlite.insert(claim_model)
 
 
 async def _prompt_errors(*, session: AsyncSession, run_id: UUID) -> int:

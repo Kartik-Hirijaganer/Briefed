@@ -21,6 +21,7 @@ from app.db.models import (
     ConnectedAccount,
     DigestRun,
     DigestRunEmail,
+    DigestRunHygieneClaim,
     Email,
     PromptCallLog,
     PromptVersion,
@@ -474,9 +475,97 @@ async def test_mark_unsubscribe_hygiene_enqueued_is_per_account_run(
     assert first is True
     assert repeat is False
     assert second is True
-    assert run.stats["unsubscribe_hygiene_enqueued"] == sorted(
-        [str(account.id), str(second_account.id)],
+    assert await _hygiene_claims(test_session, run.id) == {account.id, second_account.id}
+
+
+async def test_mark_unsubscribe_hygiene_enqueued_skips_missing_run(
+    test_session: AsyncSession,
+) -> None:
+    """A run id with no row claims nothing; a run-less message always enqueues."""
+    _user, account, _run = await _seed_run(test_session)
+
+    missing = await mark_unsubscribe_hygiene_enqueued(
+        session=test_session,
+        run_id=uuid.uuid4(),
+        account_id=account.id,
     )
+    legacy = await mark_unsubscribe_hygiene_enqueued(
+        session=test_session,
+        run_id=None,
+        account_id=account.id,
+    )
+
+    assert missing is False
+    assert legacy is True
+
+
+async def test_hygiene_claim_survives_stale_concurrent_finalize(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A worker holding a stale ``DigestRun`` neither re-claims nor erases the claim.
+
+    Regression: the old ``stats`` marker, read and rewritten from the copy
+    ``mark_run_running`` loaded, double-enqueued hygiene jobs in prod.
+    """
+    async with file_sessionmaker() as session:
+        user, account, run = await _seed_run(session)
+        user_id, account_id, run_id = user.id, account.id, run.id
+        await session.commit()
+
+    async with file_sessionmaker() as stale, file_sessionmaker() as winner:
+        stale_run = await stale.get(DigestRun, run_id)  # as in mark_run_running
+        assert stale_run is not None
+
+        assert await mark_unsubscribe_hygiene_enqueued(
+            session=winner,
+            run_id=run_id,
+            account_id=account_id,
+        )
+        await maybe_finalize_run(session=winner, user_id=user_id, run_id=run_id)
+        await winner.commit()
+
+        assert not await mark_unsubscribe_hygiene_enqueued(
+            session=stale,
+            run_id=run_id,
+            account_id=account_id,
+        )
+        await maybe_finalize_run(session=stale, user_id=user_id, run_id=run_id)
+        await stale.commit()
+
+    async with file_sessionmaker() as later:
+        assert not await mark_unsubscribe_hygiene_enqueued(
+            session=later,
+            run_id=run_id,
+            account_id=account_id,
+        )
+        assert await _hygiene_claims(later, run_id) == {account_id}
+
+
+async def test_hygiene_claim_rolls_back_with_failed_send(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A rolled-back claim lets the SQS redelivery enqueue hygiene again."""
+    async with file_sessionmaker() as session:
+        _user, account, run = await _seed_run(session)
+        account_id, run_id = account.id, run.id
+        await session.commit()
+
+    async with file_sessionmaker() as failing:
+        assert await mark_unsubscribe_hygiene_enqueued(
+            session=failing,
+            run_id=run_id,
+            account_id=account_id,
+        )
+        await failing.rollback()  # the hygiene send raised
+
+    async with file_sessionmaker() as retry:
+        assert await mark_unsubscribe_hygiene_enqueued(
+            session=retry,
+            run_id=run_id,
+            account_id=account_id,
+        )
+        await retry.commit()
+        assert await _hygiene_claims(retry, run_id) == {account_id}
 
 
 async def test_maybe_finalize_run_completes_after_summary_lands(
@@ -935,6 +1024,21 @@ async def _cluster_claimed_at(session: AsyncSession, run_id: uuid.UUID) -> datet
             .execution_options(populate_existing=True),
         )
     ).scalar_one()
+
+
+async def _hygiene_claims(session: AsyncSession, run_id: uuid.UUID) -> set[uuid.UUID]:
+    """Return the account ids holding a hygiene claim for ``run_id``."""
+    return set(
+        (
+            await session.execute(
+                select(DigestRunHygieneClaim.account_id).where(
+                    DigestRunHygieneClaim.run_id == run_id,
+                ),
+            )
+        )
+        .scalars()
+        .all(),
+    )
 
 
 def _classification(email: Email, *, is_newsletter: bool) -> Classification:

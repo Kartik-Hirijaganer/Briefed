@@ -1097,7 +1097,7 @@ class DigestRun(Base, TimestampMixin):
 
     ``tech_news_cluster_enqueued_at`` is the once-per-run newsletter cluster
     dispatch claim. Claims never live in ``stats``, which workers rewrite
-    from stale ORM copies.
+    from stale ORM copies; see also :class:`DigestRunHygieneClaim`.
     """
 
     __tablename__ = "digest_runs"
@@ -1152,6 +1152,36 @@ class DigestRunEmail(Base):
     email_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("emails.id", ondelete="CASCADE"),
         primary_key=True,
+    )
+
+
+class DigestRunHygieneClaim(Base):
+    """Once-per-account unsubscribe-hygiene dispatch claim for a digest run.
+
+    Racing classify workers claim via an atomic ``INSERT ... ON CONFLICT
+    DO NOTHING`` on the composite primary key.
+
+    Attributes:
+        run_id: Digest run the hygiene job belongs to.
+        account_id: Connected account whose hygiene job was enqueued.
+        enqueued_at: Database time the claim was taken.
+    """
+
+    __tablename__ = "digest_run_hygiene_claims"
+    __table_args__ = (Index("ix_digest_run_hygiene_claims_account", "account_id"),)
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("digest_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("connected_accounts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enqueued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -1210,6 +1240,7 @@ __all__ = [
     "ConnectedAccount",
     "DigestRun",
     "DigestRunEmail",
+    "DigestRunHygieneClaim",
     "Email",
     "EmailContentBlob",
     "KnownNewsletter",
