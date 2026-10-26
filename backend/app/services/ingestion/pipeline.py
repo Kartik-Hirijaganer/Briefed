@@ -258,13 +258,17 @@ async def _persist_cursor(
     Args:
         session: Open async session.
         row: The ORM row loaded by :func:`_get_or_create_cursor`.
-        advanced: The domain-level cursor returned by the provider.
+        advanced: The domain-level cursor returned by the provider. Its
+            ``stale`` flag (fallback scan) is not persisted.
         touched: True when at least one message was processed in this
             run; drives whether ``last_full_sync_at`` / ``last_incremental_at``
             advance.
     """
     row.history_id = advanced.history_id
-    row.stale = advanced.stale
+    # The fallback scan captured a fresh watermark, so the stored cursor is
+    # usable again. Persisting ``advanced.stale`` would pin every later run
+    # to the full lookback rescan instead of ``users.history.list``.
+    row.stale = False
     now = utcnow()
     if touched:
         row.last_incremental_at = now

@@ -184,7 +184,10 @@ async def test_ingest_stale_cursor_surfaces_bounded_full_sync(
 
     cursor = await test_session.get(SyncCursorRow, account_id)
     assert cursor is not None
-    assert cursor.stale is True
+    # The bounded sync captured a fresh watermark, so the stored cursor is
+    # usable for the History API on the next run.
+    assert cursor.stale is False
+    assert cursor.history_id == 42
     assert cursor.last_full_sync_at is not None
 
 
