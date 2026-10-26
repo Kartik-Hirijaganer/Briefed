@@ -24,6 +24,7 @@ from app.workers.messages import (
     ClassifyMessage,
     IngestMessage,
     SummarizeEmailMessage,
+    TechNewsClusterMessage,
 )
 
 
@@ -167,15 +168,8 @@ async def test_handle_classify_record_commits_before_enqueueing(
     async def _mark_hygiene_enqueued(**_kwargs: Any) -> bool:
         return True
 
-    async def _no_cluster_job(**_kwargs: Any) -> int:
-        return 0
-
     monkeypatch.setattr("app.workers.handlers.classify.handle_classify", _handle_classify)
     monkeypatch.setattr("app.services.summarization.enqueue_summary_for_email", _fake_enqueue)
-    monkeypatch.setattr(
-        "app.services.summarization.enqueue_tech_news_cluster_for_account",
-        _no_cluster_job,
-    )
     monkeypatch.setattr(
         "app.services.unsubscribe.dispatch.enqueue_hygiene_run_for_account",
         _fake_enqueue,
@@ -201,6 +195,50 @@ async def test_handle_classify_record_commits_before_enqueueing(
         "send:summarize",  # category digest from maybe_finalize_run
         "commit",
     ]
+
+
+async def test_handle_classify_record_leaves_cluster_dispatch_to_finalize(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Classify never sends the cluster job itself; finalize gets the queue sender.
+
+    Regression: this once enqueued one cluster job per classified newsletter.
+    """
+    events: list[str] = []
+    _install_worker_stubs(monkeypatch, session=_FakeSession(events), sqs=_FakeSqs(events))
+    _install_llm_stubs(monkeypatch)
+    monkeypatch.delenv("BRIEFED_UNSUBSCRIBE_QUEUE_URL", raising=False)
+    finalize_calls: list[dict[str, Any]] = []
+
+    async def _handle_classify(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def _maybe_finalize_run(**kwargs: Any) -> bool:
+        finalize_calls.append(kwargs)
+        return False
+
+    monkeypatch.setattr("app.workers.handlers.classify.handle_classify", _handle_classify)
+    monkeypatch.setattr("app.services.summarization.enqueue_summary_for_email", _fake_enqueue)
+    monkeypatch.setattr("app.services.runs.maybe_finalize_run", _maybe_finalize_run)
+
+    message = ClassifyMessage(
+        user_id=uuid.uuid4(),
+        account_id=uuid.uuid4(),
+        email_id=uuid.uuid4(),
+        run_id=uuid.uuid4(),
+    )
+    await _handle_classify_record({"body": message.model_dump_json()})
+
+    assert [event for event in events if event.startswith("send:")] == ["send:summarize"]
+    (finalize_call,) = finalize_calls
+    finalize_call["tech_news_cluster_sender"](
+        TechNewsClusterMessage(
+            user_id=message.user_id,
+            run_id=message.run_id,
+            email_ids=(uuid.uuid4(), uuid.uuid4()),
+        ),
+    )
+    assert events[-1] == "send:summarize"
 
 
 async def test_handle_summarize_record_commits_before_category_digest(

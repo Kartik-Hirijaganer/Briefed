@@ -1094,6 +1094,10 @@ class DigestRun(Base, TimestampMixin):
 
     The worker stages already pass a ``run_id`` through messages; this row
     is the API-visible ledger the Phase 6 PWA can poll and list.
+
+    ``tech_news_cluster_enqueued_at`` is the once-per-run newsletter cluster
+    dispatch claim. Claims never live in ``stats``, which workers rewrite
+    from stale ORM copies.
     """
 
     __tablename__ = "digest_runs"
@@ -1121,6 +1125,9 @@ class DigestRun(Base, TimestampMixin):
     stats: Mapped[Any] = mapped_column(json_column(), nullable=False, default=dict)
     cost_cents: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)
+    tech_news_cluster_enqueued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
 
 
 class DigestRunEmail(Base):

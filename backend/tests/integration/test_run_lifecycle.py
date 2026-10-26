@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
+import pytest
+import pytest_asyncio
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.db.models import (
+    Base,
     Classification,
     ConnectedAccount,
     DigestRun,
@@ -26,7 +32,26 @@ from app.services.runs import (
     maybe_finalize_run,
     stamp_run_membership,
 )
-from app.workers.messages import CategoryDigestMessage
+from app.workers.messages import CategoryDigestMessage, TechNewsClusterMessage
+
+
+@pytest_asyncio.fixture()
+async def file_sessionmaker(tmp_path: Path) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """Sessionmaker over file-backed SQLite so each session is its own connection.
+
+    Mirrors prod's ``expire_on_commit=False`` so a session keeps a stale
+    ``DigestRun`` after another session commits, like concurrent workers.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'runs.db'}",
+        poolclass=NullPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    finally:
+        await engine.dispose()
 
 
 async def test_maybe_finalize_run_completes_and_clears_lock(
@@ -689,6 +714,242 @@ async def test_stamp_run_membership_is_idempotent(test_session: AsyncSession) ->
     assert first == 1
     assert second == 0
     assert len(rows) == 1
+
+
+async def test_tech_news_cluster_dispatch_waits_for_classification_and_covers_run(
+    test_session: AsyncSession,
+) -> None:
+    """One cluster message per run, sent after the last classification lands.
+
+    Regression: prod enqueued one partial cluster job per classified
+    newsletter (12-23 per run).
+    """
+    user, account, run = await _seed_run(test_session)
+    newsletters = [_email(account=account, subject=f"Newsletter {idx}") for idx in range(3)]
+    not_newsletter = _email(account=account, subject="Board package")
+    outside_run = _email(account=account, subject="Older newsletter")
+    test_session.add_all([*newsletters, not_newsletter, outside_run])
+    await test_session.flush()
+    await stamp_run_membership(
+        session=test_session,
+        run_id=run.id,
+        email_ids=(*(email.id for email in newsletters), not_newsletter.id),
+    )
+    test_session.add_all(
+        [
+            _classification(newsletters[0], is_newsletter=True),
+            _classification(newsletters[1], is_newsletter=True),
+            _classification(not_newsletter, is_newsletter=False),
+            _classification(outside_run, is_newsletter=True),
+        ],
+    )
+    await test_session.flush()
+    sent: list[TechNewsClusterMessage] = []
+
+    await maybe_finalize_run(
+        session=test_session,
+        user_id=user.id,
+        run_id=run.id,
+        tech_news_cluster_sender=sent.append,
+    )
+    assert sent == []
+
+    test_session.add(_classification(newsletters[2], is_newsletter=True))
+    await test_session.flush()
+    for _ in range(3):  # every later worker record re-runs finalize
+        terminal = await maybe_finalize_run(
+            session=test_session,
+            user_id=user.id,
+            run_id=run.id,
+            tech_news_cluster_sender=sent.append,
+        )
+        assert terminal is False
+
+    assert len(sent) == 1
+    assert sent[0].user_id == user.id
+    assert sent[0].run_id == run.id
+    assert set(sent[0].email_ids) == {email.id for email in newsletters}
+    assert run.status == "running"
+    assert await _cluster_claimed_at(test_session, run.id) is not None
+
+
+async def test_tech_news_cluster_claim_survives_stale_concurrent_finalize(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A worker holding a stale ``DigestRun`` neither re-sends nor clears the claim.
+
+    Finalizers rewrite ``stats`` from stale copies; the dedicated column
+    must survive that.
+    """
+    async with file_sessionmaker() as session:
+        user, run_id = await _seed_newsletter_run(session)
+        await session.commit()
+    sent: list[TechNewsClusterMessage] = []
+
+    async with file_sessionmaker() as stale, file_sessionmaker() as winner:
+        stale_run = await stale.get(DigestRun, run_id)
+        assert stale_run is not None
+
+        await maybe_finalize_run(
+            session=winner,
+            user_id=user,
+            run_id=run_id,
+            tech_news_cluster_sender=sent.append,
+        )
+        await winner.commit()
+
+        await maybe_finalize_run(
+            session=stale,
+            user_id=user,
+            run_id=run_id,
+            tech_news_cluster_sender=sent.append,
+        )
+        await stale.commit()
+
+    async with file_sessionmaker() as later:
+        await maybe_finalize_run(
+            session=later,
+            user_id=user,
+            run_id=run_id,
+            tech_news_cluster_sender=sent.append,
+        )
+        await later.commit()
+        assert await _cluster_claimed_at(later, run_id) is not None
+
+    assert len(sent) == 1
+
+
+async def test_tech_news_cluster_claim_rolls_back_with_failed_send(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A failed SQS send releases the claim so the next finalize re-dispatches.
+
+    A claim that outlived the send would leave ``pending_clusters`` stuck.
+    """
+    async with file_sessionmaker() as session:
+        user, run_id = await _seed_newsletter_run(session)
+        await session.commit()
+
+    def _failing_send(_message: TechNewsClusterMessage) -> None:
+        raise RuntimeError("sqs unavailable")
+
+    async with file_sessionmaker() as failing:
+        with pytest.raises(RuntimeError, match="sqs unavailable"):
+            await maybe_finalize_run(
+                session=failing,
+                user_id=user,
+                run_id=run_id,
+                tech_news_cluster_sender=_failing_send,
+            )
+        await failing.rollback()
+
+    sent: list[TechNewsClusterMessage] = []
+    async with file_sessionmaker() as retry:
+        assert await _cluster_claimed_at(retry, run_id) is None
+        await maybe_finalize_run(
+            session=retry,
+            user_id=user,
+            run_id=run_id,
+            tech_news_cluster_sender=sent.append,
+        )
+        await retry.commit()
+
+    assert len(sent) == 1
+
+
+async def test_maybe_finalize_run_skips_clusters_when_clustering_disabled(
+    test_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With clustering off, newsletters neither dispatch nor block completion."""
+    monkeypatch.setattr("app.services.runs._NEWSLETTER_CLUSTERING_ENABLED", False)
+    user, account, run = await _seed_run(test_session)
+    newsletters = [_email(account=account, subject=f"Newsletter {idx}") for idx in range(2)]
+    test_session.add_all(newsletters)
+    await test_session.flush()
+    await stamp_run_membership(
+        session=test_session,
+        run_id=run.id,
+        email_ids=(email.id for email in newsletters),
+    )
+    for email in newsletters:
+        test_session.add_all(
+            [
+                _classification(email, is_newsletter=True),
+                Summary(
+                    kind="email",
+                    email_id=email.id,
+                    cluster_id=None,
+                    prompt_version_id=None,
+                    model="gemini-1.5-flash",
+                    tokens_in=10,
+                    tokens_out=5,
+                    body_md_ct=b"summary",
+                    entities_ct=None,
+                    cache_hit=False,
+                    confidence=Decimal("0.900"),
+                ),
+            ],
+        )
+    await test_session.flush()
+    sent: list[TechNewsClusterMessage] = []
+
+    terminal = await maybe_finalize_run(
+        session=test_session,
+        user_id=user.id,
+        run_id=run.id,
+        tech_news_cluster_sender=sent.append,
+    )
+
+    assert terminal is True
+    assert run.status == "complete"
+    assert sent == []
+
+
+async def _seed_newsletter_run(session: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
+    """Seed a run whose two member newsletters are both classified.
+
+    Returns:
+        ``(user_id, run_id)``.
+    """
+    user, account, run = await _seed_run(session)
+    newsletters = [_email(account=account, subject=f"Newsletter {idx}") for idx in range(2)]
+    session.add_all(newsletters)
+    await session.flush()
+    await stamp_run_membership(
+        session=session,
+        run_id=run.id,
+        email_ids=(email.id for email in newsletters),
+    )
+    session.add_all([_classification(email, is_newsletter=True) for email in newsletters])
+    await session.flush()
+    return user.id, run.id
+
+
+async def _cluster_claimed_at(session: AsyncSession, run_id: uuid.UUID) -> datetime | None:
+    """Read the committed cluster claim, bypassing the session's identity map."""
+    return (
+        await session.execute(
+            select(DigestRun.tech_news_cluster_enqueued_at)
+            .where(DigestRun.id == run_id)
+            .execution_options(populate_existing=True),
+        )
+    ).scalar_one()
+
+
+def _classification(email: Email, *, is_newsletter: bool) -> Classification:
+    """Build an ``ignore`` classification, optionally flagged as a newsletter."""
+    return Classification(
+        email_id=email.id,
+        label="ignore",
+        score=Decimal("0.800"),
+        rubric_version=1,
+        decision_source="model",
+        model="gemini-1.5-flash",
+        tokens_in=10,
+        tokens_out=5,
+        is_newsletter=is_newsletter,
+    )
 
 
 async def _seed_run(

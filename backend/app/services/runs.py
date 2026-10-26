@@ -3,7 +3,9 @@
 Manual and scheduled scans write a ``digest_runs`` row before fan-out.
 The pipeline itself is distributed across SQS queues, so each worker
 stage opportunistically recomputes whether any DB-visible work remains
-for the run and finalizes the row once processing has drained.
+for the run and finalizes the row once processing has drained. The same
+pass dispatches the run's newsletter cluster job (after classification
+drains) and category digests (after per-email summaries drain).
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.sql import Executable
 
 from app.core.app_config import get_app_config
@@ -34,7 +36,7 @@ from app.db.models import (
 )
 from app.llm.schemas import CategoryDigestCategory
 from app.services.email_labels import unread_email_filter
-from app.workers.messages import CategoryDigestMessage
+from app.workers.messages import CategoryDigestMessage, TechNewsClusterMessage
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,10 +47,17 @@ _SUMMARIZABLE_LABELS: tuple[str, ...] = _APP_CONFIG.taxonomy.summarizable_labels
 _FAILED_RUN_ERROR = "One or more LLM provider calls failed during the scan."
 _NON_FATAL_PROMPT_NAMES: tuple[str, ...] = ("unsubscribe_borderline", "category_digest")
 _UNSUBSCRIBE_HYGIENE_ENQUEUED_KEY = "unsubscribe_hygiene_enqueued"
+_NEWSLETTER_LABEL = _APP_CONFIG.taxonomy.newsletter_label
+_NEWSLETTER_CLUSTERING_ENABLED = _APP_CONFIG.features.newsletter_clustering
+_MIN_CLUSTER_NEWSLETTERS = 2
+_MAX_CLUSTER_NEWSLETTERS = 500
 logger = get_logger(__name__)
 
 CategoryDigestSender = Callable[[CategoryDigestMessage], None]
 """Synchronous sender for category digest queue messages."""
+
+TechNewsClusterSender = Callable[[TechNewsClusterMessage], None]
+"""Synchronous sender for the run's tech-news cluster queue message."""
 
 CategoryDigestBuilder = Callable[[CategoryDigestMessage], Awaitable[None]]
 """Async inline builder for local/test category digest execution."""
@@ -213,6 +222,7 @@ async def maybe_finalize_run(
     run_id: UUID | None,
     category_digest_sender: CategoryDigestSender | None = None,
     category_digest_builder: CategoryDigestBuilder | None = None,
+    tech_news_cluster_sender: TechNewsClusterSender | None = None,
 ) -> bool:
     """Finalize a digest run when no DB-visible work remains.
 
@@ -223,6 +233,9 @@ async def maybe_finalize_run(
     the pending counters so an exhausted provider chain cannot strand a
     run indefinitely.
 
+    Once classification drains, the first call with a
+    ``tech_news_cluster_sender`` enqueues the run's one cluster job.
+
     Args:
         session: Active database session.
         user_id: Owner of the run.
@@ -231,6 +244,8 @@ async def maybe_finalize_run(
             category digest messages.
         category_digest_builder: Optional inline builder used in local
             and test paths where no summarize queue is configured.
+        tech_news_cluster_sender: Optional queue sender for the run's
+            tech-news cluster message; a rollback lets a later call retry.
 
     Returns:
         ``True`` when the run reached a terminal state during this call.
@@ -252,6 +267,14 @@ async def maybe_finalize_run(
     run.cost_cents = snapshot.cost_cents
     if run.status == "queued":
         run.status = "running"
+
+    if snapshot.pending_unclassified == 0 and snapshot.pending_clusters > 0:
+        await _dispatch_tech_news_cluster(
+            session=session,
+            run=run,
+            account_ids=account_ids,
+            tech_news_cluster_sender=tech_news_cluster_sender,
+        )
 
     if snapshot.pending_unclassified == 0 and snapshot.pending_summaries == 0:
         built_inline = await _dispatch_missing_category_summaries(
@@ -553,22 +576,19 @@ async def _pending_clusters(
     account_ids: tuple[UUID, ...],
 ) -> int:
     """Return ``1`` when a run-scope tech-news cluster is still missing."""
+    if not _NEWSLETTER_CLUSTERING_ENABLED:
+        return 0
     newsletter_count = await _count(
         session,
-        select(func.count(Email.id))
-        .join(DigestRunEmail, DigestRunEmail.email_id == Email.id)
-        .join(Classification, Classification.email_id == Email.id)
-        .where(
-            DigestRunEmail.run_id == run_id,
-            Email.account_id.in_(account_ids),
-            unread_email_filter(session),
-            or_(
-                Classification.label == "newsletter",
-                Classification.is_newsletter.is_(True),
-            ),
+        select(func.count()).select_from(
+            _run_newsletters_query(
+                session=session,
+                run_id=run_id,
+                account_ids=account_ids,
+            ).subquery(),
         ),
     )
-    if newsletter_count < 2:
+    if newsletter_count < _MIN_CLUSTER_NEWSLETTERS:
         return 0
     failed_cluster = await _count(
         session,
@@ -599,6 +619,99 @@ async def _pending_clusters(
         )
     ).scalar_one_or_none()
     return 0 if summary_id is not None else 1
+
+
+def _run_newsletters_query(
+    *,
+    session: AsyncSession,
+    run_id: UUID,
+    account_ids: tuple[UUID, ...],
+) -> Select[tuple[UUID]]:
+    """Select the ids of the run's unread, classified newsletter emails.
+
+    Shared by the pending-cluster count and the dispatch so they can't drift.
+    """
+    return (
+        select(Email.id)
+        .join(DigestRunEmail, DigestRunEmail.email_id == Email.id)
+        .join(Classification, Classification.email_id == Email.id)
+        .where(
+            DigestRunEmail.run_id == run_id,
+            Email.account_id.in_(account_ids),
+            unread_email_filter(session),
+            or_(
+                Classification.label == _NEWSLETTER_LABEL,
+                Classification.is_newsletter.is_(True),
+            ),
+        )
+    )
+
+
+async def _dispatch_tech_news_cluster(
+    *,
+    session: AsyncSession,
+    run: DigestRun,
+    account_ids: tuple[UUID, ...],
+    tech_news_cluster_sender: TechNewsClusterSender | None,
+) -> None:
+    """Enqueue the run's one tech-news cluster job if nobody has yet.
+
+    Runs only after classification drains, so it covers every newsletter.
+    """
+    if tech_news_cluster_sender is None:
+        return
+    email_ids = tuple(
+        (
+            await session.execute(
+                _run_newsletters_query(session=session, run_id=run.id, account_ids=account_ids)
+                .order_by(Email.internal_date.desc())
+                .limit(_MAX_CLUSTER_NEWSLETTERS),
+            )
+        )
+        .scalars()
+        .all(),
+    )
+    if len(email_ids) < _MIN_CLUSTER_NEWSLETTERS:
+        return
+    if not await _claim_tech_news_cluster_dispatch(session=session, run_id=run.id):
+        return
+    tech_news_cluster_sender(
+        TechNewsClusterMessage(user_id=run.user_id, run_id=run.id, email_ids=email_ids),
+    )
+    logger.info(
+        "digest.tech_news_cluster.enqueued",
+        run_id=str(run.id),
+        newsletters=len(email_ids),
+    )
+
+
+async def _claim_tech_news_cluster_dispatch(*, session: AsyncSession, run_id: UUID) -> bool:
+    """Atomically claim the run's single tech-news cluster dispatch.
+
+    A conditional ``UPDATE ... WHERE tech_news_cluster_enqueued_at IS NULL``:
+    claimers serialize on the row lock and the loser matches nothing. The
+    in-session ORM copy is deliberately left unsynchronized.
+
+    Args:
+        session: Active database session; a rollback releases the claim.
+        run_id: Digest run to claim.
+
+    Returns:
+        ``True`` when this caller won the claim and must send the message.
+    """
+    claimed = (
+        await session.execute(
+            update(DigestRun)
+            .where(
+                DigestRun.id == run_id,
+                DigestRun.tech_news_cluster_enqueued_at.is_(None),
+            )
+            .values(tech_news_cluster_enqueued_at=utcnow())
+            .returning(DigestRun.id)
+            .execution_options(synchronize_session=False),
+        )
+    ).scalar_one_or_none()
+    return claimed is not None
 
 
 async def _pending_category_summaries(

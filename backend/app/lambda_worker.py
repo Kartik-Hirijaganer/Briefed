@@ -38,11 +38,12 @@ logger = get_logger(__name__)
 
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
+
     from app.core.security import KmsClient
     from app.services.classification.dispatch import SqsSender
     from app.services.ingestion.storage import ObjectStore
-    from app.services.runs import CategoryDigestSender
-    from app.workers.messages import CategoryDigestMessage
+    from app.workers.messages import CategoryDigestMessage, TechNewsClusterMessage
 
 
 class _SqsRecord(TypedDict, total=False):
@@ -153,11 +154,15 @@ def _s3_client() -> ObjectStore:
     return cast("ObjectStore", boto3.client("s3"))
 
 
-def _category_digest_sender(*, queue_url: str, sqs: SqsSender) -> CategoryDigestSender:
-    """Return a sender that places category digests on the summarize queue."""
+def _summarize_queue_sender(
+    *,
+    queue_url: str,
+    sqs: SqsSender,
+) -> Callable[[CategoryDigestMessage | TechNewsClusterMessage], None]:
+    """Return the summarize-queue sender for both ``maybe_finalize_run`` senders."""
 
-    def _send(message: CategoryDigestMessage) -> None:
-        """Send one category digest message."""
+    def _send(message: CategoryDigestMessage | TechNewsClusterMessage) -> None:
+        """Send one category digest or tech-news cluster message."""
         sqs.send_message(QueueUrl=queue_url, MessageBody=message.model_dump_json())
 
     return _send
@@ -305,15 +310,17 @@ async def _handle_ingest_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
+            summarize_sender = (
+                _summarize_queue_sender(queue_url=summarize_queue_url, sqs=sqs_client)
+                if summarize_queue_url and sqs_client is not None
+                else None
+            )
             await maybe_finalize_run(
                 session=session,
                 user_id=message.user_id,
                 run_id=message.run_id,
-                category_digest_sender=(
-                    _category_digest_sender(queue_url=summarize_queue_url, sqs=sqs_client)
-                    if summarize_queue_url and sqs_client is not None
-                    else None
-                ),
+                category_digest_sender=summarize_sender,
+                tech_news_cluster_sender=summarize_sender,
             )
             await session.commit()
 
@@ -323,7 +330,9 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
 
     Commits the classification first so downstream workers never see an
     unclassified email, then enqueues this email's unsummarized follow-up
-    work. Retries are idempotent via the upsert and dispatch filters.
+    work. Retries are idempotent via the upsert and dispatch filters. The
+    newsletter cluster job is dispatched once per run by
+    ``maybe_finalize_run``, not per email.
 
     Args:
         record: Raw SQS record from the event envelope.
@@ -343,10 +352,7 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
         mark_unsubscribe_hygiene_enqueued,
         maybe_finalize_run,
     )
-    from app.services.summarization import (
-        enqueue_summary_for_email,
-        enqueue_tech_news_cluster_for_account,
-    )
+    from app.services.summarization import enqueue_summary_for_email
     from app.services.unsubscribe.dispatch import enqueue_hygiene_run_for_account
     from app.workers.handlers.classify import ClassifyDeps, handle_classify
 
@@ -388,15 +394,6 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                     sqs=sqs_client,
                     run_id=message.run_id,
                 )
-                await enqueue_tech_news_cluster_for_account(
-                    session=session,
-                    user_id=message.user_id,
-                    account_id=message.account_id,
-                    queue_url=summarize_queue_url,
-                    sqs=sqs_client,
-                    run_id=message.run_id,
-                    trigger_email_id=message.email_id,
-                )
             if unsubscribe_queue_url:
                 should_enqueue_hygiene = await mark_unsubscribe_hygiene_enqueued(
                     session=session,
@@ -411,15 +408,17 @@ async def _handle_classify_record(record: _SqsRecord) -> None:
                         sqs=sqs_client,
                         run_id=message.run_id,
                     )
+            summarize_sender = (
+                _summarize_queue_sender(queue_url=summarize_queue_url, sqs=sqs_client)
+                if summarize_queue_url
+                else None
+            )
             await maybe_finalize_run(
                 session=session,
                 user_id=message.user_id,
                 run_id=message.run_id,
-                category_digest_sender=(
-                    _category_digest_sender(queue_url=summarize_queue_url, sqs=sqs_client)
-                    if summarize_queue_url
-                    else None
-                ),
+                category_digest_sender=summarize_sender,
+                tech_news_cluster_sender=summarize_sender,
             )
             await session.commit()
 
@@ -504,16 +503,18 @@ async def _handle_summarize_record(record: _SqsRecord) -> None:
             else:
                 await handle_tech_news_cluster(message, deps=deps)
             await session.commit()
+            summarize_sender = (
+                _summarize_queue_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
+                if summarize_queue_url
+                else None
+            )
             await maybe_finalize_run(
                 session=session,
                 user_id=user_id,
                 run_id=message.run_id,
-                category_digest_sender=(
-                    _category_digest_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
-                    if summarize_queue_url
-                    else None
-                ),
+                category_digest_sender=summarize_sender,
                 category_digest_builder=None if summarize_queue_url else _build_category_digest,
+                tech_news_cluster_sender=summarize_sender,
             )
             await session.commit()
 
@@ -571,15 +572,17 @@ async def _handle_unsubscribe_record(record: _SqsRecord) -> None:
             )
             await mark_run_running(session, message.run_id)
             await handle_unsubscribe(message, deps=deps)
+            summarize_sender = (
+                _summarize_queue_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
+                if summarize_queue_url
+                else None
+            )
             await maybe_finalize_run(
                 session=session,
                 user_id=message.user_id,
                 run_id=message.run_id,
-                category_digest_sender=(
-                    _category_digest_sender(queue_url=summarize_queue_url, sqs=_sqs_client())
-                    if summarize_queue_url
-                    else None
-                ),
+                category_digest_sender=summarize_sender,
+                tech_news_cluster_sender=summarize_sender,
             )
             await session.commit()
 
