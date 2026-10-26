@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Select, Uuid, func, literal, or_, select, update
+from sqlalchemy import Select, String, Uuid, func, literal, or_, select, update
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import Executable
 
@@ -27,6 +27,7 @@ from app.db.models import (
     Classification,
     ConnectedAccount,
     DigestRun,
+    DigestRunCategoryDigestClaim,
     DigestRunEmail,
     DigestRunHygieneClaim,
     Email,
@@ -785,7 +786,12 @@ async def _dispatch_missing_category_summaries(
     category_digest_sender: CategoryDigestSender | None,
     category_digest_builder: CategoryDigestBuilder | None,
 ) -> bool:
-    """Send or build missing category digests once per run/category."""
+    """Send or build missing category digests once per run/category.
+
+    Each category is claimed just before its dispatch. Without a
+    dispatcher nothing is claimed, so a later call that has one still
+    sends it.
+    """
     missing = await _missing_category_digest_categories(
         session=session,
         run_id=run.id,
@@ -794,11 +800,20 @@ async def _dispatch_missing_category_summaries(
     if not missing:
         return False
 
-    already_enqueued = _category_digests_enqueued(run.stats)
-    dispatched: list[str] = []
     built_inline = False
     for category in missing:
-        if category in already_enqueued:
+        if category_digest_sender is None and category_digest_builder is None:
+            logger.warning(
+                "digest.category.no_dispatcher",
+                run_id=str(run.id),
+                category=category,
+            )
+            continue
+        if not await _claim_category_digest_dispatch(
+            session=session,
+            run_id=run.id,
+            category=category,
+        ):
             continue
         message = CategoryDigestMessage(run_id=run.id, category=category)
         if category_digest_sender is not None:
@@ -806,45 +821,49 @@ async def _dispatch_missing_category_summaries(
         elif category_digest_builder is not None:
             await category_digest_builder(message)
             built_inline = True
-        else:
-            logger.warning(
-                "digest.category.no_dispatcher",
-                run_id=str(run.id),
-                category=category,
-            )
-            continue
-        dispatched.append(category)
-
-    if dispatched:
-        _mark_category_digests_enqueued(run=run, categories=tuple(dispatched))
     return built_inline
 
 
-def _category_digests_enqueued(stats: object) -> frozenset[str]:
-    """Return categories already dispatched for digesting from run stats."""
-    if not isinstance(stats, dict):
-        return frozenset()
-    raw = stats.get("category_digests_enqueued")
-    if not isinstance(raw, list):
-        return frozenset()
-    return frozenset(str(item) for item in raw if isinstance(item, str))
-
-
-def _mark_category_digests_enqueued(
+async def _claim_category_digest_dispatch(
     *,
-    run: DigestRun,
-    categories: tuple[str, ...],
-) -> None:
-    """Persist category digest dispatch markers in the run stats JSON."""
-    existing = dict(run.stats) if isinstance(run.stats, dict) else {}
-    merged = sorted(_category_digests_enqueued(existing).union(categories))
-    existing["category_digests_enqueued"] = merged
-    run.stats = existing
+    session: AsyncSession,
+    run_id: UUID,
+    category: CategoryDigestCategory,
+) -> bool:
+    """Atomically claim the digest dispatch for one run/category.
+
+    Same ``INSERT ... ON CONFLICT DO NOTHING`` claim as
+    :func:`mark_unsubscribe_hygiene_enqueued`, so a finalizer holding a
+    stale ``DigestRun`` can neither re-claim nor erase it.
+
+    Args:
+        session: Active database session; the claim commits or rolls
+            back with the caller's transaction, so a failed send releases it.
+        run_id: Digest run being finalized.
+        category: Category whose digest is about to be dispatched.
+
+    Returns:
+        ``True`` when this caller won the claim and must dispatch the digest.
+    """
+    claimed = (
+        await session.execute(
+            _claim_insert(session, DigestRunCategoryDigestClaim)
+            .from_select(
+                ["run_id", "category"],
+                select(DigestRun.id, literal(category, type_=String())).where(
+                    DigestRun.id == run_id,
+                ),
+            )
+            .on_conflict_do_nothing(index_elements=["run_id", "category"])
+            .returning(DigestRunCategoryDigestClaim.run_id),
+        )
+    ).scalar_one_or_none()
+    return claimed is not None
 
 
 def _claim_insert(
     session: AsyncSession,
-    claim_model: type[DigestRunHygieneClaim],
+    claim_model: type[DigestRunHygieneClaim | DigestRunCategoryDigestClaim],
 ) -> postgresql.Insert | sqlite.Insert:
     """Start an ``INSERT`` into a claim table that can skip key conflicts.
 

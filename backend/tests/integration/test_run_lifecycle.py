@@ -20,6 +20,7 @@ from app.db.models import (
     Classification,
     ConnectedAccount,
     DigestRun,
+    DigestRunCategoryDigestClaim,
     DigestRunEmail,
     DigestRunHygieneClaim,
     Email,
@@ -734,6 +735,114 @@ async def test_category_digest_trigger_waits_for_classify_and_email_summary(
     assert [message.category for message in sent] == ["must_read"]
 
 
+async def test_category_digest_claim_survives_stale_concurrent_finalize(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A finalizer holding a stale ``DigestRun`` neither re-sends nor erases the claim.
+
+    The ``category_digests_enqueued`` ``stats`` marker was read from the
+    worker's early-loaded copy, so two finalizers that both saw the last
+    summary land could each enqueue the same category digest.
+    """
+    async with file_sessionmaker() as session:
+        user_id, run_id = await _seed_category_digest_run(session)
+        await session.commit()
+    sent: list[CategoryDigestMessage] = []
+
+    async with file_sessionmaker() as stale, file_sessionmaker() as winner:
+        stale_run = await stale.get(DigestRun, run_id)  # as in mark_run_running
+        assert stale_run is not None
+
+        await maybe_finalize_run(
+            session=winner,
+            user_id=user_id,
+            run_id=run_id,
+            category_digest_sender=sent.append,
+        )
+        await winner.commit()
+
+        await maybe_finalize_run(
+            session=stale,
+            user_id=user_id,
+            run_id=run_id,
+            category_digest_sender=sent.append,
+        )
+        await stale.commit()
+    assert len(sent) == 1
+
+    async with file_sessionmaker() as later:
+        await maybe_finalize_run(
+            session=later,
+            user_id=user_id,
+            run_id=run_id,
+            category_digest_sender=sent.append,
+        )
+        await later.commit()
+        assert await _category_digest_claims(later, run_id) == {"must_read"}
+
+    assert [message.category for message in sent] == ["must_read"]
+
+
+async def test_category_digest_claim_rolls_back_with_failed_send(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """A failed SQS send releases the claim so the next finalize re-dispatches.
+
+    A claim that outlived a failed send would leave the digest unwritten,
+    so ``pending_category_summaries`` would never drain and the run would
+    never finalize.
+    """
+    async with file_sessionmaker() as session:
+        user_id, run_id = await _seed_category_digest_run(session)
+        await session.commit()
+
+    def _failing_send(_message: CategoryDigestMessage) -> None:
+        raise RuntimeError("sqs unavailable")
+
+    async with file_sessionmaker() as failing:
+        with pytest.raises(RuntimeError, match="sqs unavailable"):
+            await maybe_finalize_run(
+                session=failing,
+                user_id=user_id,
+                run_id=run_id,
+                category_digest_sender=_failing_send,
+            )
+        await failing.rollback()
+
+    sent: list[CategoryDigestMessage] = []
+    async with file_sessionmaker() as retry:
+        assert await _category_digest_claims(retry, run_id) == set()
+        await maybe_finalize_run(
+            session=retry,
+            user_id=user_id,
+            run_id=run_id,
+            category_digest_sender=sent.append,
+        )
+        await retry.commit()
+
+    assert [message.category for message in sent] == ["must_read"]
+
+
+async def test_category_digest_without_dispatcher_claims_nothing(
+    test_session: AsyncSession,
+) -> None:
+    """A finalize with no sender or builder leaves the category for a later call."""
+    user_id, run_id = await _seed_category_digest_run(test_session)
+
+    await maybe_finalize_run(session=test_session, user_id=user_id, run_id=run_id)
+    assert await _category_digest_claims(test_session, run_id) == set()
+
+    sent: list[CategoryDigestMessage] = []
+    await maybe_finalize_run(
+        session=test_session,
+        user_id=user_id,
+        run_id=run_id,
+        category_digest_sender=sent.append,
+    )
+
+    assert [message.category for message in sent] == ["must_read"]
+
+
 async def test_maybe_finalize_run_ignores_non_member_pre_run_email(
     test_session: AsyncSession,
 ) -> None:
@@ -1024,6 +1133,67 @@ async def _cluster_claimed_at(session: AsyncSession, run_id: uuid.UUID) -> datet
             .execution_options(populate_existing=True),
         )
     ).scalar_one()
+
+
+async def _seed_category_digest_run(session: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
+    """Seed a run whose one must-read email is classified and summarized.
+
+    Every per-email prerequisite has drained, so finalize owes exactly the
+    ``must_read`` category digest.
+
+    Returns:
+        ``(user_id, run_id)``.
+    """
+    user, account, run = await _seed_run(session)
+    email = _email(account=account, subject="Board package")
+    session.add(email)
+    await session.flush()
+    await stamp_run_membership(session=session, run_id=run.id, email_ids=(email.id,))
+    session.add_all(
+        [
+            Classification(
+                email_id=email.id,
+                label="must_read",
+                score=Decimal("0.950"),
+                rubric_version=1,
+                decision_source="model",
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=5,
+                is_newsletter=False,
+            ),
+            Summary(
+                kind="email",
+                email_id=email.id,
+                cluster_id=None,
+                prompt_version_id=None,
+                model="gemini-1.5-flash",
+                tokens_in=10,
+                tokens_out=8,
+                body_md_ct=b"summary",
+                entities_ct=None,
+                cache_hit=False,
+                confidence=Decimal("0.900"),
+            ),
+        ],
+    )
+    await session.flush()
+    return user.id, run.id
+
+
+async def _category_digest_claims(session: AsyncSession, run_id: uuid.UUID) -> set[str]:
+    """Return the categories holding a digest dispatch claim for ``run_id``."""
+    return set(
+        (
+            await session.execute(
+                select(DigestRunCategoryDigestClaim.category).where(
+                    DigestRunCategoryDigestClaim.run_id == run_id,
+                ),
+            )
+        )
+        .scalars()
+        .all(),
+    )
 
 
 async def _hygiene_claims(session: AsyncSession, run_id: uuid.UUID) -> set[uuid.UUID]:

@@ -1097,7 +1097,8 @@ class DigestRun(Base, TimestampMixin):
 
     ``tech_news_cluster_enqueued_at`` is the once-per-run newsletter cluster
     dispatch claim. Claims never live in ``stats``, which workers rewrite
-    from stale ORM copies; see also :class:`DigestRunHygieneClaim`.
+    from stale ORM copies; see also :class:`DigestRunHygieneClaim` and
+    :class:`DigestRunCategoryDigestClaim`.
     """
 
     __tablename__ = "digest_runs"
@@ -1185,6 +1186,35 @@ class DigestRunHygieneClaim(Base):
     )
 
 
+class DigestRunCategoryDigestClaim(Base):
+    """Once-per-category digest dispatch claim for a digest run.
+
+    Every finalizer that sees a category's digest still missing races to
+    enqueue it. The composite primary key makes the claim an atomic
+    ``INSERT ... ON CONFLICT DO NOTHING``, kept out of ``digest_runs.stats``
+    for the same stale-copy reason as :class:`DigestRunHygieneClaim`.
+
+    Attributes:
+        run_id: Digest run the category digest belongs to.
+        category: Summarizable triage category, matching
+            ``summaries.category``.
+        enqueued_at: Database time the claim was taken.
+    """
+
+    __tablename__ = "digest_run_category_digest_claims"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("digest_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    category: Mapped[str] = mapped_column(String(24), primary_key=True)
+    enqueued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 class ReleaseMetadata(Base):
     """One row per deploy (plan §8 ``release_metadata``, §19.7 enrichments).
 
@@ -1239,6 +1269,7 @@ __all__ = [
     "Classification",
     "ConnectedAccount",
     "DigestRun",
+    "DigestRunCategoryDigestClaim",
     "DigestRunEmail",
     "DigestRunHygieneClaim",
     "Email",
