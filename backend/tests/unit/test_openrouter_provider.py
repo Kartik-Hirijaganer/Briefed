@@ -7,6 +7,7 @@ and the local-estimate fallback when ``cost`` is absent.
 
 from __future__ import annotations
 
+import json
 import os
 from decimal import Decimal
 
@@ -97,6 +98,40 @@ async def test_skips_response_format_when_no_schema() -> None:
 
     body = route.calls.last.request.read()
     assert b"response_format" not in body
+
+
+@pytest.mark.parametrize(
+    ("system", "expected_roles"),
+    [("Rules and examples.", ["system", "user"]), ("", ["user"])],
+)
+@respx.mock
+async def test_messages_lead_with_system_when_spec_has_one(
+    system: str,
+    expected_roles: list[str],
+) -> None:
+    route = respx.post(_ENDPOINT).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"ok": true}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "cost": 0.0},
+            },
+        )
+    )
+    spec = _spec().model_copy(update={"system": system})
+    async with httpx.AsyncClient() as http:
+        provider = OpenRouterProvider(
+            api_key="k",
+            http_client=http,
+            catalog_entry=resolve("gemini-flash"),
+        )
+        await provider.complete_json(spec, rendered_prompt="<subject>hi</subject>")
+
+    messages = json.loads(route.calls.last.request.read())["messages"]
+    assert [message["role"] for message in messages] == expected_roles
+    assert messages[-1]["content"] == "<subject>hi</subject>"
+    if system:
+        assert messages[0]["content"] == system
 
 
 @respx.mock

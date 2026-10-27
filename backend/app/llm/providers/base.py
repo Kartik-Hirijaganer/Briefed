@@ -46,7 +46,9 @@ class PromptSpec(BaseModel):
     Attributes:
         name: Prompt key (``triage`` / ``summarize_relevant`` / ...).
         version: Integer version.
-        content: The raw prompt body from the markdown file.
+        content: User-message template with ``{{placeholders}}``.
+        system: Static system message (instructions, schema, examples);
+            empty means the call sends only the user message.
         model: Model identifier (provider-specific).
         temperature: Sampling temperature.
         max_tokens: Maximum output tokens.
@@ -62,6 +64,7 @@ class PromptSpec(BaseModel):
     name: str
     version: int
     content: str
+    system: str = Field(default="")
     model: str
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_tokens: int = Field(default=512, ge=1, le=16_000)

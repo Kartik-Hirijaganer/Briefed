@@ -6,6 +6,8 @@ protocol so :class:`app.llm.client.LLMClient` does not change.
 
 Notable request shape (Track A Phase 3):
 
+* ``messages`` — ``spec.system`` (instructions, schema, examples) as a
+  ``system`` message when set, then the rendered input as ``user``.
 * ``provider: {data_collection: "deny"}`` — only routes that honour
   no-logging are eligible. ADR 0009 documents the trust-boundary
   trade-off this still leaves on the table.
@@ -124,11 +126,14 @@ class OpenRouterProvider:
             "X-Title": "Briefed",
             "Content-Type": "application/json",
         }
+        messages = [{"role": "user", "content": rendered_prompt}]
+        if spec.system:
+            messages.insert(0, {"role": "system", "content": spec.system})
         body: dict[str, Any] = {
             "model": self._entry["openrouter_id"],
             "max_tokens": min(spec.max_tokens, self._entry["max_output_tokens"]),
             "temperature": spec.temperature,
-            "messages": [{"role": "user", "content": rendered_prompt}],
+            "messages": messages,
             "provider": {"data_collection": "deny"},
             "transforms": [],
         }
