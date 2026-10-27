@@ -43,6 +43,12 @@ _EMAIL_ACTION_ITEMS_LIMIT = 3
 _EMAIL_ENTITIES_LIMIT = 20
 """Maximum entity chips persisted for one email summary."""
 
+_CATEGORY_DIGEST_ITEM_REFS_LIMIT = 20
+"""Maximum source refs persisted for one category-digest group."""
+
+_CLUSTER_HEADLINE_LIMIT = 120
+"""Maximum characters persisted for one newsletter-cluster headline."""
+
 
 class TriageDecision(BaseModel):
     """Structured output of the triage prompt (plan §6, §14 Phase 2).
@@ -152,9 +158,15 @@ class CategoryDigestGroup(BaseModel):
     )
     item_refs: tuple[str, ...] = Field(
         default=(),
-        max_length=20,
+        max_length=_CATEGORY_DIGEST_ITEM_REFS_LIMIT,
         description="Opaque source refs cited by this group.",
     )
+
+    @field_validator("item_refs", mode="before")
+    @classmethod
+    def _cap_item_refs(cls, value: object) -> object:
+        """Keep the first refs when the model cites more than the cap."""
+        return _cap_sequence(value, limit=_CATEGORY_DIGEST_ITEM_REFS_LIMIT)
 
     @field_validator("label")
     @classmethod
@@ -258,6 +270,32 @@ def _cap_sequence(value: object, *, limit: int) -> object:
     return tuple(items)
 
 
+def _cap_text(value: object, *, limit: int) -> object:
+    """Shorten a provider-emitted string to ``limit`` characters.
+
+    Cuts at the last word boundary that fits and appends an ellipsis, so
+    the result reads as a shortened caption rather than a broken word.
+
+    Args:
+        value: Raw Pydantic field input.
+        limit: Maximum characters to keep, ellipsis included.
+
+    Returns:
+        The stripped string, shortened when it exceeds ``limit``; original
+        value for non-strings so normal Pydantic validation still reports
+        type errors.
+    """
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if len(stripped) <= limit:
+        return stripped
+    cut = stripped[: limit - 1]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:-") + "…"
+
+
 class UnsubscribeDecision(BaseModel):
     """Structured output of the ``unsubscribe_borderline`` prompt (plan §14 Phase 5).
 
@@ -311,7 +349,8 @@ class TechNewsClusterSummary(BaseModel):
         cluster_key: Stable slug identifying the cluster (e.g.
             ``llm-research`` / ``aws-weekly``). Plumbed through to the UI
             filter bar.
-        headline: Short cluster caption (max 120 chars).
+        headline: Short cluster caption (max 120 chars; longer model
+            output is cut at a word boundary with an ellipsis).
         bullets: Up to six cross-story bullets. Each string is lifted /
             paraphrased from the underlying emails; no speculation.
         sources: Subjects of the underlying newsletters in source order.
@@ -322,7 +361,7 @@ class TechNewsClusterSummary(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     cluster_key: str = Field(..., min_length=1, max_length=64)
-    headline: str = Field(..., min_length=1, max_length=120)
+    headline: str = Field(..., min_length=1, max_length=_CLUSTER_HEADLINE_LIMIT)
     bullets: tuple[str, ...] = Field(default=(), max_length=6)
     sources: tuple[str, ...] = Field(default=(), max_length=20)
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -335,6 +374,12 @@ class TechNewsClusterSummary(BaseModel):
         if not slug:
             raise ValueError("cluster_key must be non-empty")
         return slug
+
+    @field_validator("headline", mode="before")
+    @classmethod
+    def _cap_headline(cls, value: object) -> object:
+        """Shorten an over-long headline instead of rejecting the summary."""
+        return _cap_text(value, limit=_CLUSTER_HEADLINE_LIMIT)
 
     @field_validator("headline")
     @classmethod

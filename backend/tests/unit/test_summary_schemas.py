@@ -83,6 +83,33 @@ def test_tech_news_cluster_summary_happy_path() -> None:
     assert len(cluster.bullets) == 2
 
 
+def test_tech_news_cluster_summary_shortens_long_headline_at_word_boundary() -> None:
+    words = "Bank of America offers new ways to save, invest, and plan for retirement"
+    cluster = TechNewsClusterSummary(
+        cluster_key="boa",
+        headline=f"  {words} with several investment opportunities and more details.  ",
+        confidence=0.8,
+    )
+
+    assert len(cluster.headline) <= 120
+    assert cluster.headline.endswith("…")
+    kept = cluster.headline.removesuffix("…")
+    assert f"{words} with several investment opportunities and more".startswith(kept)
+    assert not kept.endswith((" ", ","))
+
+
+def test_tech_news_cluster_summary_hard_cuts_single_long_word() -> None:
+    cluster = TechNewsClusterSummary(cluster_key="ai", headline="x" * 200, confidence=0.5)
+
+    assert cluster.headline == "x" * 119 + "…"
+
+
+def test_tech_news_cluster_summary_keeps_headline_at_limit() -> None:
+    cluster = TechNewsClusterSummary(cluster_key="ai", headline="y" * 120, confidence=0.5)
+
+    assert cluster.headline == "y" * 120
+
+
 def test_tech_news_cluster_summary_rejects_extra() -> None:
     with pytest.raises(ValidationError):
         TechNewsClusterSummary.model_validate(
@@ -110,6 +137,17 @@ def test_category_digest_summary_happy_path() -> None:
     assert summary.narrative == "Must-read mail centers on board planning."
     assert summary.groups[0].label == "Board review"
     assert summary.groups[0].bullets == ("Packet is due Friday",)
+
+
+def test_category_digest_group_keeps_first_refs_when_over_cap() -> None:
+    refs = tuple(f"E{index}" for index in range(1, 106))
+    summary = CategoryDigestSummary(
+        narrative="Mostly routine notices.",
+        groups=({"label": "Notices", "bullets": ("Routine updates",), "item_refs": refs},),
+        confidence=0.7,
+    )
+
+    assert summary.groups[0].item_refs == refs[:20]
 
 
 def test_category_digest_summary_rejects_extra() -> None:
