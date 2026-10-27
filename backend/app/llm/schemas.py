@@ -179,6 +179,11 @@ class CategoryDigestSummary(BaseModel):
     and per-email summaries have fully drained. The input is the complete
     run/category set of per-email TL;DRs and key points.
 
+    The limits here are wider than ``category_digest.v1.json`` on purpose:
+    digests stored under the earlier, wider prompt limits still load, and
+    a model that slightly overshoots the prompt's targets is kept rather
+    than discarded.
+
     Attributes:
         narrative: Short prose rollup for the category.
         groups: Thematic source-backed groups.
