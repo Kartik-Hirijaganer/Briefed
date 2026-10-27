@@ -166,8 +166,8 @@ The backend image ships three entrypoints selected by `BRIEFED_RUNTIME` (see [ba
 EventBridge Scheduler → `fanout_handler` → enumerates `connected_accounts` → enqueues one `IngestMessage` per account → downstream workers fan out per stage. Each stage has its own SQS queue and its own handler; discriminated-union payloads live in [backend/app/workers/messages.py](backend/app/workers/messages.py):
 
 ```
-fanout → ingest → classify ─┬─▶ summarize (per-email + newsletter clusters)
-                            └─▶ jobs (extract + corroborate + predicates)
+fanout → ingest → classify ─┬─▶ summarize (per-email + newsletter clusters + category digests)
+                            └─▶ unsubscribe (per-account hygiene suggestions)
 ```
 
 Queue URLs are injected via env (`BRIEFED_*_QUEUE_URL`). The ingest handler opportunistically chains into `classify` when `BRIEFED_CLASSIFY_QUEUE_URL` is set — other stages follow the same pattern. **Never invent new message shapes inline**; add a class to `workers/messages.py` with `ConfigDict(frozen=True, extra="forbid")` and a `kind` literal.
