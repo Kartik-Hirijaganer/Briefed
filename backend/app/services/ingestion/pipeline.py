@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy import select
 
@@ -125,7 +126,10 @@ async def run_ingest(
     for raw, (meta, body) in zip(raw_messages, parsed, strict=True):
         if meta not in outcome.to_insert:
             continue
+        # Assign the id now: the ORM default only fires at flush, and the
+        # excerpt ciphertext below binds ``email.id`` into its KMS context.
         email = Email(
+            id=uuid4(),
             account_id=account_id,
             gmail_message_id=meta.message_id,
             thread_id=meta.thread_id,
