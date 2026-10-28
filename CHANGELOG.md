@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.5.4](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.3...v1.5.4) (2026-10-28)
+
+
+### Bug Fixes
+
+* bump dev-only filelock and pip in uv.lock ([a6eb7c1](https://github.com/Kartik-Hirijaganer/Briefed/commit/a6eb7c1893df80d31eac22a2ed10cad30cb8438f))
+* cap pydantic below 2.14 and patch vulnerable runtime packages ([4be51d5](https://github.com/Kartik-Hirijaganer/Briefed/commit/4be51d53b9ef276831725d9815a7d6ab853da22c))
+* **gmail:** persist a fresh sync cursor after the fallback scan ([c2f753d](https://github.com/Kartik-Hirijaganer/Briefed/commit/c2f753de52f75e6720e0c3dbf7f1aa8e3baf7cf0))
+* **ingest:** bind excerpt encryption to the real email id ([86e533e](https://github.com/Kartik-Hirijaganer/Briefed/commit/86e533e86f2f22593a9edcd7768090fe75e994a5))
+* **ingest:** mark accounts for reconnect on invalid_grant ([89fd21b](https://github.com/Kartik-Hirijaganer/Briefed/commit/89fd21b410ff5a4995ee14a288d400223bd7d480))
+* pin sqlalchemy below 2.1 to restore mypy --strict in CI ([6768b1e](https://github.com/Kartik-Hirijaganer/Briefed/commit/6768b1e8fe656e7f280ca6144e8dc12bbc7b59e3))
+* pin sqlalchemy below 2.1 to restore mypy --strict in CI ([4875d8c](https://github.com/Kartik-Hirijaganer/Briefed/commit/4875d8c16d0ceafe9e7709231ed77847ec9f4f96))
+* pipeline dispatch claims, ingest reauth, sync cursor, and excerpt encryption ([6ba02aa](https://github.com/Kartik-Hirijaganer/Briefed/commit/6ba02aa52496fa8efd799f3c5569bdd75159e99c))
+* **runs:** enqueue the newsletter cluster job once per run ([bd8507a](https://github.com/Kartik-Hirijaganer/Briefed/commit/bd8507ab30fe32c2278780f0babfa98659163385))
+* **runs:** move category digest claims into their own table ([7fb8473](https://github.com/Kartik-Hirijaganer/Briefed/commit/7fb8473471fc1dfeba3389c6c1edf93debe2aee8))
+* **runs:** move the unsubscribe-hygiene claim into its own table ([3ab3a33](https://github.com/Kartik-Hirijaganer/Briefed/commit/3ab3a33d06352d938fa90da312c900fc3fa58e20))
+* **worker:** commit pipeline writes before enqueueing the next stage ([c93bf1c](https://github.com/Kartik-Hirijaganer/Briefed/commit/c93bf1cc087ae60e3d8b2910daf5d033e0e1e2a9))
+
 ## [1.5.3](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.2...v1.5.3) (2026-09-15)
 
 
