@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit convention: [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.6.0](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.4...v1.6.0) (2026-10-28)
+
+
+### Features
+
+* **prompts:** send instructions as a system message and fit the category digest ([ef1fe8f](https://github.com/Kartik-Hirijaganer/Briefed/commit/ef1fe8f4ccc9764a786514ce02fd4b1c48de14f2))
+
 ## [1.5.4](https://github.com/Kartik-Hirijaganer/Briefed/compare/v1.5.3...v1.5.4) (2026-10-28)
 
 
