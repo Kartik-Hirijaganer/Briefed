@@ -72,8 +72,8 @@ async def test_bootstrap_query_is_unread_when_configured() -> None:
     """Unread-only bootstrap scans use Gmail's server-side unread query."""
     transport = _ScriptedTransport(
         responses=[
-            (200, {"messages": [{"id": "m1"}]}),
             (200, {"historyId": "10"}),
+            (200, {"messages": [{"id": "m1"}]}),
         ],
     )
     async with httpx.AsyncClient(transport=transport) as http:
@@ -89,7 +89,7 @@ async def test_bootstrap_query_is_unread_when_configured() -> None:
         )
 
     assert ids == ["m1"]
-    assert "q=is%3Aunread+newer_than%3A14d" in str(transport.requests[0].url)
+    assert "q=is%3Aunread+newer_than%3A14d" in str(transport.requests[1].url)
 
 
 async def test_mark_read_falls_back_to_singletons_after_batch_failure() -> None:

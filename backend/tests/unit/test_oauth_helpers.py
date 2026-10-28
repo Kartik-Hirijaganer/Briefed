@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from app.core.errors import AuthError, ProviderError
+from app.core.errors import AuthError, InvalidGrantError, ProviderError
 from app.services.gmail.oauth import (
     GMAIL_MODIFY_SCOPE,
     GMAIL_SCOPES,
@@ -14,6 +14,7 @@ from app.services.gmail.oauth import (
     exchange_code,
     expires_at_from_bundle,
     generate_pkce_pair,
+    refresh_access_token,
 )
 
 
@@ -112,3 +113,40 @@ async def test_exchange_code_maps_malformed_success_payload_to_provider_error() 
                 redirect_uri="https://app.example.test/api/v1/oauth/gmail/callback",
                 http_client=client,
             )
+
+
+async def test_refresh_access_token_maps_invalid_grant_to_invalid_grant_error() -> None:
+    """A revoked / expired refresh token is distinguishable from other 4xx."""
+
+    def _handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code=400,
+            json={"error": "invalid_grant", "error_description": "Bad Request"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as client:
+        with pytest.raises(InvalidGrantError, match="refresh token rejected: invalid_grant"):
+            await refresh_access_token(
+                refresh_token="refresh",
+                client_id="client-id",
+                client_secret="client-secret",
+                http_client=client,
+            )
+
+
+async def test_refresh_access_token_keeps_invalid_client_as_plain_auth_error() -> None:
+    """Briefed's own OAuth misconfiguration must not look like a user revoke."""
+
+    def _handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code=401, json={"error": "invalid_client"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as client:
+        with pytest.raises(AuthError, match="invalid_client") as excinfo:
+            await refresh_access_token(
+                refresh_token="refresh",
+                client_id="client-id",
+                client_secret="client-secret",
+                http_client=client,
+            )
+
+    assert not isinstance(excinfo.value, InvalidGrantError)

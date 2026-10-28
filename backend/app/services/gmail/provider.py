@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Literal
 
 from app.core.app_config import get_app_config
 from app.core.errors import StaleCursorError
+from app.core.logging import get_logger
 from app.domain.providers import (
     MailboxProvider,
     MarkReadFailure,
@@ -26,7 +27,15 @@ from app.services.gmail.oauth import revoke_token
 from app.services.gmail.parser import raw_from_gmail_full
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Mapping, Sequence
+
     import httpx
+
+
+logger = get_logger(__name__)
+
+_EXCLUDED_LABELS = frozenset({"SPAM", "TRASH"})
+"""Labels ``messages.list`` skips by default; history-added ids skip them too."""
 
 
 class GmailProvider(MailboxProvider):
@@ -80,6 +89,10 @@ class GmailProvider(MailboxProvider):
         ``messages.list`` scan (``newer_than:{bootstrap_lookback_days}d``)
         and mark the returned cursor as stale so the caller knows to run
         a full sync write-out on :attr:`SyncCursor.last_full_sync_at`.
+        Its ``history_id`` is still fresh, so callers persist it as non-stale.
+
+        History ids are filtered like the scan: no Spam/Trash, and
+        ``UNREAD`` only when ``unread_only``.
 
         Args:
             credentials: Decrypted OAuth credentials.
@@ -94,11 +107,7 @@ class GmailProvider(MailboxProvider):
                     access_token=credentials.access_token,
                     start_history_id=cursor.history_id,
                 )
-                history_ids = [
-                    str(entry.get("id"))
-                    for entry in added
-                    if isinstance(entry, dict) and entry.get("id")
-                ]
+                history_ids = _mailbox_message_ids(added)
                 if self.unread_only:
                     history_ids = await self._filter_unread_history_ids(
                         credentials=credentials,
@@ -108,8 +117,18 @@ class GmailProvider(MailboxProvider):
                     update={"history_id": next_history, "stale": False},
                 )
             except StaleCursorError:
-                pass
+                logger.warning(
+                    "gmail.history_cursor_expired",
+                    account_id=str(credentials.account_id),
+                    start_history_id=cursor.history_id,
+                )
 
+        # Read the watermark before scanning: mail landing mid-scan then
+        # shows up again in the next history.list (dedup absorbs the
+        # overlap) instead of falling between the scan and the watermark.
+        watermark = await self._client.get_profile_history_id(
+            access_token=credentials.access_token,
+        )
         query_parts = [f"newer_than:{self.bootstrap_lookback_days}d"]
         if self.unread_only:
             query_parts.insert(0, "is:unread")
@@ -120,9 +139,6 @@ class GmailProvider(MailboxProvider):
             query=query,
         ):
             full_ids.append(message_id)
-        watermark = await self._client.get_profile_history_id(
-            access_token=credentials.access_token,
-        )
         return full_ids, cursor.model_copy(update={"history_id": watermark, "stale": True})
 
     async def get_messages(
@@ -230,14 +246,15 @@ class GmailProvider(MailboxProvider):
         credentials: ProviderCredentials,
         message_ids: list[MessageId],
     ) -> list[MessageId]:
-        """Keep history-added messages that still carry ``UNREAD``.
+        """Keep history-added messages that are still unread outside Spam/Trash.
 
         Args:
             credentials: Decrypted OAuth credentials.
             message_ids: Candidate ids returned by ``users.history.list``.
 
         Returns:
-            Candidate ids whose live labels still include ``UNREAD``.
+            Candidate ids whose live labels include ``UNREAD`` and
+            neither ``SPAM`` nor ``TRASH``.
         """
         unread_ids: list[MessageId] = []
         for message_id in message_ids:
@@ -250,7 +267,7 @@ class GmailProvider(MailboxProvider):
                 if exc.status_code == 404:
                     continue
                 raise
-            if has_unread_label(labels):
+            if has_unread_label(labels) and not _EXCLUDED_LABELS.intersection(labels):
                 unread_ids.append(message_id)
         return unread_ids
 
@@ -282,6 +299,27 @@ class GmailProvider(MailboxProvider):
             except GmailApiError as exc:
                 failed.append(MarkReadFailure(message_id=message_id, reason=str(exc)))
         return MarkReadResult(marked=tuple(marked), failed=tuple(failed))
+
+
+def _mailbox_message_ids(added: Sequence[Mapping[str, object]]) -> list[MessageId]:
+    """Return ids of history-added messages that did not land in Spam or Trash.
+
+    Args:
+        added: ``messagesAdded[].message`` entries from ``users.history.list``.
+
+    Returns:
+        Message ids in history order, judged by add-time ``labelIds``.
+    """
+    message_ids: list[MessageId] = []
+    for entry in added:
+        message_id = entry.get("id")
+        labels = entry.get("labelIds")
+        if not isinstance(message_id, str) or not message_id:
+            continue
+        if isinstance(labels, list) and _EXCLUDED_LABELS.intersection(labels):
+            continue
+        message_ids.append(message_id)
+    return message_ids
 
 
 def _chunks(

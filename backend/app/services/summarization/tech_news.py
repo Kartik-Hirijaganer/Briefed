@@ -18,6 +18,9 @@ ordering is sender-count DESC then cluster_key ASC, and source emails
 inside a cluster are ordered by ``internal_date`` then ``id`` so the
 rendered `newsletters_block` is stable. Determinism matters for the
 eval suite.
+
+A run is clustered at most once: a duplicate message for an already
+clustered run is a no-op.
 """
 
 from __future__ import annotations
@@ -38,6 +41,7 @@ from app.db.models import (
     Email,
     EmailContentBlob,
     PromptCallLog,
+    Summary,
     TechNewsCluster,
     TechNewsClusterMember,
 )
@@ -124,6 +128,7 @@ class TechNewsOutcome:
         total_tokens_out: Sum of output tokens across cluster calls.
         total_cost_usd: Sum of per-cluster cost estimates.
         cache_hits: Count of cluster calls with cache-read > 0.
+        skipped_existing: ``True`` when the run was already clustered.
     """
 
     clusters_created: int
@@ -134,6 +139,7 @@ class TechNewsOutcome:
     total_tokens_out: int
     total_cost_usd: Decimal
     cache_hits: int
+    skipped_existing: bool = False
 
 
 async def cluster_and_summarize(
@@ -148,11 +154,25 @@ async def cluster_and_summarize(
         session: Active async session (caller owns commit).
 
     Returns:
-        :class:`TechNewsOutcome`.
+        :class:`TechNewsOutcome`; ``skipped_existing`` if already clustered.
     """
     if not inputs.email_ids:
         return _empty_outcome()
+    if inputs.run_id is not None and await _run_has_cluster_summary(
+        session,
+        user_id=inputs.user_id,
+        run_id=inputs.run_id,
+    ):
+        return _empty_outcome(skipped_existing=True)
+    return await _cluster_and_summarize_all(inputs, session=session)
 
+
+async def _cluster_and_summarize_all(
+    inputs: TechNewsInputs,
+    *,
+    session: AsyncSession,
+) -> TechNewsOutcome:
+    """Route, upsert, and summarize every cluster for a non-empty input."""
     rows = await _load_emails(session, email_ids=inputs.email_ids)
     grouped: dict[str, list[tuple[Email, ClusterRoute]]] = defaultdict(list)
     route_topics: dict[str, str] = {}
@@ -320,6 +340,31 @@ def _render_newsletters_block(
     return "\n".join(sections)
 
 
+async def _run_has_cluster_summary(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    run_id: UUID,
+) -> bool:
+    """Return whether an earlier delivery already summarized this run's clusters.
+
+    Cluster jobs write in one transaction, so one summary means it finished.
+    """
+    found = (
+        await session.execute(
+            select(Summary.id)
+            .join(TechNewsCluster, TechNewsCluster.id == Summary.cluster_id)
+            .where(
+                TechNewsCluster.user_id == user_id,
+                TechNewsCluster.run_id == run_id,
+                Summary.kind == "tech_news_cluster",
+            )
+            .limit(1),
+        )
+    ).scalar_one_or_none()
+    return found is not None
+
+
 async def _load_emails(
     session: AsyncSession,
     *,
@@ -465,8 +510,8 @@ def _extract_list_id(row: Email) -> str | None:
     return None
 
 
-def _empty_outcome() -> TechNewsOutcome:
-    """Return a zeroed :class:`TechNewsOutcome` for the empty-input fast path."""
+def _empty_outcome(*, skipped_existing: bool = False) -> TechNewsOutcome:
+    """Return a zeroed :class:`TechNewsOutcome` for the no-work fast paths."""
     return TechNewsOutcome(
         clusters_created=0,
         clusters_summarized=0,
@@ -476,6 +521,7 @@ def _empty_outcome() -> TechNewsOutcome:
         total_tokens_out=0,
         total_cost_usd=Decimal("0"),
         cache_hits=0,
+        skipped_existing=skipped_existing,
     )
 
 

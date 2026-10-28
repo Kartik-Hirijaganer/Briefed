@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy import select
 
@@ -125,7 +126,10 @@ async def run_ingest(
     for raw, (meta, body) in zip(raw_messages, parsed, strict=True):
         if meta not in outcome.to_insert:
             continue
+        # Assign the id now: the ORM default only fires at flush, and the
+        # excerpt ciphertext below binds ``email.id`` into its KMS context.
         email = Email(
+            id=uuid4(),
             account_id=account_id,
             gmail_message_id=meta.message_id,
             thread_id=meta.thread_id,
@@ -258,13 +262,17 @@ async def _persist_cursor(
     Args:
         session: Open async session.
         row: The ORM row loaded by :func:`_get_or_create_cursor`.
-        advanced: The domain-level cursor returned by the provider.
+        advanced: The domain-level cursor returned by the provider. Its
+            ``stale`` flag (fallback scan) is not persisted.
         touched: True when at least one message was processed in this
             run; drives whether ``last_full_sync_at`` / ``last_incremental_at``
             advance.
     """
     row.history_id = advanced.history_id
-    row.stale = advanced.stale
+    # The fallback scan captured a fresh watermark, so the stored cursor is
+    # usable again. Persisting ``advanced.stale`` would pin every later run
+    # to the full lookback rescan instead of ``users.history.list``.
+    row.stale = False
     now = utcnow()
     if touched:
         row.last_incremental_at = now

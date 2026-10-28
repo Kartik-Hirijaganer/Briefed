@@ -271,9 +271,9 @@ class MailboxProvider(Protocol):
             cursor: The last-known sync cursor; may be stale.
 
         Returns:
-            Pair of (new message ids, updated cursor). The returned cursor
-            has :attr:`SyncCursor.stale` set to ``True`` when the provider
-            refused the cursor and the caller must do a bounded backfill.
+            Pair of (new message ids, updated cursor). ``stale`` is ``True``
+            when the provider fell back to a bounded backfill; its
+            ``history_id`` is still fresh, so callers persist it as non-stale.
         """
         ...
 
