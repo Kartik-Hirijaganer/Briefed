@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://briefed.sh/schemas/category_digest.v1.json",
   "title": "CategoryDigestSummary",
-  "description": "Structured output produced by category_digest/v1. The digest is built only after a run's category-specific per-email summaries are complete.",
+  "description": "Structured output produced by category_digest/v1. The digest is built only after a run's category-specific per-email summaries are complete. These are the prompt's target limits; the backend CategoryDigestSummary model accepts wider values so digests stored under the earlier limits still load.",
   "type": "object",
   "additionalProperties": false,
   "required": ["narrative", "confidence"],
@@ -10,11 +10,11 @@
     "narrative": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 800
+      "maxLength": 400
     },
     "groups": {
       "type": "array",
-      "maxItems": 8,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -27,16 +27,16 @@
           },
           "bullets": {
             "type": "array",
-            "maxItems": 5,
+            "maxItems": 3,
             "items": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 240
+              "maxLength": 160
             }
           },
           "item_refs": {
             "type": "array",
-            "maxItems": 20,
+            "maxItems": 5,
             "items": {
               "type": "string",
               "minLength": 1,
