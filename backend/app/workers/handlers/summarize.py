@@ -8,6 +8,7 @@ LLM client, and repo, then hands off to :mod:`app.services.summarization`.
 Retry semantics:
 
 * Missing email / cluster row → log + succeed (nothing left to do).
+* Duplicate cluster message for an already clustered run → no-op.
 * Missing prompt version row → raises so SQS re-delivers.
 * :class:`app.llm.client.LLMClientError` is already handled inside the
   pipeline (``ok=False`` outcome) — we do not retry at the SQS level
@@ -186,6 +187,14 @@ async def handle_tech_news_cluster(
         ),
         session=deps.session,
     )
+    if outcome.skipped_existing:
+        logger.info(
+            "summarize.cluster.handler.skipped",
+            run_id=str(message.run_id),
+            reason="run_already_clustered",
+            elapsed_ms=int((utcnow() - started).total_seconds() * 1000),
+        )
+        return outcome
     emit_summarize_cluster_metric(
         clusters_created=outcome.clusters_created,
         clusters_summarized=outcome.clusters_summarized,
@@ -197,6 +206,7 @@ async def handle_tech_news_cluster(
     )
     logger.info(
         "summarize.cluster.handler.completed",
+        run_id=str(message.run_id) if message.run_id else None,
         clusters_created=outcome.clusters_created,
         clusters_summarized=outcome.clusters_summarized,
         clusters_skipped_small=outcome.clusters_skipped_small,

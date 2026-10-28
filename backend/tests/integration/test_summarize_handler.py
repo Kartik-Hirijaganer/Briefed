@@ -1,7 +1,7 @@
 """Integration tests for the summarize SQS handler (plan §14 Phase 3).
 
-Covers both message kinds and asserts metric emission is wired to the
-observability module.
+Covers both message kinds, asserts metric emission is wired to the
+observability module, and checks cluster messages are idempotent per run.
 """
 
 from __future__ import annotations
@@ -18,11 +18,14 @@ from sqlalchemy import select
 from app.db.models import (
     Classification,
     ConnectedAccount,
+    DigestRun,
     Email,
     EmailContentBlob,
     KnownNewsletter,
+    PromptCallLog,
     PromptVersion,
     Summary,
+    TechNewsCluster,
     User,
 )
 from app.llm.client import LLMClient
@@ -195,19 +198,32 @@ async def test_handle_summarize_email_writes_summary_and_metric(test_session) ->
     assert len(rows) == 1 and rows[0].email_id == email.id
 
 
-@pytest.mark.asyncio
-async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> None:
+_CLUSTER_RESPONSE: dict[str, Any] = {
+    "cluster_key": "llm-research",
+    "headline": "LLM research",
+    "bullets": ["Point"],
+    "sources": ["Issue 0", "Issue 1"],
+    "confidence": 0.85,
+}
+
+
+async def _seed_newsletter_cluster(
+    session,
+    *,
+    responses: list[Any],
+) -> tuple[User, list[Email], SummarizeDeps]:
+    """Seed two same-list newsletters, the router rule, and cluster deps."""
     user = User(email="me@example.com", tz="UTC", status="active")
-    test_session.add(user)
-    await test_session.flush()
+    session.add(user)
+    await session.flush()
     account = ConnectedAccount(
         user_id=user.id,
         provider="gmail",
         email="mbox@example.com",
         status="active",
     )
-    test_session.add(account)
-    await test_session.flush()
+    session.add(account)
+    await session.flush()
 
     now = datetime.now(tz=UTC)
     emails: list[Email] = []
@@ -226,8 +242,8 @@ async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> 
             content_hash=hashlib.sha256(f"m-{idx}".encode()).digest(),
             list_unsubscribe={"list_id": "<llm-research.list-id.example>"},
         )
-        test_session.add(email)
-        await test_session.flush()
+        session.add(email)
+        await session.flush()
         email.body = EmailContentBlob(
             message_id=email.id,
             storage_backend="pg",
@@ -235,7 +251,7 @@ async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> 
         )
         emails.append(email)
 
-    test_session.add(
+    session.add(
         KnownNewsletter(
             match={"list_id_equals": "llm-research.list-id.example"},
             cluster_key="llm-research",
@@ -243,40 +259,36 @@ async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> 
             maintainer="seed",
         ),
     )
-    await test_session.flush()
+    await session.flush()
 
     registered, _pv_id = await _register_prompt(
-        test_session,
+        session,
         name="newsletter_group",
         content="cluster {{cluster_key}} {{topic_hint}} {{newsletters_block}}",
     )
-    registry = PromptRegistry(entries={("newsletter_group", 1): registered})
-
-    provider = _Provider(
-        [
-            _ok_result(
-                {
-                    "cluster_key": "llm-research",
-                    "headline": "LLM research",
-                    "bullets": ["Point"],
-                    "sources": [e.subject for e in emails],
-                    "confidence": 0.85,
-                },
-            ),
-        ],
-    )
-    llm = LLMClient(primary=provider)
     router = ClusterRouter(
-        rules=tuple(
-            (await test_session.execute(select(KnownNewsletter))).scalars().all(),
-        ),
+        rules=tuple((await session.execute(select(KnownNewsletter))).scalars().all()),
     )
     deps = SummarizeDeps(
-        session=test_session,
-        llm=llm,
-        registry=registry,
+        session=session,
+        llm=LLMClient(primary=_Provider(responses)),
+        registry=PromptRegistry(entries={("newsletter_group", 1): registered}),
         repo=SummariesRepo(cipher=None),
         router=router,
+    )
+    return user, emails, deps
+
+
+async def _count_rows(session, model: type[Any]) -> int:
+    """Count every row of ``model``."""
+    return len((await session.execute(select(model))).scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> None:
+    user, emails, deps = await _seed_newsletter_cluster(
+        test_session,
+        responses=[_ok_result(_CLUSTER_RESPONSE)],
     )
 
     outcome = await handle_tech_news_cluster(
@@ -297,3 +309,52 @@ async def test_handle_tech_news_cluster_writes_cluster_summary(test_session) -> 
         .all()
     )
     assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_tech_news_cluster_is_idempotent_per_run(test_session) -> None:
+    """A duplicate or redelivered cluster message for a clustered run is a no-op.
+
+    The provider holds one response, so a re-summarize would exhaust it.
+    """
+    user, emails, deps = await _seed_newsletter_cluster(
+        test_session,
+        responses=[_ok_result(_CLUSTER_RESPONSE), _ok_result(_CLUSTER_RESPONSE)],
+    )
+    runs = [
+        DigestRun(
+            user_id=user.id,
+            status="running",
+            trigger_type="scheduled",
+            started_at=datetime.now(tz=UTC),
+            stats={},
+        )
+        for _ in range(2)
+    ]
+    test_session.add_all(runs)
+    await test_session.flush()
+
+    def _message(run: DigestRun) -> TechNewsClusterMessage:
+        return TechNewsClusterMessage(
+            user_id=user.id,
+            run_id=run.id,
+            email_ids=tuple(e.id for e in emails),
+        )
+
+    first = await handle_tech_news_cluster(_message(runs[0]), deps=deps)
+    duplicate = await handle_tech_news_cluster(_message(runs[0]), deps=deps)
+
+    assert first.clusters_summarized == 1
+    assert first.skipped_existing is False
+    assert duplicate.skipped_existing is True
+    assert duplicate.clusters_created == 0
+    assert duplicate.clusters_summarized == 0
+    assert duplicate.clusters_failed == 0
+    assert await _count_rows(test_session, TechNewsCluster) == 1
+    assert await _count_rows(test_session, PromptCallLog) == 1
+
+    next_run = await handle_tech_news_cluster(_message(runs[1]), deps=deps)
+
+    assert next_run.skipped_existing is False
+    assert next_run.clusters_summarized == 1
+    assert await _count_rows(test_session, TechNewsCluster) == 2

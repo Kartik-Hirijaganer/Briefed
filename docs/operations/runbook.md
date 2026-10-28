@@ -21,6 +21,11 @@ The SNS topic that fans out alarm emails is named
      digest.
   3. Drain the DLQ by triggering manual SQS receive + delete after the
      bug is fixed; never delete a poison message without inspecting it.
+- **Not a DLQ cause any more:** a Gmail refresh token Google rejects
+  with `invalid_grant`. Ingest marks the account `revoked` (Settings
+  shows "Needs reconnect"), acks the message, and logs
+  `event=ingest.reauth_required` with the `account_id`. Fanout skips the
+  account until the owner reconnects it from Settings.
 - **Rollback:** if the worker code is the cause, alias the prior
   Lambda version (`aws lambda update-alias --name prod
   --function-version <previous>`).

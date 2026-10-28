@@ -8,6 +8,9 @@ Retry semantics:
 
 * ``QuotaExceededError`` from Gmail → raise so SQS re-delivers.
 * ``StaleCursorError`` → handled inside the provider; never bubbles up.
+* ``InvalidGrantError`` from the token refresh → terminal: the account is
+  flagged ``revoked`` ("Needs reconnect") and the message is acknowledged.
+* Account no longer ``active`` → skipped and acknowledged.
 * Everything else → propagates; the Lambda dispatcher records a
   ``batchItemFailures`` entry so SQS re-delivers.
 """
@@ -22,9 +25,10 @@ from sqlalchemy import select
 
 from app.core.clock import utcnow
 from app.core.consent import has_current_legal_consent
+from app.core.errors import InvalidGrantError
 from app.core.logging import get_logger
 from app.core.security import EncryptedBlob, EnvelopeCipher, token_context
-from app.db.models import OAuthToken, User
+from app.db.models import ConnectedAccount, OAuthToken, User
 from app.domain.providers import ProviderCredentials
 from app.services.gmail.oauth import expires_at_from_bundle, refresh_access_token
 from app.services.ingestion.pipeline import IngestStats, run_ingest
@@ -43,6 +47,12 @@ logger = get_logger(__name__)
 
 _TOKEN_REFRESH_LEEWAY = timedelta(minutes=5)
 """Refresh Gmail access tokens before they expire inside an ingest run."""
+
+_REAUTH_REQUIRED_STATUS = "revoked"
+"""Account status set when Google rejects the refresh token.
+
+Runs skip it, the UI shows "Needs reconnect", and reconnect restores ``active``.
+"""
 
 
 @dataclass
@@ -86,10 +96,11 @@ async def handle_ingest(
         deps: :class:`IngestDeps`.
 
     Returns:
-        :class:`IngestStats` summarizing the run.
+        :class:`IngestStats` summarizing the run. Empty stats when the
+        account was skipped or flagged for re-authorization.
 
     Raises:
-        LookupError: When the account no longer has OAuth credentials.
+        LookupError: When an active account has no OAuth credentials.
     """
     user = await deps.session.get(User, message.user_id)
     if user is None:
@@ -97,6 +108,15 @@ async def handle_ingest(
         return IngestStats(0, 0, 0, 0, False)
     if not has_current_legal_consent(user):
         logger.warning("ingest.skip_no_consent", user_id=str(message.user_id))
+        return IngestStats(0, 0, 0, 0, False)
+
+    account = await deps.session.get(ConnectedAccount, message.account_id)
+    if account is None or account.status != "active":
+        logger.warning(
+            "ingest.skip_inactive_account",
+            account_id=str(message.account_id),
+            status=account.status if account is not None else None,
+        )
         return IngestStats(0, 0, 0, 0, False)
 
     tokens = (
@@ -124,12 +144,16 @@ async def handle_ingest(
     if _expires_within(tokens.expires_at, deps.token_refresh_leeway):
         if not deps.oauth_client_id or not deps.oauth_client_secret:
             raise RuntimeError("OAuth client credentials required to refresh Gmail token")
-        bundle = await refresh_access_token(
-            refresh_token=refresh_plain,
-            client_id=deps.oauth_client_id,
-            client_secret=deps.oauth_client_secret,
-            http_client=deps.http_client,
-        )
+        try:
+            bundle = await refresh_access_token(
+                refresh_token=refresh_plain,
+                client_id=deps.oauth_client_id,
+                client_secret=deps.oauth_client_secret,
+                http_client=deps.http_client,
+            )
+        except InvalidGrantError:
+            await _mark_reauth_required(session=deps.session, account=account)
+            return IngestStats(0, 0, 0, 0, False)
         access_plain = bundle.access_token
         access_blob = deps.cipher.encrypt(
             access_plain.encode("utf-8"),
@@ -184,6 +208,25 @@ async def handle_ingest(
         elapsed_ms=int((utcnow() - started).total_seconds() * 1000),
     )
     return stats
+
+
+async def _mark_reauth_required(*, session: AsyncSession, account: ConnectedAccount) -> None:
+    """Flag an account whose refresh token Google rejected.
+
+    Only the status changes, so a reconnect alone resumes scheduled ingest.
+
+    Args:
+        session: Active session; the caller owns the commit.
+        account: Account whose refresh token returned ``invalid_grant``.
+    """
+    account.status = _REAUTH_REQUIRED_STATUS
+    await session.flush()
+    logger.warning(
+        "ingest.reauth_required",
+        account_id=str(account.id),
+        user_id=str(account.user_id),
+        reason="invalid_grant",
+    )
 
 
 def _blob(ciphertext: bytes) -> EncryptedBlob:

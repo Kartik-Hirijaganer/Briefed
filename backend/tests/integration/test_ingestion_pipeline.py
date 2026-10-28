@@ -10,7 +10,9 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ConnectedAccount, Email, User
+from app.core.content_crypto import content_context
+from app.core.security import EncryptedBlob, EnvelopeCipher
+from app.db.models import ConnectedAccount, Email, EmailContentBlob, User
 from app.db.models import SyncCursor as SyncCursorRow
 from app.domain.providers import (
     MailboxProvider,
@@ -72,6 +74,36 @@ class _FakeGmail(MailboxProvider):
 
     async def revoke(self, credentials: ProviderCredentials) -> None:
         return None
+
+
+class _ContextCheckingKms:
+    """KMS stub that, like real KMS, refuses a Decrypt under a different context."""
+
+    def __init__(self) -> None:
+        self._wrapped: dict[bytes, tuple[bytes, dict[str, str]]] = {}
+
+    def encrypt(
+        self,
+        *,
+        KeyId: str,
+        Plaintext: bytes,
+        EncryptionContext: dict[str, str],
+    ) -> dict[str, object]:
+        handle = f"W{len(self._wrapped):04d}".encode()
+        self._wrapped[handle] = (Plaintext, dict(EncryptionContext))
+        return {"CiphertextBlob": handle}
+
+    def decrypt(
+        self,
+        *,
+        CiphertextBlob: bytes,
+        EncryptionContext: dict[str, str],
+        KeyId: str | None = None,
+    ) -> dict[str, object]:
+        dek, context = self._wrapped[bytes(CiphertextBlob)]
+        if context != EncryptionContext:
+            raise RuntimeError("InvalidCiphertextException")
+        return {"Plaintext": dek}
 
 
 def _make_fixture_emails(count: int) -> dict[MessageId, RawMessage]:
@@ -184,7 +216,10 @@ async def test_ingest_stale_cursor_surfaces_bounded_full_sync(
 
     cursor = await test_session.get(SyncCursorRow, account_id)
     assert cursor is not None
-    assert cursor.stale is True
+    # The bounded sync captured a fresh watermark, so the stored cursor is
+    # usable for the History API on the next run.
+    assert cursor.stale is False
+    assert cursor.history_id == 42
     assert cursor.last_full_sync_at is not None
 
 
@@ -211,6 +246,40 @@ async def test_ingest_with_raw_mime_toggle_uploads_s3(
     for (bucket, _key), body in store.objects.items():
         assert bucket == "briefed-raw"
         assert b"Content-Type: text/plain" in body
+
+
+async def test_ingest_binds_excerpt_to_its_email_id(test_session: AsyncSession) -> None:
+    """Each excerpt decrypts under its own email id, not a pre-flush ``"None"``."""
+    account_id = await _seed_account(test_session)
+    account = await test_session.get(ConnectedAccount, account_id)
+    assert account is not None
+    cipher = EnvelopeCipher(key_id="alias/content", client=_ContextCheckingKms())
+
+    await run_ingest(
+        session=test_session,
+        account_id=account_id,
+        provider=_FakeGmail(messages=_make_fixture_emails(3)),
+        credentials=_credentials(account_id),
+        content_cipher=cipher,
+    )
+    await test_session.commit()
+
+    blobs = (await test_session.execute(select(EmailContentBlob))).scalars().all()
+    assert len(blobs) == 3
+    for blob in blobs:
+        assert blob.plain_text_excerpt_ct is not None
+        # Strict row-bound context, bypassing decrypt_excerpt's legacy fallback.
+        context = content_context(
+            table="email_content_blobs",
+            row_id=str(blob.message_id),
+            purpose="email_body_excerpt",
+            user_id=str(account.user_id),
+        )
+        plaintext = cipher.decrypt(
+            EncryptedBlob(ciphertext=bytes(blob.plain_text_excerpt_ct)),
+            context,
+        )
+        assert plaintext.decode("utf-8").startswith("body-")
 
 
 async def test_ingest_missing_account_raises(test_session: AsyncSession) -> None:
