@@ -37,7 +37,7 @@
 
 What it shows:
 
-- Daily digest with real freshness, scan entry point, and four-way inbox classification.
+- Daily digest with real freshness, scan entry point, and three-way inbox classification.
 - Per-email rationale, confidence, and summary before opening Gmail.
 - Unsubscribe recommendations with sender volume, engagement, recent subjects, and user-controlled selection.
 - Multi-account settings with the connected Gmail account and Add Gmail entry point, stopping before OAuth.
@@ -61,7 +61,7 @@ Public review is deliberately split from real Gmail access: `/demo` uses synthet
 ## What it does
 
 - **Daily pipeline** — ingests new Gmail on a schedule and runs the whole brief end to end, unattended.
-- **Four-way classification** — sorts every email into **must-read / good-to-read / ignore / waste** against a rubric you own and can edit.
+- **Three-way classification** — sorts every email into **must-read / good-to-read / ignore** against a rubric you own and can edit.
 - **Summaries** — condenses the must-read pile so you read the gist, not the thread.
 - **Newsletter clustering** — rolls up newsletter and tech-news clusters into one digest entry instead of thirty rows.
 - **Unsubscribe recommender** — rule-based with a borderline-LLM tiebreaker; it scores senders and explains *why*, then recommends. In Release 2, an explicit, confirmed action can execute supported one-click unsubscribes when the default-off capability is enabled.
@@ -87,9 +87,9 @@ The **digest above** is the home view — bucket filters at a glance, the full c
 flowchart LR
   S["EventBridge<br/>Scheduler"] --> F["fanout"]
   F -->|one message / account| I["ingest"]
-  I --> C["classify<br/>(4-way)"]
+  I --> C["classify<br/>(3-way)"]
   C --> SUM["summarize<br/>per-email + clusters"]
-  C --> J["jobs<br/>extract + corroborate"]
+  C -->|once per run| U["unsubscribe<br/>sender hygiene"]
 ```
 
 **One image, three runtimes.** The same backend image ships an API and two worker entrypoints, selected by `BRIEFED_RUNTIME`. The frontend is hosted by Vercel; `/api/*` is proxied to the CloudFront-protected Lambda API origin, and the workers run off SQS.
@@ -157,17 +157,17 @@ Use `make dev-reset` when you want a clean local account-linking test. It remove
 
 The parts of this project I'd point a reviewer at — each links to the code or the decision record that backs it.
 
-- **Envelope encryption, per row.** Two customer-managed KMS CMKs (one for OAuth-token wrapping, one for email content); a per-row data key; the encryption context binds `{user_id, table, row_id}`, so a leaked ciphertext can't be replayed across rows or users. → [ADR 0008](docs/adr/0008-kms-cmk-for-token-wrap-key.md), [`core/security.py`](backend/app/core/security.py), [`core/content_crypto.py`](backend/app/core/content_crypto.py)
-- **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain, 3 retries (exponential backoff + jitter, retryable-only), a circuit breaker that trips after 5 consecutive failures, per-model hard caps (Haiku at 100 calls/day), and per-call cost/token logging. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
+- **Envelope encryption, per row.** Two customer-managed KMS CMKs (one wrapping OAuth tokens, one for email content); a fresh AES-256-GCM data key per write, wrapped by KMS; the encryption context binds each ciphertext to its row and owner — `{table, row_id, purpose, user_id}` for content, `{account_id, purpose}` for tokens — so a leaked ciphertext can't be replayed onto another row or another user's data. Email excerpts written before v1.5.4 are bound to their owner but not their row until they're re-encrypted. → [ADR 0008](docs/adr/0008-kms-cmk-for-token-wrap-key.md), [`core/security.py`](backend/app/core/security.py), [`core/content_crypto.py`](backend/app/core/content_crypto.py)
+- **A resilient LLM layer.** Every call goes through one client with a catalog-driven fallback chain (Gemini 2.5 Flash → Claude Haiku 4.5 via OpenRouter), up to 3 retries (exponential backoff + jitter, retryable errors only), a per-provider circuit breaker (opens after 5 consecutive failures), per-model call caps (Haiku: 100/day in the catalog), a daily USD budget guard, and a cost/token row in `prompt_call_log` for every call. Today the worker builds a fresh client per SQS message, so breaker, cap, and budget state only spans that message — moving it to durable storage is next. → [`llm/client.py`](backend/app/llm/client.py), [ADR 0002](docs/adr/0002-gemini-flash-primary-haiku-fallback.md), [ADR 0009](docs/adr/0009-openrouter-as-llm-routing-layer.md)
 - **Cold-start discipline.** Settings validate and logging configures at *module import*, not in a factory; heavy imports are deferred to handler bodies and documented with per-file `ruff` ignores. This keeps container-image cold starts bounded while preserving a future SnapStart-compatible initialization shape. → [ADR 0003](docs/adr/0003-lambda-snapstart-over-fargate.md), [`lambda_api.py`](backend/app/lambda_api.py)
 - **A decoupled pipeline with typed contracts.** SQS fan-out per stage; every message is a frozen, `extra="forbid"` Pydantic discriminated union — no inline message shapes anywhere. → [`workers/messages.py`](backend/app/workers/messages.py)
 - **Public demo, real consent.** `/`, `/about`, `/privacy`, and `/terms` are public no-API surfaces; `/demo` is seeded synthetic data with `/api/*` blocked; `/app/*` is server-gated by versioned Privacy Policy and Terms acceptance before real Gmail processing. → [ADR 0015](docs/adr/0015-public-homepage-demo-and-enforced-consent.md)
 - **Safety by design.** The agent never archives, unsubscribes, or sends in 1.0.0; later destructive paths are narrow, explicit, gated, and documented in ADRs. → [ADR 0006](docs/adr/0006-recommend-only-in-release-1-0-0.md), [ADR 0013](docs/adr/0013-gmail-mark-read-write-scope.md), [ADR 0014](docs/adr/0014-execute-unsubscribe-in-release-2.md)
 - **Operability rehearsed, not assumed.** Blue/green Lambda alias deploys; rollback is a single `update-alias`; chaos drills cover DLQ replay, secret rotation, KMS-key revocation, and the LLM circuit breaker; restore-from-backup is drilled against a fresh Supabase project; every deploy writes an immutable `release_metadata` audit row. → [`docs/operations/`](docs/operations/), [`deploy-prod.yml`](.github/workflows/deploy-prod.yml)
 - **Quality gates in CI.** `mypy --strict`, Ruff (pydocstyle + type-annotation + more), ESLint (`eslint-config-google`) + Prettier, an 80% coverage floor with critical modules pinned at 100%, dead-code checks (vulture + knip), `gitleaks` secret scanning, and a markdown link-checker. → [Makefile](Makefile), [`pyproject.toml`](pyproject.toml)
-- **Decisions are documented.** **16 ADRs** cover compute, LLM routing, data store, auth, encryption, edge security, public demo access, deployment topology, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
+- **Decisions are documented.** **16 ADRs** cover compute, LLM routing, data store, Gmail write scopes, encryption, edge security, public demo access, deployment topology, and product safety — the *why* behind every load-bearing choice. → [`docs/adr/`](docs/adr/)
 
-**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **504 backend tests** across 70 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 16 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
+**By the numbers:** ~22K LOC backend · ~10K LOC frontend · **609 backend tests** across 77 files + 43 frontend test suites · Playwright e2e + Promptfoo prompt-evals + chaos drills · 16 ADRs · runs for **~$8–11/month** including two customer-managed KMS keys.
 
 ## Project internals and reference
 
@@ -207,8 +207,8 @@ All routes are mounted under `/api/v1`. The full interactive spec is at `/docs` 
 
 | Resource | Path | Representative operations |
 |---|---|---|
-| Auth | `/auth` | Session logout (local auth provider: argon2 + TOTP MFA) |
-| Google OAuth | `/oauth/gmail` | Start authorization-code flow · callback exchange |
+| Auth | `/auth` | Log out (clears the session cookie) |
+| Google OAuth | `/oauth/gmail` | Start authorization-code + PKCE flow · callback exchange (issues a 30-day HMAC-signed session cookie) |
 | Accounts | `/accounts` | List · update settings · disconnect · remove mailbox |
 | Rubric | `/rubric` | CRUD classification rules |
 | Emails | `/emails` | List classified emails · mark read · override bucket |
